@@ -76,6 +76,7 @@ export function createTrainingTimer({getSession,getPersonName,notify}){
     const visible=$('trainingCountdown');
     const global=$('globalTrainingTimer');
     const start=$('trainingTimerStart');
+    const stopButton=$('trainingTimerStop');
     const field=$('evalMinutes');
     const current=getSession?.();
     const active=!!record;
@@ -90,6 +91,7 @@ export function createTrainingTimer({getSession,getPersonName,notify}){
       start.disabled=active||!current||current.status==='done';
       start.textContent='Iniciar';
     }
+    if(stopButton)stopButton.disabled=!active;
     if(field)field.readOnly=active&&same;
     const label=$('trainingTimerPerson');
     if(label){
@@ -101,6 +103,15 @@ export function createTrainingTimer({getSession,getPersonName,notify}){
       global.textContent=active?'⏱ '+format(left)+' · '+record.name:'';
       global.title=active?'Cuenta regresiva de '+record.name:'';
     }
+  }
+  function stop(){
+    if(!record)return;
+    record=null;
+    persist();
+    dialogShown=false;
+    const m=$('trainingTimerDialog');
+    if(m?.open)m.close();
+    refresh();
   }
   function start(){
     if(record){
@@ -129,11 +140,13 @@ export function createTrainingTimer({getSession,getPersonName,notify}){
   }
   document.addEventListener('click',e=>{
     const btn=e.target.closest?.('[data-training-timer-start]');
-    if(btn)start();
+    if(btn){start();return;}
+    const stopButton=e.target.closest?.('[data-training-timer-stop]');
+    if(stopButton)stop();
   });
   ticker=setInterval(refresh,350);
   document.addEventListener('visibilitychange',refresh);
   window.addEventListener('focus',refresh);
   refresh();
-  return {refresh,start,format,getState:()=>record?{...record,secondsLeft:secondsLeft()}:null};
+  return {refresh,start,stop,format,getState:()=>record?{...record,secondsLeft:secondsLeft()}:null};
 }
