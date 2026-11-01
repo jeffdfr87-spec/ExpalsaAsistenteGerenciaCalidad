@@ -91,6 +91,8 @@ export function createTrainingDocuments({notify}){
       if(planUrl){URL.revokeObjectURL(planUrl);planUrl=null;}
       activated=false;
       togglePrompt(false);
+      const calendarPrompt=$('trainingDocsCalendarPrompt');
+      if(calendarPrompt)calendarPrompt.hidden=true;
       try{await storedWrite(bytes);}catch(e){notify?.('Documentos cargados. Este navegador no permitió conservarlos para una próxima visita.');}
       status('');
       if($('planPdfFrame'))await activate();
@@ -123,8 +125,8 @@ export function createTrainingDocuments({notify}){
     }catch(e){
       if(e.code==='DOCUMENTS_MISSING'){
         requestedDay=day;
-        const file=$('trainingDocsQuickUpload');
-        if(file){file.click();return;}
+        showError(e);
+        return;
       }
       throw e;
     }
@@ -134,7 +136,7 @@ export function createTrainingDocuments({notify}){
       await download(PLAN,'EXPALSA_PLAN_CAPACITACION_INSPECTORES_2026.pdf');
     }catch(e){
       if(e.code==='DOCUMENTS_MISSING'){
-        $('trainingDocsFile')?.click();
+        showError(e);
         return;
       }
       throw e;
@@ -143,6 +145,8 @@ export function createTrainingDocuments({notify}){
   function showError(error){
     if(error?.code==='DOCUMENTS_MISSING'){
       togglePrompt(true);
+      const calendarPrompt=$('trainingDocsCalendarPrompt');
+      if(calendarPrompt)calendarPrompt.hidden=false;
       status('Selecciona el paquete ZIP de capacitación para acceder a los once PDF.');
       return;
     }
