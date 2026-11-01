@@ -33,44 +33,62 @@ export async function crearReporteCapacitacion({day,person,session,photos,score,
   labelLine('Area',stationName||person.station,116,57,70);
   labelLine('Fecha',session.date,20,72,80);
   labelLine('Jornada / Duracion','Dia '+day.day+' de 10 · '+(session.minutes||0)+' minutos',116,72,70);
-  txt(day.title,16,94,11,'bold');
-  hline(16,98,178);
-  pdf.setFillColor(232,241,244);pdf.rect(16,102,178,9,'F');
-  txt('CRITERIO DE OBSERVACION',19,108,8,'bold');
-  txt('NIVEL',178,108,8,'bold');
-  let y=118;
+  txt(day.title,16,91,11,'bold');
+  hline(16,94,178);
+  pdf.setFillColor(232,241,244);pdf.rect(16,98,178,8,'F');
+  txt('CRITERIO DE OBSERVACION',19,104,8,'bold');
+  txt('NIVEL',178,104,8,'bold');
+  let y=113;
   for(const c of day.checks){
     const v=session.ratings?.[c.id];
     const scoreLabel=v==='na'?'N/A':Number.isInteger(v)?v+'/4':'Pendiente';
     const lines=pdf.splitTextToSize(clean(c.c+' · '+c.label),150);
     font(9);pdf.text(lines.slice(0,2),19,y);
     txt(scoreLabel,182,y,9,'bold',Number.isInteger(v)&&v<3?[166,60,72]:ink);
-    y+=Math.max(12,lines.length*5+4);
+    y+=Math.max(9,lines.length*4.4+3);
     hline(19,y-5,171,[231,237,241]);
   }
-  box(16,y+3,178,13,[227,244,239]);
-  txt('Resultado práctico',20,y+11,9,'bold');
-  txt(score===null?'Sin calificar':score+'%',174,y+11,11,'bold',green);
-  y+=24;
+  box(16,y+1,178,11,[227,244,239]);
+  txt('Resultado práctico',20,y+8,9,'bold');
+  txt(score===null?'Sin calificar':score+'%',174,y+8,11,'bold',green);
+  y+=15;
+  const overflow=[];
   const section=(label,value)=>{
-    txt(label,16,y,9,'bold');
-    y+=5;
-    font(8.5);
+    txt(label,16,y,8.5,'bold');
+    y+=4;
+    font(8);
     const full=pdf.splitTextToSize(clean(value||'Sin observaciones registradas.'),176);
-    const max=4;
-    pdf.text(full.slice(0,max),17,y);
-    y+=Math.min(max,full.length)*4.3+5;
+    pdf.text(full.slice(0,2),17,y);
+    if(full.length>2)overflow.push({label,text:clean(value)});
+    y+=Math.min(2,full.length)*3.8+4;
   };
   section('Hallazgos y evidencias observadas',session.notes);
   section('Refuerzo o seguimiento',session.followup||'No registrado.');
-  const imageTop=Math.max(y+3,209);
-  const imageH=Math.max(25,267-imageTop);
+  const imageTop=Math.max(y+4,205);
+  const imageH=Math.max(14,272-imageTop);
   hline(16,imageTop-7,178);
   txt('EVIDENCIA FOTOGRAFICA PRINCIPAL',16,imageTop-1,8,'bold',blue);
   const main=photos.main;
   if(!fitImage(pdf,main,17,imageTop+2,176,imageH-3)){
     box(17,imageTop+3,176,imageH-5,[247,249,250]);
     txt('Sin fotografia principal registrada',56,imageTop+imageH/2,9,'normal',muted);
+  }
+  if(overflow.length){
+    pdf.addPage();
+    heading('DETALLE DEL REGISTRO TECNICO','Inspector: '+person.name+' · Día '+day.day);
+    let detailY=54;
+    for(const entry of overflow){
+      txt(entry.label,16,detailY,10,'bold');
+      detailY+=8;
+      font(9);
+      const lines=pdf.splitTextToSize(entry.text,176);
+      for(const line of lines){
+        if(detailY>273){pdf.addPage();heading('DETALLE DEL REGISTRO TECNICO (CONT.)');detailY=54;font(9);}
+        pdf.text(line,17,detailY);
+        detailY+=5.2;
+      }
+      detailY+=9;
+    }
   }
   const annexes=photos.annexes||[];
   for(let i=0;i<annexes.length;i+=2){
