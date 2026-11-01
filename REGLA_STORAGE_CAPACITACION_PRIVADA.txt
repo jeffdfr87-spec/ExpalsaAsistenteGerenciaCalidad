@@ -1,0 +1,12 @@
+match /expalsa_capacitacion_privada_2026/{pdfFile} {
+  function authorizedAdmin() {
+    return request.auth != null
+      && request.auth.token.email == 'jefferson@expalsaevaluations.com'
+      && firestore.get(/databases/(default)/documents/expalsa_calidad_config/administrador).data.uid == request.auth.uid
+      && firestore.get(/databases/(default)/documents/expalsa_calidad_config/administrador).data.email == request.auth.token.email;
+  }
+  allow get: if authorizedAdmin()
+    && pdfFile in ['PLAN_CAPACITACION.pdf', 'DIA_01.pdf', 'DIA_02.pdf', 'DIA_03.pdf', 'DIA_04.pdf', 'DIA_05.pdf', 'DIA_06.pdf', 'DIA_07.pdf', 'DIA_08.pdf', 'DIA_09.pdf', 'DIA_10.pdf'];
+  allow list: if false;
+  allow create, update, delete: if false;
+}
