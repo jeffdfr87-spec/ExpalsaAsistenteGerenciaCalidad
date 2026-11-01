@@ -34,60 +34,50 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
  function helpfulError(e){
   return permissionError(e)?'Falta activar el permiso de fotografías en Firestore. La jornada sí se puede guardar.':e?.message||String(e);
  }
- async function mainPhoto(file,id){
-  const photo=await compressed(file,140000);
-  if(!current()||current().id!==id)throw Error('Cambió la jornada.');
-  const existing=current().evidenceImage||'';
-  current().evidenceImage=photo.jpeg;
-  await saveDraft();
-  if(getSaved(id)?.evidenceImage!==photo.jpeg){
-    if(current()?.id===id)current().evidenceImage=existing;
-    throw Error('No se pudo guardar la fotografía principal. Revisa los permisos de la jornada.');
-  }
-  draw(id);
- }
  async function upload(files,origin,criterionId=''){
   const arr=Array.from(files||[]),d=current();
   if(!arr.length||!d)return;
-  if(busy){notify('Hay otra carga de fotos en curso.');return;}
+  if(busy){notify('Hay otra carga de fotografías en curso.');return;}
   busy=true;
-  const id=d.id;let coverSaved=false,uploaded=0;
+  const id=d.id;
+  let uploaded=0;
   try{
     await parent(id);
-    if(!criterionId&&!current()?.evidenceImage&&arr.length){
-      status('Guardando fotografía principal…');
-      await mainPhoto(arr.shift(),id);
-      coverSaved=true;
-    }
-    if(!arr.length){
-      status('Fotografía principal guardada.');
-      notify('Fotografía principal guardada correctamente.');
-      return;
-    }
     if(!cache.has(id)){
       const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));
       cache.set(id,snap.docs.map(x=>({id:x.id,...x.data()})));
     }
-    const rows=cache.get(id),room=MAX-rows.length-(current()?.evidenceImage?1:0);
-    if(arr.length>room)throw Error('Puedes subir '+Math.max(0,room)+' fotos adicionales.');
+    const rows=cache.get(id);
+    const remaining=MAX-rows.length-(current()?.evidenceImage?1:0);
+    if(arr.length>remaining)throw Error('Puedes subir '+Math.max(0,remaining)+' fotos adicionales.');
+    const hadGeneral=Boolean(current()?.evidenceImage)||rows.some(x=>!x.criterionId);
     for(const file of arr){
       if(current()?.id!==id||current()?.status==='done')throw Error('La jornada cambió durante la carga.');
       status('Guardando fotografía '+(uploaded+1)+'/'+arr.length+'…');
       const photo=await compressed(file);
       const photoId='FT_'+crypto.randomUUID().replace(/-/g,'');
-      const obj={sessionId:id,personId:d.personId,day:d.day,...photo,origin,criterionId,createdBy:auth.currentUser.uid,createdAt:fs.serverTimestamp()};
+      const obj={
+        sessionId:id,personId:d.personId,day:d.day,
+        ...photo,origin,criterionId,
+        createdBy:auth.currentUser.uid,createdAt:fs.serverTimestamp()
+      };
       await fs.setDoc(fs.doc(db,S,id,'fotos',photoId),obj);
       rows.push({id:photoId,...obj});
       draw(id);
       uploaded++;
     }
-    status((coverSaved?1:0)+uploaded+' fotografía(s) guardada(s).');
-    notify('Fotografías guardadas correctamente.');
+    const primary=criterionId===''&&!hadGeneral;
+    status(uploaded+' fotografía'+(uploaded===1?' guardada.':'s guardadas.')+
+      (primary?' La primera será la evidencia principal del PDF.':''));
+    notify(uploaded+' fotografía'+(uploaded===1?' guardada':'s guardadas')+' correctamente.');
   }catch(e){
     const detail=helpfulError(e);
-    status((coverSaved?'Fotografía principal guardada. ':'')+detail);
-    notify((coverSaved?'Se guardó la principal. ':'')+detail);
-  }finally{busy=false;draw(id);}
+    status((uploaded?uploaded+' fotografía(s) guardadas. ':'')+detail);
+    notify((uploaded?'Guardado parcial. ':'')+detail);
+  }finally{
+    busy=false;
+    draw(id);
+  }
  }
  async function remove(id){const d=current();if(!d||d.status==='done'||busy)return;if(!list(d.id).some(p=>p.id===id)||!confirm('¿Eliminar esta fotografía?'))return;busy=true;try{await fs.deleteDoc(fs.doc(db,S,d.id,'fotos',id));cache.set(d.id,list(d.id).filter(x=>x.id!==id));draw(d.id);}catch(e){notify('No se pudo eliminar: '+helpfulError(e));}finally{busy=false;}}
  const dlg=document.createElement('dialog');dlg.id='evidenceCameraDialog';dlg.className='photo-camera-dialog';dlg.innerHTML='<h3>Tomar fotografía</h3><video id="evidenceCameraVideo" autoplay playsinline muted></video><div class="row"><button type="button" class="button primary" data-photo="capture">Capturar</button><button type="button" class="button" data-photo="close">Cancelar</button></div><input type="file" id="evidenceCameraFallback" accept="image/*" capture="environment" hidden>';document.body.appendChild(dlg);
