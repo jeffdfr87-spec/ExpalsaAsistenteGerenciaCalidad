@@ -14,31 +14,82 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
  function html(d){const count=list(d.id).filter(p=>!p.criterionId).length+(d.evidenceImage?1:0);return '<div class="form-field"><label>Evidencia fotográfica autorizada <span id="photoCounter" class="photo-count">'+count+' principal(es)</span></label><div class="photo-actions"><button type="button" class="button primary" data-photo="camera" '+(d.status==='done'?'disabled':'')+'>Tomar foto</button><button type="button" class="button" data-photo="gallery" '+(d.status==='done'?'disabled':'')+'>Seleccionar de galería</button><input type="file" id="evidenceGallery" accept="image/*" multiple hidden></div><div id="evidenceList" class="photo-gallery">'+grid(d)+'</div><p id="photoUploadStatus" class="photo-upload-status" role="status"></p></div>';}
  function status(s){if(el('photoUploadStatus'))el('photoUploadStatus').textContent=s;}
  function draw(id){if(current()?.id!==id)return;const d=current();if(el('evidenceList'))el('evidenceList').innerHTML=grid(d);if(el('photoCounter'))el('photoCounter').textContent=(list(id).filter(p=>!p.criterionId).length+(d.evidenceImage?1:0))+' principal(es)';document.querySelectorAll('[data-criterion-list]').forEach(node=>{const c=node.getAttribute('data-criterion-list');node.innerHTML=criterionGrid(d,c);});}
- async function load(id){if(cache.has(id)||pending.has(id))return;pending.add(id);try{const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));const rows=snap.docs.map(p=>({id:p.id,...p.data()})).filter(x=>x.jpeg?.startsWith('data:image/jpeg;base64,'));rows.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||a.id.localeCompare(b.id));cache.set(id,rows);}catch(e){if(current()?.id===id)status('No se pudieron consultar las fotos: '+e.message);}finally{pending.delete(id);draw(id);}}
+ async function load(id){if(cache.has(id)||pending.has(id))return;pending.add(id);try{const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));const rows=snap.docs.map(p=>({id:p.id,...p.data()})).filter(x=>x.jpeg?.startsWith('data:image/jpeg;base64,'));rows.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||a.id.localeCompare(b.id));cache.set(id,rows);}catch(e){if(current()?.id===id)status(helpfulError(e));}finally{pending.delete(id);draw(id);}}
  function activate(){const d=current();const mount=el('photoMount');if(mount&&d)mount.outerHTML=html(d);if(d)void load(d.id);if(d)draw(d.id);}
  async function parent(id){if(current()?.id!==id||current().status==='done')throw Error('La jornada está cerrada.');let i=0;while(isSaving()&&i++<100)await new Promise(ok=>setTimeout(ok,50));if(isSaving())throw Error('Se está guardando la jornada.');if(!getSaved(id)){await saveDraft();i=0;while(isSaving()&&i++<100)await new Promise(ok=>setTimeout(ok,50));}if(!getSaved(id))throw Error('Guarda el borrador antes de subir fotografías.');}
- async function compressed(f){if(!f?.type?.startsWith('image/'))throw Error('Archivo de imagen no válido.');if(f.size>15*1024*1024)throw Error('Fotografía superior a 15 MB.');
+ async function compressed(f,maxLen=LIMIT){if(!f?.type?.startsWith('image/'))throw Error('Archivo de imagen no válido.');if(f.size>15*1024*1024)throw Error('Fotografía superior a 15 MB.');
   const data=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=()=>no(Error('Error al leer imagen.'));r.readAsDataURL(f);});
   const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(Error('Imagen no compatible.'));i.src=data;});
   if(!im.naturalWidth||!im.naturalHeight)throw Error('Fotografía vacía.');
   let c=document.createElement('canvas'),scale=Math.min(1,900/Math.max(im.naturalWidth,im.naturalHeight));
   c.width=Math.max(1,Math.round(im.naturalWidth*scale));c.height=Math.max(1,Math.round(im.naturalHeight*scale));c.getContext('2d',{alpha:false}).drawImage(im,0,0,c.width,c.height);
-  let jpg='';for(let q=.78;q>=.26;q-=.09){jpg=c.toDataURL('image/jpeg',q);if(jpg.length<=LIMIT)break;}
-  if(jpg.length>LIMIT){const small=document.createElement('canvas');small.width=Math.max(1,Math.round(c.width*.65));small.height=Math.max(1,Math.round(c.height*.65));small.getContext('2d').drawImage(c,0,0,small.width,small.height);c=small;jpg=c.toDataURL('image/jpeg',.45);}
-  if(jpg.length>LIMIT)throw Error('No fue posible reducir la imagen.');
+  let jpg='';for(let q=.78;q>=.26;q-=.09){jpg=c.toDataURL('image/jpeg',q);if(jpg.length<=maxLen)break;}
+  if(jpg.length>maxLen){const small=document.createElement('canvas');small.width=Math.max(1,Math.round(c.width*.65));small.height=Math.max(1,Math.round(c.height*.65));small.getContext('2d').drawImage(c,0,0,small.width,small.height);c=small;jpg=c.toDataURL('image/jpeg',.45);}
+  if(jpg.length>maxLen)throw Error('No fue posible reducir la imagen.');
   return {jpeg:jpg,width:c.width,height:c.height,size:Math.round((jpg.length-23)*.75)};
  }
- async function upload(files,origin,criterionId=''){const arr=Array.from(files||[]),d=current();if(!arr.length||!d)return;if(busy){notify('Ya hay otra carga de fotos en curso.');return;}busy=true;const id=d.id;
-  try{await parent(id);if(!cache.has(id)){const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));cache.set(id,snap.docs.map(x=>({id:x.id,...x.data()})));}
-   const rows=cache.get(id),room=MAX-rows.length-(current()?.evidenceImage?1:0);
-   if(arr.length>room)throw Error('Puedes subir '+Math.max(0,room)+' fotos adicionales.');
-   let completed=0;for(const file of arr){if(current()?.id!==id||current()?.status==='done')throw Error('La jornada cambió durante la carga.');status('Guardando '+(completed+1)+'/'+arr.length+'…');const photo=await compressed(file);const photoId='FT_'+crypto.randomUUID().replace(/-/g,'');
-    const obj={sessionId:id,personId:d.personId,day:d.day,...photo,origin,criterionId,createdBy:auth.currentUser.uid,createdAt:fs.serverTimestamp()};
-    await fs.setDoc(fs.doc(db,S,id,'fotos',photoId),obj);rows.push({id:photoId,...obj});draw(id);completed++;
-   }status(completed+' foto'+(completed===1?' guardada':'s guardadas'));notify(completed+' foto'+(completed===1?' guardada':'s guardadas')+' correctamente.');
-  }catch(e){status('Error: '+e.message);notify('No se completó la carga: '+e.message);}finally{busy=false;draw(id);}
+ function permissionError(e){
+  return e?.code==='permission-denied'||/Missing or insufficient permissions/i.test(e?.message||'');
  }
- async function remove(id){const d=current();if(!d||d.status==='done'||busy)return;if(!list(d.id).some(p=>p.id===id)||!confirm('¿Eliminar esta fotografía?'))return;busy=true;try{await fs.deleteDoc(fs.doc(db,S,d.id,'fotos',id));cache.set(d.id,list(d.id).filter(x=>x.id!==id));draw(d.id);}catch(e){notify('No se pudo eliminar: '+e.message);}finally{busy=false;}}
+ function helpfulError(e){
+  return permissionError(e)?'Falta activar el permiso de fotografías en Firestore. La jornada sí se puede guardar.':e?.message||String(e);
+ }
+ async function mainPhoto(file,id){
+  const photo=await compressed(file,140000);
+  if(!current()||current().id!==id)throw Error('Cambió la jornada.');
+  const existing=current().evidenceImage||'';
+  current().evidenceImage=photo.jpeg;
+  await saveDraft();
+  if(getSaved(id)?.evidenceImage!==photo.jpeg){
+    if(current()?.id===id)current().evidenceImage=existing;
+    throw Error('No se pudo guardar la fotografía principal. Revisa los permisos de la jornada.');
+  }
+  draw(id);
+ }
+ async function upload(files,origin,criterionId=''){
+  const arr=Array.from(files||[]),d=current();
+  if(!arr.length||!d)return;
+  if(busy){notify('Hay otra carga de fotos en curso.');return;}
+  busy=true;
+  const id=d.id;let coverSaved=false,uploaded=0;
+  try{
+    await parent(id);
+    if(!criterionId&&!current()?.evidenceImage&&arr.length){
+      status('Guardando fotografía principal…');
+      await mainPhoto(arr.shift(),id);
+      coverSaved=true;
+    }
+    if(!arr.length){
+      status('Fotografía principal guardada.');
+      notify('Fotografía principal guardada correctamente.');
+      return;
+    }
+    if(!cache.has(id)){
+      const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));
+      cache.set(id,snap.docs.map(x=>({id:x.id,...x.data()})));
+    }
+    const rows=cache.get(id),room=MAX-rows.length-(current()?.evidenceImage?1:0);
+    if(arr.length>room)throw Error('Puedes subir '+Math.max(0,room)+' fotos adicionales.');
+    for(const file of arr){
+      if(current()?.id!==id||current()?.status==='done')throw Error('La jornada cambió durante la carga.');
+      status('Guardando fotografía '+(uploaded+1)+'/'+arr.length+'…');
+      const photo=await compressed(file);
+      const photoId='FT_'+crypto.randomUUID().replace(/-/g,'');
+      const obj={sessionId:id,personId:d.personId,day:d.day,...photo,origin,criterionId,createdBy:auth.currentUser.uid,createdAt:fs.serverTimestamp()};
+      await fs.setDoc(fs.doc(db,S,id,'fotos',photoId),obj);
+      rows.push({id:photoId,...obj});
+      draw(id);
+      uploaded++;
+    }
+    status((coverSaved?1:0)+uploaded+' fotografía(s) guardada(s).');
+    notify('Fotografías guardadas correctamente.');
+  }catch(e){
+    const detail=helpfulError(e);
+    status((coverSaved?'Fotografía principal guardada. ':'')+detail);
+    notify((coverSaved?'Se guardó la principal. ':'')+detail);
+  }finally{busy=false;draw(id);}
+ }
+ async function remove(id){const d=current();if(!d||d.status==='done'||busy)return;if(!list(d.id).some(p=>p.id===id)||!confirm('¿Eliminar esta fotografía?'))return;busy=true;try{await fs.deleteDoc(fs.doc(db,S,d.id,'fotos',id));cache.set(d.id,list(d.id).filter(x=>x.id!==id));draw(d.id);}catch(e){notify('No se pudo eliminar: '+helpfulError(e));}finally{busy=false;}}
  const dlg=document.createElement('dialog');dlg.id='evidenceCameraDialog';dlg.className='photo-camera-dialog';dlg.innerHTML='<h3>Tomar fotografía</h3><video id="evidenceCameraVideo" autoplay playsinline muted></video><div class="row"><button type="button" class="button primary" data-photo="capture">Capturar</button><button type="button" class="button" data-photo="close">Cancelar</button></div><input type="file" id="evidenceCameraFallback" accept="image/*" capture="environment" hidden>';document.body.appendChild(dlg);
  function close(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}el('evidenceCameraVideo').srcObject=null;if(dlg.open)dlg.close();}
  dlg.addEventListener('close',()=>{if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}el('evidenceCameraVideo').srcObject=null;});
