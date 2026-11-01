@@ -1,4 +1,3 @@
-/* EXPALSA · Cronómetro de acompañamiento. No modifica los registros de evaluación. */
 export function createTrainingTimer({getSession,getPersonName,notify}){
   const KEY='expalsa_capacitacion_cronometro_v1';
   const $=id=>document.getElementById(id);
@@ -15,14 +14,14 @@ export function createTrainingTimer({getSession,getPersonName,notify}){
         data.duration>=1&&data.duration<=480&&['running','finished'].includes(data.status)){
         return data;
       }
-    }catch(e){/* Datos locales inválidos: no se restauran. */}
+    }catch(e){}
     return null;
   }
   function persist(){
     try{
       if(record)sessionStorage.setItem(KEY,JSON.stringify(record));
       else sessionStorage.removeItem(KEY);
-    }catch(e){/* Un temporizador abierto sigue funcionando aun si el almacenamiento está bloqueado. */}
+    }catch(e){}
   }
   record=recover();
   function secondsLeft(){
@@ -67,7 +66,7 @@ export function createTrainingTimer({getSession,getPersonName,notify}){
       const m=modal();
       const name=record.name||'este inspector';
       $('trainingTimerDialogDescription').textContent='El tiempo de acompañamiento de '+name+
-        ' ha finalizado ('+record.duration+' minutos).';
+        ' ha finalizado ('+record.duration+' '+(record.duration===1?'minuto':'minutos')+').';
       dialogShown=true;
       if(!m.open)m.showModal();
     }
