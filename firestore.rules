@@ -1042,6 +1042,69 @@ match /empaque_ejercicio_reportes/{reporteId} {
   }
 }
 
+    // MODULO DE CAPACITACION 2026 - EXCLUSIVAMENTE ADMINISTRADOR
+    // Colecciones independientes: no modifica evaluaciones, resultados ni expedientes oficiales.
+    function capAdminWrite(d) {
+      return expalsaAdmin()
+        && d.keys().hasOnly(['id','name','station','accountUid','email','active','createdAt','updatedAt','updatedBy'])
+        && d.keys().hasAll(['id','name','station','accountUid','email','active','createdAt','updatedAt','updatedBy'])
+        && d.id is string && d.name is string && d.name.size() >= 2 && d.name.size() <= 100
+        && d.station in ['M02','M05','M06','M07','M08','M09','M10','B12','B345','T01']
+        && d.email is string && d.email.size() <= 150
+        && d.accountUid is string && d.accountUid.size() <= 128
+        && d.active is bool
+        && d.updatedBy == request.auth.uid
+        && d.updatedAt == request.time;
+    }
+    match /expalsa_capacitacion_2026_participantes/{participantId} {
+      allow get, list: if expalsaAdmin();
+      allow create: if capAdminWrite(request.resource.data)
+        && request.resource.data.id == participantId
+        && participantId.matches('ci_[a-zA-Z0-9]{8,64}')
+        && request.resource.data.createdAt == request.time;
+      allow update: if capAdminWrite(request.resource.data)
+        && request.resource.data.id == participantId
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+    function capSessionValid(d, sid) {
+      return expalsaAdmin()
+        && d.keys().hasOnly(['id','personId','personName','station','day','date','minutes','attendance','ratings','notes','followup','followupResolved','evidenceImage','status','rev','createdAt','updatedAt','updatedBy'])
+        && d.keys().hasAll(['id','personId','personName','station','day','date','minutes','attendance','ratings','notes','followup','followupResolved','evidenceImage','status','rev','createdAt','updatedAt','updatedBy'])
+        && d.id == sid && d.personId is string && d.personId.size() <= 70
+        && d.personName is string && d.personName.size() <= 100
+        && d.station in ['M02','M05','M06','M07','M08','M09','M10','B12','B345','T01']
+        && d.day is int && d.day >= 1 && d.day <= 10
+        && d.date is string && d.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && d.minutes is int && d.minutes >= 0 && d.minutes <= 480
+        && d.attendance in ['asistio','no_asistio','reprogramado']
+        && d.ratings is map && d.ratings.size() <= 10
+        && d.notes is string && d.notes.size() <= 8000
+        && d.followup is string && d.followup.size() <= 3000
+        && d.followupResolved is bool
+        && d.evidenceImage is string && d.evidenceImage.size() <= 145000
+        && (d.evidenceImage == '' || d.evidenceImage.matches('data:image/jpeg;base64,.*'))
+        && d.status in ['draft','done']
+        && d.rev is int && d.rev >= 1
+        && d.updatedBy == request.auth.uid && d.updatedAt == request.time;
+    }
+    match /expalsa_capacitacion_2026_sesiones/{sessionId} {
+      allow get, list: if expalsaAdmin();
+      allow create: if capSessionValid(request.resource.data, sessionId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.rev == 1
+        && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(request.resource.data.personId));
+      allow update: if capSessionValid(request.resource.data, sessionId)
+        && request.resource.data.rev == resource.data.rev + 1
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.personId == resource.data.personId
+        && request.resource.data.day == resource.data.day
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+
   }
 }
 
