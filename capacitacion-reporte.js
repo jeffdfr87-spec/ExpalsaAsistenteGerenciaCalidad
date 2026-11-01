@@ -10,7 +10,8 @@ function fitImage(pdf,picture,x,y,maxW,maxH){
 }
 export async function crearReporteCapacitacion({day,person,session,photos,score,stationName}){
   if(!day||!person||!session)throw Error('Selecciona un inspector y una jornada.');
-  const {jsPDF}=await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm');
+  let jsPDF=window.jspdf?.jsPDF;
+  if(!jsPDF){const library=await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm');jsPDF=library.jsPDF;}
   if(typeof jsPDF!=='function')throw Error('No se pudo cargar el generador PDF.');
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
   const width=210,ink=[23,48,68],blue=[10,67,94],soft=[240,247,249],muted=[99,121,138],green=[16,119,99];
