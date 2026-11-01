@@ -48,3 +48,20 @@ Las calificaciones de capacitación son formativas, no sustituyen las tres etapa
 - Solo se pueden añadir o quitar fotografías mientras la jornada esté en borrador; después del cierre es necesario reabrirla.
 - **Importante:** también debes incorporar en las reglas publicadas de Firebase el bloque anidado `match /fotos/{photoId}` que figura en la versión más reciente de `Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`. Sin ese permiso, el botón puede mostrarse pero la carga no tendrá autorización.
 - Pruebas pendientes en Firebase real: captura desde cámara trasera, selección de tres o más imágenes, persistencia al actualizar, eliminación y rechazo de cambios tras el cierre.
+
+## Actualización: reportes individuales y evidencias por criterio
+
+- El botón **Capacitar** abre la jornada del inspector; **Eliminar** lo retira del grupo y libera el puesto. La eliminación es lógica (`active:false`), por seguridad no borra sus sesiones históricas.
+- Junto a cada opción **N/A** de la matriz hay un botón **Foto**. La captura se guarda con su identificador `criterionId` y se agrupa con ese criterio.
+- La sección **Evidencia fotográfica autorizada** se conserva como fotografía principal. Si hay varias fotos generales, la primera se coloca en la portada del PDF y las demás se anexan.
+- El botón **Crear reporte PDF** genera un archivo con resultados del inspector, observaciones, evidencia principal en la primera página y fotografías por criterio como anexos.
+- Para escribir fotografías por criterio hay que publicar la regla actualizada **`Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`**, que permite el campo opcional `criterionId` en cada fotografía. Antes de publicar, comparar con las reglas que están activas en Firebase, que pueden diferir de la copia en GitHub.
+- La biblioteca jsPDF se carga en el navegador; para crear el PDF es necesaria conectividad a la CDN usada por la página.
+- Las evaluaciones oficiales y los perfiles originales de los inspectores no se modifican.
+
+### Pruebas que deben hacerse con Firebase real
+1. Seleccionar inspector existente y comprobar área y fotografía.
+2. Asignar temporalmente una plaza, retirarla con Eliminar y verificar que se libere sin borrar el historial.
+3. Añadir una foto general y dos fotos desde criterios distintos, comprobar que se conservan al recargar.
+4. Generar PDF y comprobar que la foto general aparece en la página inicial y cada foto de criterio en los anexos respectivos.
+5. Cerrar una jornada, verificar el bloqueo de carga y reabrirla para continuar.
