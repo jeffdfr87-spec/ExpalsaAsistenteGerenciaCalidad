@@ -40,3 +40,11 @@ Se ha validado la sintaxis del JavaScript, la estructura de diez jornadas, la pr
 
 ## Importante
 Las calificaciones de capacitación son formativas, no sustituyen las tres etapas de la evaluación oficial ni una decisión de Gerencia. Los valores técnicos de control siempre proceden de procedimientos y fichas vigentes de EXPALSA.
+
+## Fotografías de evidencia por jornada (actualización)
+- `capacitacion-fotos.js` incorpora **Tomar foto**, **Seleccionar de galería** (selección múltiple) y visualización de hasta 15 imágenes por inspector y día.
+- Las fotografías se guardan por separado en la subcolección `expalsa_capacitacion_2026_sesiones/{sessionId}/fotos/{fotoId}`.
+- Cada fotografía se convierte a JPEG y se comprime. Las fotografías anteriores guardadas en `evidenceImage` se mantienen visibles.
+- Solo se pueden añadir o quitar fotografías mientras la jornada esté en borrador; después del cierre es necesario reabrirla.
+- **Importante:** también debes incorporar en las reglas publicadas de Firebase el bloque anidado `match /fotos/{photoId}` que figura en la versión más reciente de `Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`. Sin ese permiso, el botón puede mostrarse pero la carga no tendrá autorización.
+- Pruebas pendientes en Firebase real: captura desde cámara trasera, selección de tres o más imágenes, persistencia al actualizar, eliminación y rechazo de cambios tras el cierre.
