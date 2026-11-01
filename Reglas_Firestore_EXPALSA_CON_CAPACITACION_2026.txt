@@ -1093,6 +1093,32 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && request.resource.data.day == resource.data.day
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
+      match /fotos/{photoId} {
+        allow get, list: if expalsaAdmin();
+        allow create: if expalsaAdmin()
+          && photoId.matches('FT_[A-Za-z0-9]{12,64}')
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft'
+          && request.resource.data.keys().hasOnly(['sessionId','personId','day','jpeg','width','height','size','origin','createdBy','createdAt'])
+          && request.resource.data.keys().hasAll(['sessionId','personId','day','jpeg','width','height','size','origin','createdBy','createdAt'])
+          && request.resource.data.sessionId == sessionId
+          && request.resource.data.personId == get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.personId
+          && request.resource.data.day == get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.day
+          && request.resource.data.jpeg is string
+          && request.resource.data.jpeg.size() <= 175000
+          && request.resource.data.jpeg.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+')
+          && request.resource.data.width is int && request.resource.data.width >= 1 && request.resource.data.width <= 960
+          && request.resource.data.height is int && request.resource.data.height >= 1 && request.resource.data.height <= 960
+          && request.resource.data.size is int && request.resource.data.size > 0 && request.resource.data.size <= 132000
+          && request.resource.data.origin in ['camera','gallery']
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow update: if false;
+        allow delete: if expalsaAdmin()
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft';
+      }
+
     }
 
   }
