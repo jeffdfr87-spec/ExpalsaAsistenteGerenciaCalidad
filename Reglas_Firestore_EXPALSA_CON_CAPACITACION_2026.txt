@@ -1099,7 +1099,7 @@ match /empaque_ejercicio_reportes/{reporteId} {
           && photoId.matches('FT_[A-Za-z0-9]{12,64}')
           && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
           && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft'
-          && request.resource.data.keys().hasOnly(['sessionId','personId','day','jpeg','width','height','size','origin','createdBy','createdAt'])
+          && request.resource.data.keys().hasOnly(['sessionId','personId','day','jpeg','width','height','size','origin','criterionId','createdBy','createdAt'])
           && request.resource.data.keys().hasAll(['sessionId','personId','day','jpeg','width','height','size','origin','createdBy','createdAt'])
           && request.resource.data.sessionId == sessionId
           && request.resource.data.personId == get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.personId
@@ -1111,6 +1111,20 @@ match /empaque_ejercicio_reportes/{reporteId} {
           && request.resource.data.height is int && request.resource.data.height >= 1 && request.resource.data.height <= 960
           && request.resource.data.size is int && request.resource.data.size > 0 && request.resource.data.size <= 132000
           && request.resource.data.origin in ['camera','gallery']
+          && (!request.resource.data.keys().hasAny(['criterionId']) || (request.resource.data.criterionId is string && (request.resource.data.criterionId == '' || request.resource.data.criterionId.matches('^D(10|[1-9])_[1-4]
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow update: if false;
+        allow delete: if expalsaAdmin()
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft';
+      }
+
+    }
+
+  }
+}
+))))
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.createdAt == request.time;
         allow update: if false;
