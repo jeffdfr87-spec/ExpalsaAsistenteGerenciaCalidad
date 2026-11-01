@@ -1,4 +1,3 @@
-/* EXPALSA · Programa de capacitación 2026 · Material diario de orientación */
 window.EXPALSA_CAPACITACION_DIAS = [
   {
     day:1, title:"BPM, POES y condiciones de arranque", objective:"Reforzar la verificación de condiciones higiénicas y operativas antes de recibir camarón y durante el proceso.",
