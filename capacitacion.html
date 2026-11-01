@@ -36,7 +36,7 @@
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script type="module">
-import {createPhotoManager} from "./capacitacion-fotos.js?v=20261101-fix2";
+import {createPhotoManager} from "./capacitacion-fotos.js?v=20261101-permisos3";
 import {crearReporteCapacitacion} from "./capacitacion-reporte.js?v=20261101-fix2";
 const days=window.EXPALSA_CAPACITACION_DIAS||[];
 const stations=window.EXPALSA_CAPACITACION_PUESTOS||[];
@@ -238,7 +238,7 @@ async function reportPdf(){
     toast('Preparando reporte PDF…');
     const photos=await photoManager.getReportPhotos(d);
     const info=await crearReporteCapacitacion({day,person:{...p,name:officialName(p.accountUid)||p.name},session:d,photos,score:percent(d),stationName:stationName(p)});
-    toast('Reporte PDF generado: '+info.pages+' página(s), '+info.annexes+' anexo(s).');
+    toast(info&&photos.partial?'PDF generado con foto principal. Los anexos requieren permisos en Firestore.':'Reporte PDF generado: '+info.pages+' página(s), '+info.annexes+' anexo(s).');
   }catch(e){toast('No se pudo generar el PDF: '+e.message);}
 }
 function csv(){const lines=[['Inspector','Área','Día','Tema','Fecha','Asistencia','Minutos','Estado','Calificación %','Crítico bajo','Observaciones','Refuerzo','Refuerzo cerrado'].join(';')];for(const p of activePeople())for(const day of days){const s=sess(p.id,day.day);lines.push([p.name,stationName(p),day.day,day.title,s?.date||'',s?.attendance||'',s?.minutes||'',s?.status||'sin iniciar',percent(s)??'',criticalMiss(s)?'Sí':'No',s?.notes||'',s?.followup||'',s?.followupResolved?'Sí':'No'].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(';'));}const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='EXPALSA_Control_Capacitacion_2026.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2500);}
