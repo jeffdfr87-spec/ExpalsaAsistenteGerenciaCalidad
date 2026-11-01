@@ -99,15 +99,22 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
  document.addEventListener('change',async e=>{if(e.target.id==='evidenceGallery'){const files=Array.from(e.target.files||[]);e.target.value='';await upload(files,'gallery');}if(e.target.id==='evidenceCameraFallback'){const files=Array.from(e.target.files||[]);e.target.value='';await upload(files,'camera',targetCriterion);targetCriterion='';}});
  async function getReportPhotos(d){
   if(!d)throw Error('No hay jornada seleccionada.');
-  const snap=await fs.getDocs(fs.collection(db,S,d.id,'fotos'));
-  const stored=snap.docs.map(x=>({id:x.id,...x.data()})).filter(x=>typeof x.jpeg==='string'&&x.jpeg.startsWith('data:image/jpeg;base64,'));
-  stored.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||a.id.localeCompare(b.id));
-  cache.set(d.id,stored);
-  draw(d.id);
+  let stored=[],partial=false;
+  try{
+    const snap=await fs.getDocs(fs.collection(db,S,d.id,'fotos'));
+    stored=snap.docs.map(x=>({id:x.id,...x.data()})).filter(x=>typeof x.jpeg==='string'&&x.jpeg.startsWith('data:image/jpeg;base64,'));
+    stored.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||a.id.localeCompare(b.id));
+    cache.set(d.id,stored);
+    draw(d.id);
+  }catch(e){
+    if(!permissionError(e))throw e;
+    partial=true;
+    status(helpfulError(e));
+  }
   const legacy=d.evidenceImage?.startsWith('data:image/jpeg;base64,')?{jpeg:d.evidenceImage,origin:'legacy',criterionId:'',id:'legacy'}:null;
   const general=[...(legacy?[legacy]:[]),...stored.filter(x=>!x.criterionId)];
   const annexes=[...stored.filter(x=>x.criterionId),...general.slice(1)];
-  return {main:general[0]||null,annexes,all:stored};
+  return {main:general[0]||null,annexes,all:stored,partial};
  }
  return {html,activate,criterionHtml,getReportPhotos,isBusy:()=>busy};
 }
