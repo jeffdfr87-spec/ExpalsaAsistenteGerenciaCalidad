@@ -1250,5 +1250,27 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && request.resource.data.rev == resource.data.rev + 1;
       allow delete: if false;
     }
+
+    // Responsable del equipo actual: nombre y fotografia opcional, solo administrador.
+    // No altera participantes, dias, horas ni resultados de capacitacion.
+    function capResponsibleValid(d) {
+      return expalsaAdmin()
+        && d.keys().hasAll(['name','jpeg','rev','createdAt','updatedAt','updatedBy'])
+        && d.keys().hasOnly(['name','jpeg','rev','createdAt','updatedAt','updatedBy'])
+        && d.name is string && d.name.size() >= 2 && d.name.size() <= 100
+        && d.jpeg is string && d.jpeg.size() <= 170000
+        && (d.jpeg == '' || d.jpeg.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$'))
+        && d.rev is int && d.rev >= 1 && d.createdAt is timestamp
+        && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+    }
+    match /expalsa_capacitacion_2026_equipo/{recordId} {
+      allow get: if expalsaAdmin() && recordId == 'responsable';
+      allow list, delete: if false;
+      allow create: if recordId == 'responsable' && capResponsibleValid(request.resource.data)
+        && request.resource.data.rev == 1 && request.resource.data.createdAt == request.time;
+      allow update: if recordId == 'responsable' && capResponsibleValid(request.resource.data)
+        && request.resource.data.rev == resource.data.rev + 1
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
   }
 }
