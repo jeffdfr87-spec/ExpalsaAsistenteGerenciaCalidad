@@ -1070,8 +1070,12 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
     }
+    function capParticipantActive(personId) {
+      let p = get(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(personId)).data;
+      return p.active == true && p.get('deleted', false) != true;
+    }
     function capSessionValid(d, sid) {
-      return expalsaAdmin()
+      return expalsaAdmin() && capParticipantActive(d.personId)
         && d.keys().hasOnly(['id','personId','personName','station','day','date','minutes','attendance','ratings','notes','followup','followupResolved','evidenceImage','status','rev','createdAt','updatedAt','updatedBy'])
         && d.keys().hasAll(['id','personId','personName','station','day','date','minutes','attendance','ratings','notes','followup','followupResolved','evidenceImage','status','rev','createdAt','updatedAt','updatedBy'])
         && d.id == sid && d.personId is string && d.personId.size() <= 70
@@ -1107,6 +1111,7 @@ match /empaque_ejercicio_reportes/{reporteId} {
       match /fotos/{photoId} {
         allow get, list: if expalsaAdmin();
         allow create: if expalsaAdmin()
+          && capParticipantActive(get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.personId)
           && photoId.matches('^FT_[A-Za-z0-9]{12,64}$')
           && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
           && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft'
@@ -1177,7 +1182,7 @@ match /empaque_ejercicio_reportes/{reporteId} {
           && d.payload.recheck is string && d.payload.recheck.size() <= 3000
           && d.payload.concordant is string && d.payload.concordant.size() <= 3000
           && d.payload.evidence is string && d.payload.evidence.size() <= 3000
-          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(d.payload.personId))
+          && capParticipantActive(d.payload.personId)
           && d.id == 'cp_res_' + d.payload.calibrationId + '_' + d.payload.personId
           && get(/databases/$(database)/documents/expalsa_capacitacion_2026_complementos/$(d.payload.calibrationId)).data.type == 'calibracion'
           && d.payload.attendance in ['','asistio','no_asistio','reprogramado'] && d.payload.concordant in ['','si','no']
@@ -1218,7 +1223,7 @@ match /empaque_ejercicio_reportes/{reporteId} {
           && d.payload.reinforcement is string && d.payload.reinforcement.size() <= 3000
           && d.payload.resolved is string && d.payload.resolved.size() <= 3000
           && d.payload.evidence is string && d.payload.evidence.size() <= 3000
-          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(d.payload.personId))
+          && capParticipantActive(d.payload.personId)
           && d.id == 'cp_apr_' + d.payload.caseId + '_' + d.payload.personId
           && get(/databases/$(database)/documents/expalsa_capacitacion_2026_complementos/$(d.payload.caseId)).data.type == 'reclamo'
           && d.payload.result in ['','demostrado','refuerzo'] && d.payload.resolved in ['','si','no']
