@@ -24,7 +24,19 @@ export function createTrainingDocuments({getAuth,getAuthorized,notify}){
     const start=version;
     const sdk=await getSdk();
     if(!getAuthorized?.())throw Error('Sesión no autorizada.');
+    let manifest=null;
+    if(file===PLAN){
+      const fire=await import('https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js');
+      const record=await fire.getDocFromServer(fire.doc(fire.getFirestore(getAuth().app),'expalsa_capacitacion_2026_documentos','plan'));
+      if(!record.exists())throw Error('No se encontró el registro del plan firmado.');
+      manifest=record.data();
+      if(manifest.storagePath!==PREFIX+'/'+PLAN)throw Error('La ruta del plan firmado no coincide.');
+    }
     const blob=await sdk.getBlob(sdk.ref(firebaseStorage,PREFIX+'/'+file),MAX_BYTES);
+    if(manifest){
+      const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join('');
+      if(hash!==manifest.sha256)throw Error('El PDF no coincide con la versión firmada registrada. Actualiza la página e inténtalo de nuevo.');
+    }
     if(start!==version||!getAuthorized?.())throw Error('La sesión de administrador ha terminado.');
     if(blob.size===0)throw Error('El archivo PDF está vacío.');
     return blob.type==='application/pdf'?blob:new Blob([blob],{type:'application/pdf'});
@@ -97,3 +109,4 @@ export function createTrainingDocuments({getAuth,getAuthorized,notify}){
   }
   return {activate,downloadDay,downloadPlan,showError,onNavigateAway,clear};
 }
+

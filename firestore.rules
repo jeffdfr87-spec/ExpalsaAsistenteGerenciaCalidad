@@ -1042,6 +1042,8 @@ match /empaque_ejercicio_reportes/{reporteId} {
   }
 }
 
+
+
     // MODULO DE CAPACITACION 2026 - EXCLUSIVAMENTE ADMINISTRADOR
     // Colecciones independientes: no modifica evaluaciones, resultados ni expedientes oficiales.
     function capAdminWrite(d) {
@@ -1102,9 +1104,146 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && request.resource.data.day == resource.data.day
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
+      match /fotos/{photoId} {
+        allow get, list: if expalsaAdmin();
+        allow create: if expalsaAdmin()
+          && photoId.matches('^FT_[A-Za-z0-9]{12,64}$')
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft'
+          && request.resource.data.keys().hasOnly(['sessionId','personId','day','jpeg','width','height','size','origin','criterionId','createdBy','createdAt'])
+          && request.resource.data.keys().hasAll(['sessionId','personId','day','jpeg','width','height','size','origin','createdBy','createdAt'])
+          && request.resource.data.sessionId == sessionId
+          && request.resource.data.personId == get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.personId
+          && request.resource.data.day == get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.day
+          && request.resource.data.jpeg is string
+          && request.resource.data.jpeg.size() <= 175000
+          && request.resource.data.jpeg.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')
+          && request.resource.data.width is int && request.resource.data.width >= 1 && request.resource.data.width <= 960
+          && request.resource.data.height is int && request.resource.data.height >= 1 && request.resource.data.height <= 960
+          && request.resource.data.size is int && request.resource.data.size > 0 && request.resource.data.size <= 132000
+          && request.resource.data.origin in ['camera','gallery']
+          && (!request.resource.data.keys().hasAny(['criterionId'])
+              || (request.resource.data.criterionId is string
+                  && (request.resource.data.criterionId == '' || request.resource.data.criterionId.matches('^D(10|[1-9])_[1-4]$'))))
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow update: if false;
+        allow delete: if expalsaAdmin()
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId))
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_sesiones/$(sessionId)).data.status == 'draft';
+      }
     }
 
 
+    // Seguimiento del plan firmado 6.1 y 6.2. Solo administrador.
+    // Modelo: id y type inmutables; payload tipado por formulario; revision incremental.
+    // No elimina ni modifica las reglas de los modulos existentes.
+    match /expalsa_capacitacion_2026_documentos/{docId} {
+      allow get: if expalsaAdmin();
+      allow list, write: if false;
+    }
+    function capComplementPayload(d) {
+      return d.payload is map && d.payload.status in ['draft','done'] && (
+        (d.type == 'periodo' && d.payload.keys().hasAll(["programStart","reviewedBy","evidence","status"]) && d.payload.keys().hasOnly(["programStart","reviewedBy","evidence","status"])
+          && d.payload.programStart is string && d.payload.programStart.size() <= 3000
+          && d.payload.reviewedBy is string && d.payload.reviewedBy.size() <= 3000
+          && d.payload.evidence is string && d.payload.evidence.size() <= 3000
+          && d.id == 'cp_periodo_2026' && d.payload.programStart.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}') && d.payload.reviewedBy.size() > 0 && d.payload.evidence.size() > 0
+          && (d.payload.status != 'done' || (d.payload.programStart.size() > 0 && d.payload.reviewedBy.size() > 0 && d.payload.evidence.size() > 0))) ||
+        (d.type == 'calibracion' && d.payload.keys().hasAll(["date","minutes","sample","spec","lead","shiftLead","reference","tolerance","validatedBy","agreements","evidence","status"]) && d.payload.keys().hasOnly(["date","minutes","sample","spec","lead","shiftLead","reference","tolerance","validatedBy","agreements","evidence","status"])
+          && d.payload.date is string && d.payload.date.size() <= 3000
+          && d.payload.minutes is string && d.payload.minutes.size() <= 3000
+          && d.payload.sample is string && d.payload.sample.size() <= 3000
+          && d.payload.spec is string && d.payload.spec.size() <= 3000
+          && d.payload.lead is string && d.payload.lead.size() <= 3000
+          && d.payload.shiftLead is string && d.payload.shiftLead.size() <= 3000
+          && d.payload.reference is string && d.payload.reference.size() <= 3000
+          && d.payload.tolerance is string && d.payload.tolerance.size() <= 3000
+          && d.payload.validatedBy is string && d.payload.validatedBy.size() <= 3000
+          && d.payload.agreements is string && d.payload.agreements.size() <= 3000
+          && d.payload.evidence is string && d.payload.evidence.size() <= 3000
+          && (d.payload.status != 'done' || (d.payload.date.size() > 0 && d.payload.minutes.size() > 0 && d.payload.sample.size() > 0 && d.payload.spec.size() > 0 && d.payload.lead.size() > 0 && d.payload.shiftLead.size() > 0 && d.payload.reference.size() > 0 && d.payload.tolerance.size() > 0 && d.payload.validatedBy.size() > 0 && d.payload.agreements.size() > 0 && d.payload.evidence.size() > 0))) ||
+        (d.type == 'resultado' && d.payload.keys().hasAll(["calibrationId","personId","attendance","talla","cuenta","uniformidad","defectos","decision","discrepancy","reinforcement","recheck","concordant","evidence","status"]) && d.payload.keys().hasOnly(["calibrationId","personId","attendance","talla","cuenta","uniformidad","defectos","decision","discrepancy","reinforcement","recheck","concordant","evidence","status"])
+          && d.payload.calibrationId is string && d.payload.calibrationId.size() <= 3000
+          && d.payload.personId is string && d.payload.personId.size() <= 3000
+          && d.payload.attendance is string && d.payload.attendance.size() <= 3000
+          && d.payload.talla is string && d.payload.talla.size() <= 3000
+          && d.payload.cuenta is string && d.payload.cuenta.size() <= 3000
+          && d.payload.uniformidad is string && d.payload.uniformidad.size() <= 3000
+          && d.payload.defectos is string && d.payload.defectos.size() <= 3000
+          && d.payload.decision is string && d.payload.decision.size() <= 3000
+          && d.payload.discrepancy is string && d.payload.discrepancy.size() <= 3000
+          && d.payload.reinforcement is string && d.payload.reinforcement.size() <= 3000
+          && d.payload.recheck is string && d.payload.recheck.size() <= 3000
+          && d.payload.concordant is string && d.payload.concordant.size() <= 3000
+          && d.payload.evidence is string && d.payload.evidence.size() <= 3000
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(d.payload.personId))
+          && d.id == 'cp_res_' + d.payload.calibrationId + '_' + d.payload.personId
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_complementos/$(d.payload.calibrationId)).data.type == 'calibracion'
+          && d.payload.attendance in ['','asistio','no_asistio','reprogramado'] && d.payload.concordant in ['','si','no']
+          && d.payload.decision in ['','aceptar','rechazar']
+          && (d.payload.status != 'done' || (d.payload.attendance == 'asistio' && d.payload.concordant == 'si'
+            && get(/databases/$(database)/documents/expalsa_capacitacion_2026_complementos/$(d.payload.calibrationId)).data.payload.status == 'done'
+            && (d.payload.discrepancy == '' || (d.payload.reinforcement.size() > 0 && d.payload.recheck.size() > 0))))
+          && (d.payload.status != 'done' || (d.payload.calibrationId.size() > 0 && d.payload.personId.size() > 0 && d.payload.attendance.size() > 0 && d.payload.talla.size() > 0 && d.payload.cuenta.size() > 0 && d.payload.uniformidad.size() > 0 && d.payload.defectos.size() > 0 && d.payload.decision.size() > 0 && d.payload.concordant.size() > 0 && d.payload.evidence.size() > 0))) ||
+        (d.type == 'reclamo' && d.payload.keys().hasAll(["code","date","product","deviation","requirement","cause","control","action","topic","competency","day","priority","rationale","evidence","status"]) && d.payload.keys().hasOnly(["code","date","product","deviation","requirement","cause","control","action","topic","competency","day","priority","rationale","evidence","status"])
+          && d.payload.code is string && d.payload.code.size() <= 3000
+          && d.payload.date is string && d.payload.date.size() <= 3000
+          && d.payload.product is string && d.payload.product.size() <= 3000
+          && d.payload.deviation is string && d.payload.deviation.size() <= 3000
+          && d.payload.requirement is string && d.payload.requirement.size() <= 3000
+          && d.payload.cause is string && d.payload.cause.size() <= 3000
+          && d.payload.control is string && d.payload.control.size() <= 3000
+          && d.payload.action is string && d.payload.action.size() <= 3000
+          && d.payload.topic is string && d.payload.topic.size() <= 3000
+          && d.payload.competency is string && d.payload.competency.size() <= 3000
+          && d.payload.day is string && d.payload.day.size() <= 3000
+          && d.payload.priority is string && d.payload.priority.size() <= 3000
+          && d.payload.rationale is string && d.payload.rationale.size() <= 3000
+          && d.payload.evidence is string && d.payload.evidence.size() <= 3000
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_complementos/cp_periodo_2026)
+          && d.payload.day in ['','2','3','4','5','6','8','9'] && d.payload.priority in ['','alta','media','baja']
+          && (d.payload.status != 'done' || (d.payload.code.size() > 0 && d.payload.date.size() > 0 && d.payload.product.size() > 0 && d.payload.deviation.size() > 0 && d.payload.requirement.size() > 0 && d.payload.cause.size() > 0 && d.payload.control.size() > 0 && d.payload.action.size() > 0 && d.payload.topic.size() > 0 && d.payload.competency.size() > 0 && d.payload.day.size() > 0 && d.payload.priority.size() > 0 && d.payload.rationale.size() > 0 && d.payload.evidence.size() > 0))) ||
+        (d.type == 'aprendizaje' && d.payload.keys().hasAll(["caseId","personId","date","explanation","requirement","detection","containment","communication","verification","result","reinforcement","resolved","evidence","status"]) && d.payload.keys().hasOnly(["caseId","personId","date","explanation","requirement","detection","containment","communication","verification","result","reinforcement","resolved","evidence","status"])
+          && d.payload.caseId is string && d.payload.caseId.size() <= 3000
+          && d.payload.personId is string && d.payload.personId.size() <= 3000
+          && d.payload.date is string && d.payload.date.size() <= 3000
+          && d.payload.explanation is string && d.payload.explanation.size() <= 3000
+          && d.payload.requirement is string && d.payload.requirement.size() <= 3000
+          && d.payload.detection is string && d.payload.detection.size() <= 3000
+          && d.payload.containment is string && d.payload.containment.size() <= 3000
+          && d.payload.communication is string && d.payload.communication.size() <= 3000
+          && d.payload.verification is string && d.payload.verification.size() <= 3000
+          && d.payload.result is string && d.payload.result.size() <= 3000
+          && d.payload.reinforcement is string && d.payload.reinforcement.size() <= 3000
+          && d.payload.resolved is string && d.payload.resolved.size() <= 3000
+          && d.payload.evidence is string && d.payload.evidence.size() <= 3000
+          && exists(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(d.payload.personId))
+          && d.id == 'cp_apr_' + d.payload.caseId + '_' + d.payload.personId
+          && get(/databases/$(database)/documents/expalsa_capacitacion_2026_complementos/$(d.payload.caseId)).data.type == 'reclamo'
+          && d.payload.result in ['','demostrado','refuerzo'] && d.payload.resolved in ['','si','no']
+          && (d.payload.status != 'done' || (d.payload.result == 'demostrado' && (d.payload.reinforcement == '' || d.payload.resolved == 'si')))
+          && (d.payload.status != 'done' || (d.payload.caseId.size() > 0 && d.payload.personId.size() > 0 && d.payload.date.size() > 0 && d.payload.explanation.size() > 0 && d.payload.requirement.size() > 0 && d.payload.detection.size() > 0 && d.payload.containment.size() > 0 && d.payload.communication.size() > 0 && d.payload.verification.size() > 0 && d.payload.result.size() > 0 && d.payload.resolved.size() > 0 && d.payload.evidence.size() > 0)))
+      );
+    }
+    function capComplementValid(d, id) {
+      return expalsaAdmin()
+        && d.keys().hasAll(['id','type','payload','rev','createdAt','updatedAt','updatedBy'])
+        && d.keys().hasOnly(['id','type','payload','rev','createdAt','updatedAt','updatedBy'])
+        && d.id == id && id.matches('cp_[A-Za-z0-9_]{8,200}')
+        && d.rev is int && d.rev >= 1
+        && d.createdAt is timestamp && d.updatedAt == request.time && d.updatedBy == request.auth.uid
+        && capComplementPayload(d);
+    }
+    match /expalsa_capacitacion_2026_complementos/{id} {
+      allow get, list: if expalsaAdmin();
+      allow create: if capComplementValid(request.resource.data, id)
+        && request.resource.data.rev == 1 && request.resource.data.createdAt == request.time;
+      allow update: if capComplementValid(request.resource.data, id)
+        && request.resource.data.id == resource.data.id && request.resource.data.type == resource.data.type
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.rev == resource.data.rev + 1;
+      allow delete: if false;
+    }
   }
 }
-
