@@ -13,14 +13,32 @@ export function progressModel(data){
   const daily=Array.from({length:10},(_,i)=>{const values=series.map(s=>s.practice[i]).filter(finite);return {day:i+1,coverage:values.length,total:people.length,average:mean(values),maximum:values.filter(v=>v===100).length,target:values.filter(v=>v>=85).length,below:values.filter(v=>v<85).length};});
   return {people,sessions,series,daily,theoryKeys:keys,theoryLabels:keys.map(k=>'ET'+k.split('_')[0]+' I'+(k.endsWith('_2')?2:1))};
 }
-export function lineSvg(labels,series,{title='Evolución de resultados',height=270,interactive=false,mode='practice'}={}){
-  const width=960,left=48,right=26,top=25,bottom=48,w=width-left-right,h=height-top-bottom;
+export function pointLabelPositions(items,minY,maxY,gap=36){
+  const sorted=items.map(item=>({...item})).sort((a,b)=>a.py-b.py||a.order-b.order);
+  for(let i=0;i<sorted.length;i++)sorted[i].labelY=Math.max(minY,sorted[i].py-20,i?sorted[i-1].labelY+gap:minY);
+  if(sorted.length&&sorted.at(-1).labelY>maxY){sorted.at(-1).labelY=maxY;for(let i=sorted.length-2;i>=0;i--)sorted[i].labelY=Math.min(sorted[i].labelY,sorted[i+1].labelY-gap);}
+  return sorted;
+}
+export function lineSvg(labels,series,{title='Evolución de resultados',height=270,interactive=false,mode='practice',pointLabels=false}={}){
+  const labelWidth=Math.max(128,...series.map(s=>Math.min(210,Math.max(String(s.firstName||s.label||'').split(/\s+/)[0].length*7,String(s.employeeCode||'Sin código').length*6)+18)));
+  const step=Math.max(164,labelWidth+32),left=48,right=pointLabels?labelWidth+30:26;
+  const width=pointLabels?Math.max(960,left+Math.max(1,labels.length-1)*step+right):960;
+  if(pointLabels)height=Math.max(height,460,series.length*36+150);
+  const top=pointLabels?36:25,bottom=pointLabels?56:48,w=width-left-right,h=height-top-bottom;
   const x=i=>left+(labels.length>1?i*w/(labels.length-1):w/2),y=v=>top+(100-v)/100*h;
-  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(title)}. Escala de cero a cien. Las interrupciones representan datos no disponibles."><rect width="${width}" height="${height}" fill="white"/>`;
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" ${pointLabels?`style="min-width:${width}px;width:100%;max-width:none"`:''} role="img" aria-label="${esc(title)}. Escala de cero a cien. Las interrupciones representan datos no disponibles."><rect width="${width}" height="${height}" fill="white"/>`;
   for(const v of [0,25,50,75,100])svg+=`<line x1="${left}" y1="${y(v)}" x2="${width-right}" y2="${y(v)}" stroke="#dce5ea"/><text x="${left-9}" y="${y(v)+4}" text-anchor="end" font-size="12" fill="#526575">${v}</text>`;
   svg+=`<line x1="${left}" y1="${y(85)}" x2="${width-right}" y2="${y(85)}" stroke="#536575" stroke-dasharray="5 5"/><text x="${width-right}" y="${y(85)-5}" text-anchor="end" font-size="11" fill="#536575">Meta 85%</text>`;
   labels.forEach((label,i)=>{svg+=`<text x="${x(i)}" y="${height-18}" text-anchor="middle" font-size="12" fill="#334f63">${esc(label)}</text>`;});
-  series.forEach((s,idx)=>{let segment=[];const flush=()=>{if(segment.length>1)svg+=`<polyline fill="none" stroke="${s.color}" stroke-width="2.3" ${idx%3===1?'stroke-dasharray="7 3"':idx%3===2?'stroke-dasharray="2 3"':''} points="${segment.join(' ')}"/>`;segment=[];};s.values.forEach((v,i)=>{if(!finite(v)){flush();return;}segment.push(x(i)+','+y(v));});flush();s.values.forEach((v,i)=>{if(finite(v))svg+=`<circle ${interactive?`tabindex="0" role="button" aria-label="${esc(s.label)} ${esc(labels[i])} ${percent(v)}" data-curve-person="${esc(s.id)}" data-curve-index="${i}" data-curve-mode="${esc(mode)}"`:""} cx="${x(i)}" cy="${y(v)}" r="3.4" fill="white" stroke="${s.color}" stroke-width="2"><title>${esc(s.label)} · ${esc(labels[i])} · ${percent(v)}</title></circle>`;});});
+  series.forEach((s,idx)=>{let segment=[];const flush=()=>{if(segment.length>1)svg+=`<polyline fill="none" stroke="${s.color}" stroke-width="2.3" ${idx%3===1?'stroke-dasharray="7 3"':idx%3===2?'stroke-dasharray="2 3"':''} points="${segment.join(' ')}"/>`;segment=[];};s.values.forEach((v,i)=>{if(!finite(v)){flush();return;}segment.push(x(i)+','+y(v));});flush();s.values.forEach((v,i)=>{if(finite(v))svg+=`<circle ${interactive?`tabindex="${pointLabels?-1:0}" role="button" aria-label="${esc(s.label)} ${esc(labels[i])} ${percent(v)}" data-curve-person="${esc(s.id)}" data-curve-index="${i}" data-curve-mode="${esc(mode)}"`:''} cx="${x(i)}" cy="${y(v)}" r="3.4" fill="white" stroke="${s.color}" stroke-width="2"><title>${esc(s.label)} · ${esc(labels[i])} · ${percent(v)}</title></circle>`;});});
+  if(pointLabels)for(let i=0;i<labels.length;i++){
+    const points=series.flatMap((s,order)=>finite(s.values[i])?[{series:s,order,py:y(s.values[i])}]:[]);
+    for(const point of pointLabelPositions(points,top+16,height-bottom-16)){
+      const s=point.series,px=x(i),lx=px+12,ly=point.labelY;
+      const firstName=String(s.firstName||s.label||'Inspector').trim().split(/\s+/)[0],code=String(s.employeeCode||'Sin código');
+      svg+=`<g class="progress-point-label" data-label-person="${esc(s.id)}" data-curve-index="${i}" data-curve-mode="${esc(mode)}" ${interactive?`role="button" tabindex="0" aria-label="${esc(firstName)} ${esc(code)} · ${esc(labels[i])} · ${percent(s.values[i])}"`:''}><title>${esc(s.label)} · ${esc(code)} · ${esc(labels[i])} · ${percent(s.values[i])}</title><line x1="${px}" y1="${point.py}" x2="${lx}" y2="${ly}" stroke="${s.color}" stroke-width="1" opacity=".65"/><rect x="${lx}" y="${ly-16}" width="${labelWidth}" height="32" rx="4" fill="white" fill-opacity=".95" stroke="${s.color}" stroke-opacity=".45"/><text x="${lx+7}" y="${ly-3}" fill="${s.color}" font-family="Arial,sans-serif" font-size="12" font-weight="700">${esc(firstName)}</text><text x="${lx+7}" y="${ly+11}" fill="#334f63" font-family="Arial,sans-serif" font-size="11">${esc(code)}</text></g>`;
+    }
+  }
   return svg+'</svg>';
 }
 export function barsSvg(rows){const width=960,height=Math.max(110,rows.length*31+45),left=48,right=80,w=width-left-right;let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Comparación de práctica ponderada y promedio teórico por inspector. Azul práctica, naranja teoría."><rect width="${width}" height="${height}" fill="white"/>`;
