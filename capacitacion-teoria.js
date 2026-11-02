@@ -94,15 +94,15 @@ export function theorySection(theory,{details=true,competencies=[]}={}){
 export function exampleTheory(people){
   return Object.fromEntries(people.map((p,i)=>{
     const reviews=[];
-    for(const key of i===0?['1','1_2','2','3']:['1','2','3']){
+    for(const key of i===6?['1','1_2','2','3']:['1','2','3']){
       const stage=stageOf(key),version='EJEMPLO-BANCO-'+key,questions=Array.from({length:30},(_,j)=>({id:'DEMO_C'+(j%10+1)+'_'+j,criterionId:'C'+(j%10+1),topic:'C'+(j%10+1)+' · Tema demostrativo',type:j%6===0?'fill':'choice',text:j%6===0?'Ejemplo de cálculo: ¿cuántas piezas hay en dos muestras de diez piezas?':'Pregunta demostrativa de criterio técnico '+(j+1),inputMode:j%6===0?'numeric':undefined,options:j%6===0?undefined:[{id:'A',label:'Aplicar y documentar el procedimiento vigente'},{id:'B',label:'Continuar sin comprobar el requisito'}],explanation:'Fundamento ficticio para revisar el diseño. No pertenece al banco oficial de EXPALSA.'}));
       const keys=Object.fromEntries(questions.map(q=>[q.id,q.type==='fill'?{accepted:['20']}:{value:'A'}]));
-      const correct=i===0&&key==='1'?15:i===1?22:27;
-      const missed=new Set(stage===1?[27,28,29]:stage===2?[24,25,26]:[20,21,22]);
-      const answers=Object.fromEntries(questions.map((q,j)=>{const right=i<2?j<correct:!missed.has(j);return [q.id,q.type==='fill'?(right?'20':'10'):(right?'A':'B')];}));
+      const correct=i<6?(stage===2?27:26):i<8?(i===6&&key==='1'?15:key==='1_2'?20:stage===1?18:stage===2?19:20):stage===1?8:stage===2?9:10;
+      const missed=new Set(stage===1?[26,27,28,29]:stage===2?[23,24,25]:[20,21,22,23]);
+      const answers=Object.fromEntries(questions.map((q,j)=>{const right=i>=6?j<correct:!missed.has(j);return [q.id,q.type==='fill'?(right?'20':'10'):(right?'A':'B')];}));
       const attempt={uid:p.accountUid||'demo_uid_'+i,stage,status:'submitted',bankSchema:3,version,answers,submittedAt:'2026-11-'+String(stage*3+1).padStart(2,'0')+'T14:00:00Z'};
       reviews.push(buildAttemptReview({uid:attempt.uid,key,attempt,automatic:{uid:attempt.uid,stage,correctCount:correct,total:30},bank:{stage,schema:3,version,questions},secret:{stage,version,keys}}));
     }
-    return [p.id,summarizeTheory(reviews,{linkStatus:'linked',note:'Simulación ficticia: tres etapas, banco de 30 preguntas por intento y un segundo intento demostrativo. No son exámenes ni notas reales.'})];
+    return [p.id,summarizeTheory(reviews,{linkStatus:'linked',note:'Simulación ficticia: tres etapas, treinta preguntas por intento; seis promedios en meta, cuatro por debajo y dos con brechas amplias. Incluye un segundo intento demostrativo. No son exámenes ni notas reales.'})];
   }));
 }

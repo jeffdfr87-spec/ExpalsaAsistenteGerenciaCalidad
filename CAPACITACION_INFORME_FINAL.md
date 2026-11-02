@@ -12,7 +12,7 @@ Datos: `expalsa_capacitacion_2026_equipo/responsable`, lectura y escritura exclu
 
 La pestaña **Informe final del plan** incorpora:
 
-- **Ver ejemplo del informe final**: diez inspectores ficticios, cien jornadas, calibración, un reclamo demostrativo y dos necesidades de refuerzo. No escribe en Firestore.
+- **Ver ejemplo del informe final**: diez inspectores ficticios, cien jornadas, calibración, un reclamo demostrativo, seis promedios teóricos en meta, cuatro por debajo y dos brechas amplias para revisión prioritaria. No escribe en Firestore.
 - **Generar con los registros reales**: consulta los inspectores activos y sus registros actuales. Reúne diez jornadas por inspector, criterios y competencias, observaciones, seguimientos, fotos generales y por criterio, actas y resultados de calibración, matriz de reclamos y aprendizajes individuales.
 - **Tamaño de fotografías**: pequeñas, medianas o grandes. También permite omitirlas y volver a generar.
 - **Imprimir / Guardar PDF**: abre la impresión del informe para guardarlo como PDF desde el navegador.
@@ -49,3 +49,25 @@ Consultas privadas de solo lectura: accesos, entregas, resúmenes, autocalificac
 El ejemplo contiene preguntas y respuestas ficticias de selección y cálculo, tres etapas de treinta preguntas y un segundo intento demostrativo. Ninguna pregunta de un banco privado real se incluye en ese ejemplo.
 
 Verificación adicional: comparación de puntuación con el código fuente vigente, promedios con reintento, cero válido, rechazo de cuentas/versiones inconsistentes, conservación de notas ante discrepancias, datos sin vínculo, filtro de fechas y generación en navegador del ejemplo completo y del resumen. En la consulta de esquema no había participantes activos vinculados para comprobar un examen real completo; no se alteraron datos para simular esa prueba.
+
+
+## Informe ejecutivo compacto y gráfico de avances
+
+El formato predeterminado del informe es **Ejecutivo compacto con tablas y gráficos**. El ejemplo se organiza en cinco páginas de contenido y una página opcional de evidencia seleccionada. Conserva resumen individual, barras de práctica y teoría, curvas prácticas de diez días, trayectoria teórica por etapa e intento, radar C1–C10, cobertura, brechas, calibración 6.1, reclamos 6.2 y acciones de refuerzo propuestas. La extensión real puede variar según los datos y la configuración de impresión.
+
+No repite los cien registros ni todos los cuestionarios en la síntesis. El selector **Expediente completo con registros y cuestionarios** conserva el detalle íntegro por separado. En el ejecutivo se seleccionan como máximo cuatro fotos; la recuperación de imágenes se limita progresivamente para no descargar todas las galerías cuando solo se necesita una selección.
+
+La nueva pestaña **Gráfico de avances** muestra dos curvas independientes:
+
+- Práctica: diez jornadas, una serie por inspector; solo jornadas completas y resultados de 0–100%.
+- Teoría: etapas e intentos de la plataforma de evaluación, sin convertirlos artificialmente en días prácticos. El promedio mantiene todos los intentos calificados.
+
+Los resultados ausentes se mantienen como datos faltantes y cortan la curva, sin convertirse en cero. Se pueden filtrar las curvas por inspector cuando se superponen. La tabla diaria conserva cobertura, cantidad en meta, cantidad con 100% y promedio de todo el equipo.
+
+Las fotos o avatares son botones. Al pulsarlos se abre una ficha breve con nombres, apellidos, código y área. Los puntos de las curvas también permiten abrir la ficha, incluido acceso por teclado. En práctica, cuando está registrada, se presenta el área de la jornada; en teoría se identifica el área del grupo sin atribuir al examen un lugar que no consta en la entrega. Los datos que falten no se inventan ni se sustituyen por identificadores internos.
+
+Mientras la pestaña esté abierta, las suscripciones de Firestore actualizan participantes, jornadas, entregas teóricas y calificaciones. Se cancelan al salir o cerrar la sesión. La simulación está separada de los datos reales y no escribe resultados ni mantiene suscripciones activas.
+
+El ejemplo contiene seis promedios teóricos ≥85%, cuatro inferiores a 85%, y dos inferiores a 50% con resultados prácticos persistentemente bajos. Estos últimos se identifican como **brechas amplias para revisión técnica prioritaria**. El sistema no concluye que una persona sea incapaz de aprender ni recomienda automáticamente su desvinculación.
+
+Verificación: coherencia numérica de diez series y cien jornadas; escenario 6/4/2; exclusión de retirados; datos ausentes sin cero; fichas desde fotos y puntos; selección individual; actualización automática tras una jornada simulada y cierre de suscripciones al salir; interfaz móvil sin desbordamiento de página. Se revisaron las alturas de las seis secciones del ejemplo en ancho A4 con los estilos de impresión. No se crearon datos de prueba en producción.
