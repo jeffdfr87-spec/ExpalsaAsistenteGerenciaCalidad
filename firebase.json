@@ -1,0 +1,16 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "registro-inspectores",
+      "runtime": "nodejs22",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*",
+        "*.local"
+      ]
+    }
+  ]
+}
