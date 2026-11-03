@@ -274,6 +274,18 @@ body:has(#cloudBar[style*="flex"]) .topactions #cloudReload,body:has(#cloudBar[s
       <input id="expalsaPassword" type="password" name="password" autocomplete="current-password" required>
       <button class="button" id="expalsaLoginButton" type="submit">Iniciar sesión</button>
     </form>
+    <button class="button secondary" type="button" id="expalsaShowSignup">Crear cuenta de inspector</button>
+    <form id="expalsaSignupForm" autocomplete="on" hidden>
+      <label for="expalsaSignupEmail">Correo del inspector</label>
+      <input id="expalsaSignupEmail" type="email" autocomplete="email" required placeholder="usuario@empresa.com">
+      <label for="expalsaSignupPassword">Contraseña</label>
+      <input id="expalsaSignupPassword" type="password" autocomplete="new-password" minlength="6" required>
+      <label for="expalsaSignupConfirm">Confirmar contraseña</label>
+      <input id="expalsaSignupConfirm" type="password" autocomplete="new-password" minlength="6" required>
+      <button class="button" id="expalsaSignupButton" type="submit">Crear cuenta y solicitar acceso</button>
+      <p>La solicitud aparecerá en Notificaciones y el acceso se habilitará tras la aprobación.</p>
+      <button class="button quiet" type="button" id="expalsaShowLogin">Volver a iniciar sesión</button>
+    </form>
     <p id="expalsaAuthMessage" role="status" aria-live="polite"></p>
     <section id="expalsaPendingBox" class="expalsa-verify-box" hidden aria-label="Solicitud de acceso">
       <p><strong>Autorización pendiente</strong></p>

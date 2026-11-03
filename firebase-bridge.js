@@ -17,7 +17,7 @@ if (!cfg || !cfg.apiKey || cfg.apiKey.includes('PEGAR_') || !cfg.appId || cfg.ap
 } else {
   try {
     const V = '13.0.0';
-    const [{ initializeApp }, { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserSessionPersistence }, { getFirestore, collection, getDocs, doc, getDoc, getDocFromServer, onSnapshot, setDoc, updateDoc, writeBatch, runTransaction, serverTimestamp, Timestamp }] = await Promise.all([
+    const [{ initializeApp }, { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, setPersistence, browserSessionPersistence }, { getFirestore, collection, getDocs, doc, getDoc, getDocFromServer, onSnapshot, setDoc, updateDoc, writeBatch, runTransaction, serverTimestamp, Timestamp }] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
       import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
       import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
@@ -146,6 +146,8 @@ if (!cfg || !cfg.apiKey || cfg.apiKey.includes('PEGAR_') || !cfg.appId || cfg.ap
       const code = error?.code || '';
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'Usuario o contraseña incorrectos.';
       if (code === 'auth/invalid-email') return 'El formato del correo es incorrecto.';
+      if (code === 'auth/email-already-in-use') return 'Ese correo ya tiene una cuenta. Inicia sesión para solicitar o comprobar su autorización.';
+      if (code === 'auth/weak-password') return 'La contraseña debe tener al menos 6 caracteres.';
       if (code === 'auth/too-many-requests') return 'Demasiados intentos. Intenta más tarde.';
       if (code === 'permission-denied') return 'Acceso denegado por las reglas de Firestore. Verifica que estén publicadas y que la cuenta tenga permisos.';
       return (error?.message || 'Error desconocido').slice(0, 400);
@@ -164,6 +166,49 @@ if (!cfg || !cfg.apiKey || cfg.apiKey.includes('PEGAR_') || !cfg.appId || cfg.ap
       }
     });
 
+    el('expalsaShowSignup').addEventListener('click', () => {
+      el('expalsaLoginForm').hidden = true;
+      el('expalsaSignupForm').hidden = false;
+      el('expalsaShowSignup').hidden = true;
+      el('expalsaPendingBox').hidden = true;
+      info('');
+      el('expalsaSignupEmail').value = el('expalsaEmail').value.trim();
+      el('expalsaSignupEmail').focus();
+    });
+    el('expalsaShowLogin').addEventListener('click', () => {
+      el('expalsaSignupForm').hidden = true;
+      el('expalsaLoginForm').hidden = false;
+      el('expalsaShowSignup').hidden = false;
+      info('');
+      el('expalsaEmail').value = el('expalsaSignupEmail').value.trim();
+      el('expalsaEmail').focus();
+    });
+    el('expalsaSignupForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const email = el('expalsaSignupEmail').value.trim().toLowerCase();
+      const password = el('expalsaSignupPassword').value;
+      const confirmation = el('expalsaSignupConfirm').value;
+      const button = el('expalsaSignupButton');
+      if (!isValidAccountEmail(email)) { info('Ingresa un correo válido.'); return; }
+      if (password.length < 6) { info('La contraseña debe tener al menos 6 caracteres.'); return; }
+      if (password !== confirmation) { info('Las contraseñas no coinciden.'); return; }
+      button.disabled = true;
+      info('Creando cuenta y enviando solicitud de autorización…');
+      try {
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = credential.user;
+        const request = doc(db, REQUESTS_COLLECTION, user.uid);
+        await setDoc(request, {email, status: 'pending', createdAt: serverTimestamp()});
+        el('expalsaSignupPassword').value = '';
+        el('expalsaSignupConfirm').value = '';
+        await showPending(user);
+        info('Solicitud enviada. Podrás ingresar cuando Calidad apruebe tu cuenta.');
+      } catch (err) {
+        info(errorText(err));
+        button.disabled = false;
+      }
+    });
+
     const OWNER_EMAIL = 'jefferson@expalsaevaluations.com';
     const ACCESS_COLLECTION = 'expalsa_calidad_accesos';
     const REQUESTS_COLLECTION = 'expalsa_calidad_solicitudes';
@@ -173,6 +218,8 @@ if (!cfg || !cfg.apiKey || cfg.apiKey.includes('PEGAR_') || !cfg.appId || cfg.ap
     const showLogin = () => {
       gate.style.display = 'flex';
       el('expalsaLoginForm').hidden = false;
+      el('expalsaSignupForm').hidden = true;
+      el('expalsaShowSignup').hidden = false;
       el('expalsaPendingBox').hidden = true;
       el('expalsaLoginButton').disabled = false;
       el('expalsaAdminOpen').hidden = true;
@@ -180,6 +227,8 @@ if (!cfg || !cfg.apiKey || cfg.apiKey.includes('PEGAR_') || !cfg.appId || cfg.ap
     const showPending = async user => {
       gate.style.display = 'flex';
       el('expalsaLoginForm').hidden = true;
+      el('expalsaSignupForm').hidden = true;
+      el('expalsaShowSignup').hidden = true;
       el('expalsaPendingBox').hidden = false;
       el('cloudBar').style.display = 'none';
       el('expalsaPendingEmail').textContent = user.email || '';
