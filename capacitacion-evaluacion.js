@@ -29,8 +29,9 @@ export function createTrainingEvaluation({context,notify}){
  function draw(){
   const el=root();if(!el)return;
   if(!bank){el.innerHTML='<section class="panel"><h2>Evaluación de capacitación</h2><p role="alert">'+E(error||'Consultando banco…')+'</p><button class="button" data-ce="reload">Reintentar</button></section>';el.onclick=click;return;}
+  if(preview&&!current){el.innerHTML='<section class="panel"><div class="section-title"><h2>Simulador de capacitación</h2><button class="button primary" data-ce="simulatorStart">Iniciar prueba</button></div></section>';el.onclick=click;return;}
   const roster=people();
-  if(!roster.length){el.innerHTML='<section class="panel"><h2>Evaluación de capacitación</h2><div class="empty">Sin inspectores asignados.</div></section>';return;}
+  if(!roster.length&&!preview){el.innerHTML='<section class="panel"><h2>Evaluación de capacitación</h2><div class="empty">Sin inspectores asignados.</div></section>';return;}
   el.innerHTML='<style>#trainingEvaluationRoot,#trainingEvaluationRoot>.panel{min-width:0;max-width:100%;width:100%}#trainingEvaluationRoot .form-field{min-width:0}#trainingEvaluationRoot select{min-width:0;max-width:100%}#trainingEvaluationRoot .tablewrap{min-width:0;max-width:100%}#trainingEvaluationRoot .section-title{flex-wrap:wrap;gap:10px}#trainingEvaluationRoot .exam-question{border:1px solid #dce5ea;border-radius:12px;padding:18px;margin:12px 0;background:#fff}#trainingEvaluationRoot .exam-question label{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;cursor:pointer}#trainingEvaluationRoot .exam-question input[type=radio]{width:18px;height:18px;flex:none;margin-top:3px}#trainingEvaluationRoot textarea{width:100%;min-height:100px}#trainingEvaluationRoot .exam-time{font-variant-numeric:tabular-nums;font-size:1.2rem;font-weight:800}#trainingEvaluationRoot .exam-days{display:flex;gap:7px;flex-wrap:wrap}#trainingEvaluationRoot .exam-days [aria-pressed=true]{background:#397e88;color:#fff}#trainingEvaluationRoot .exam-note{padding:12px;background:#f0f7f8;border-radius:10px;line-height:1.6}#trainingEvaluationRoot .exam-bad{color:#a53945}#trainingEvaluationRoot .exam-summary{display:flex;gap:12px;flex-wrap:wrap}#trainingEvaluationRoot .exam-summary>div{padding:14px;background:#f2f7f8;border-radius:12px;flex:1;min-width:140px}#trainingEvaluationRoot .exam-summary b{display:block;font-size:1.5rem}#trainingEvaluationRoot .exam-answer{white-space:pre-wrap;overflow-wrap:anywhere}#trainingEvaluationRoot table{min-width:720px}#trainingEvaluationRoot .exam-question:focus{outline:2px solid #397e88}</style>'+
    '<section class="panel"><div class="section-title"><h2>Evaluación del aprendizaje</h2><span class="tag '+(preview?'warn':'good')+'">'+(preview?'PRUEBA SIN GUARDAR':'PLAN DE CAPACITACIÓN')+'</span></div><div class="row"><button class="button" data-ce="bank" '+(current?.status==='active'?'disabled':'')+'>'+(showBank?'Ocultar banco':'Consultar banco y rúbricas')+'</button><button class="button" data-ce="reload" '+(busy?'disabled':'')+'>Actualizar resultados</button></div><p id="trainingExamStatus" role="status">'+E(error)+'</p></section>'+
    (showBank?bankView():current?attemptView():dashboard(roster));
@@ -46,8 +47,8 @@ export function createTrainingEvaluation({context,notify}){
   '<section class="panel"><h3>Historial del grupo</h3>'+teamRecords().map(r=>'<p><button class="button sm" data-ce-open="'+E(r.id)+'">'+E(person(r.accountUid)?.name||'Inspector no activo')+' · '+date(r.startedAt)+' · '+E(r.purpose)+' · '+status(r)+'</button></p>').join('')+(teamRecords().length?'':'<p>Sin evaluaciones guardadas.</p>')+'</section>';
  }
  function attemptView(){
-  const p=person(current.accountUid),qs=questionsFor(bank,current.scope),selected=qs.filter(q=>q.day===focusDay),active=current.status==='active',result=evaluateTraining(bank,{...current,answers:JSON.stringify(answers),marks:JSON.stringify(marks)});
-  return '<section class="panel"><div class="section-title"><div class="inspector-identity">'+avatar(p)+'<div><h3>'+E(p?.name||'Inspector no activo')+'</h3><span>'+E(current.purpose)+' · '+(current.scope?'Jornada '+current.scope:'Plan completo')+' · '+status(current)+'</span></div></div><button class="button" data-ce="back">Volver al historial</button></div>'+(preview?'<p class="alert">Prueba de funcionamiento: ninguna respuesta ni resultado se guarda en Firebase.</p>':'')+
+  const p=person(current.accountUid)||(preview?{name:'Inspector de ejemplo'}:null),qs=questionsFor(bank,current.scope),selected=qs.filter(q=>q.day===focusDay),active=current.status==='active',result=evaluateTraining(bank,{...current,answers:JSON.stringify(answers),marks:JSON.stringify(marks)});
+  return '<section class="panel"><div class="section-title"><div class="inspector-identity">'+avatar(p)+'<div><h3>'+E(p?.name||'Inspector no activo')+'</h3><span>'+E(current.purpose)+' · '+(current.scope?'Jornada '+current.scope:'Plan completo')+' · '+status(current)+'</span></div></div><button class="button" data-ce="back">'+(preview?'Salir del simulador':'Volver al historial')+'</button></div>'+(preview?'<p class="alert">Prueba de funcionamiento: ninguna respuesta ni resultado se guarda en Firebase.</p>':'')+
    (active?'<div class="spread"><span class="exam-time" id="capExamClock"></span><span id="capExamSaved" role="status">'+(dirty?'Respuestas pendientes':'Respuestas guardadas')+'</span></div>':'<p>Entrega: '+date(current.submittedAt)+' · '+(current.submissionKind==='expired'?'Tiempo agotado':'Entrega manual')+'</p>')+
    '<div class="exam-summary"><div><b>'+result.answered+'/'+result.total+'</b>Respondidas</div><div><b>'+percent(result.automatic)+'</b>Selección automática'+(active?' · provisional':'')+'</div><div><b>'+result.pending+'</b>Casos por revisar</div><div><b>'+(active?'En curso':result.pending?'Pendiente':percent(result.score))+'</b>Nota final</div></div>'+
    '<div class="exam-days" style="margin:20px 0" role="group" aria-label="Jornada de la evaluación">'+[...new Set(qs.map(q=>q.day))].map(day=>'<button class="button sm" data-ce-day="'+day+'" aria-pressed="'+(focusDay===day)+'">D'+String(day).padStart(2,'0')+'</button>').join('')+'</div><h3>D'+String(focusDay).padStart(2,'0')+' · '+E(context().days[focusDay-1]?.title||'')+'</h3>'+
@@ -137,20 +138,23 @@ export function createTrainingEvaluation({context,notify}){
    if(b.dataset.ceDay){await flush();focusDay=Number(b.dataset.ceDay);draw();return;}
    if(b.dataset.ceOpen){await openRecord(b.dataset.ceOpen);return;}
    const action=b.dataset.ce;
+   if(action==='simulatorStart'){beginPreview();return;}
    if(action==='start'||action==='preview'){busy=true;try{await start(action==='preview');}finally{busy=false;draw();}return;}
    if(action==='save'){await flush();return;}
    if(action==='submit'){if(confirm('¿Entregar la evaluación? Las respuestas quedarán bloqueadas. Las preguntas sin responder cuentan como cero.'))await submit();return;}
    if(action==='grade'){await grade();return;}
-   if(action==='back'){if(current?.status==='submitted'&&dirty){if(!confirm('Hay una revisión de casos sin guardar. ¿Volver sin calificar?'))return;}await flush();clearInterval(timer);current=null;dirty=false;preview=false;draw();return;}
+   if(action==='back'){if(preview){await flush();clearInterval(timer);current=null;dirty=false;draw();return;}if(current?.status==='submitted'&&dirty){if(!confirm('Hay una revisión de casos sin guardar. ¿Volver sin calificar?'))return;}await flush();clearInterval(timer);current=null;dirty=false;preview=false;draw();return;}
    if(action==='bank'){if(current?.status==='active')throw Error('Entrega la evaluación antes de consultar las respuestas del banco.');await flush();showBank=!showBank;draw();return;}
    if(action==='reload'){await beforeLeave();current=null;preview=false;showBank=false;await load();}
   }catch(err){report(err);}
  }
+ function beginPreview(){const p=people()[0];preview=true;answers={};marks={};dirty=false;focusDay=1;const started=clock();current={id:'preview',accountUid:p?.accountUid||'__simulador__',scope:0,purpose:'simulador',durationMinutes:60,bankId:VERSION,status:'active',answers:'{}',marks:'{}',startedAt:{toMillis:()=>started,toDate:()=>new Date(started)},rev:1};startTimer();draw();}
+ async function openSimulator(){if(!bank)await load();if(!bank)return;if(current&&preview){draw();startTimer();return;}beginPreview();}
  async function beforeLeave(){await flush();if(current?.status==='submitted'&&dirty)throw Error('Guarda la revisión y califica, o vuelve al historial descartando esa revisión.');}
  function stop(){clearInterval(timer);clearTimeout(debounce);}
  function clear(){ticket++;stop();bank=null;records=[];current=null;answers={};marks={};dirty=false;preview=false;showBank=false;error='';}
  async function activate(){if(bank){draw();startTimer();}else await load();}
- return {view,activate,beforeLeave,stop,clear};
+ return {view,activate,openSimulator,beforeLeave,stop,clear};
 }
 
 
