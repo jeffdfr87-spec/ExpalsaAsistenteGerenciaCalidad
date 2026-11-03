@@ -121,7 +121,7 @@ export function createTrainingEvaluation({context,notify}){
    const {fs}=context();
    await updateRecord(old=>({status:'submitted',answers:old.answers,submittedAt:preview?{toDate:()=>new Date()}:fs.serverTimestamp(),submissionKind:expired?'expired':'manual'}));
    dirty=false;clearInterval(timer);if(!preview){await refreshRecords();current=records.find(r=>r.id===current.id)||current;}draw();
-  }finally{busy=false;}
+  }finally{busy=false;draw();}
  }
  async function grade(){
   const result=evaluateTraining(bank,{...current,marks:JSON.stringify(marks)});if(result.rows.some(r=>r.q.type==='case'&&!r.answered&&r.points>0))throw Error('Un caso sin responder debe calificarse con cero.');if(result.pending)throw Error('Revisa los '+result.pending+' casos pendientes antes de calificar.');
@@ -134,7 +134,7 @@ export function createTrainingEvaluation({context,notify}){
    if(b.dataset.ceDay){await flush();focusDay=Number(b.dataset.ceDay);draw();return;}
    if(b.dataset.ceOpen){await openRecord(b.dataset.ceOpen);return;}
    const action=b.dataset.ce;
-   if(action==='start'||action==='preview'){busy=true;try{await start(action==='preview');}finally{busy=false;}return;}
+   if(action==='start'||action==='preview'){busy=true;try{await start(action==='preview');}finally{busy=false;draw();}return;}
    if(action==='save'){await flush();return;}
    if(action==='submit'){if(confirm('¿Entregar la evaluación? Las respuestas quedarán bloqueadas. Las preguntas sin responder cuentan como cero.'))await submit();return;}
    if(action==='grade'){await grade();return;}
