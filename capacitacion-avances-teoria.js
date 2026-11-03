@@ -4,7 +4,7 @@ const image=p=>typeof p==='string'&&(/^(data:image\/(jpeg|png);base64,[A-Za-z0-9
 export function horizontalTheory(series){
  const rows=theoryRows(series);if(!rows.length)return '<div class="empty">Todavía no hay una evaluación integral calificada del plan de capacitación.</div>';
  const width=Math.max(960,rows.length*170+100),left=60,right=width-60,scale=v=>left+(right-left)*v/100;
- let svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+width+' 460" role="group" aria-label="Etapa única del plan. Escala horizontal de cero a cien. Inspectores de izquierda a derecha, de menor a mayor puntaje."><rect x="'+left+'" y="55" width="'+(right-left)+'" height="54" rx="15" fill="#e7eeee"/>';
+ let svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+width+' 460" style="min-width:'+width+'px" role="group" aria-label="Etapa única del plan. Escala horizontal de cero a cien. Inspectores de izquierda a derecha, de menor a mayor puntaje."><rect x="'+left+'" y="55" width="'+(right-left)+'" height="54" rx="15" fill="#e7eeee"/>';
  [0,25,50,70,85,100].forEach(v=>{svg+='<line x1="'+scale(v)+'" x2="'+scale(v)+'" y1="49" y2="115" stroke="'+(v===85?'#c69530':'#b7cacf')+'" stroke-dasharray="'+(v===85?'5 4':'none')+'"/><text x="'+scale(v)+'" y="35" text-anchor="middle" font-size="15" fill="#617688">'+v+'%</text>';});
  svg+='<text x="'+scale(85)+'" y="137" text-anchor="middle" font-size="12" fill="#8d671e">Meta 85%</text>';
  rows.forEach((s,i)=>{
