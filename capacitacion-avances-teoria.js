@@ -10,7 +10,8 @@ export function horizontalTheory(series){
  rows.forEach((s,i)=>{
   const x=left+(i+.5)*(right-left)/rows.length,sx=scale(s.value),name=String(s.person.name||'Inspector'),words=name.split(/\s+/),lines=[''];
   for(const word of words){if((lines.at(-1)+' '+word).trim().length>22&&lines.length<3)lines.push(word);else lines[lines.length-1]=(lines.at(-1)+' '+word).trim();}
-  svg+='<g class="daily-profile" tabindex="0" role="button" data-curve-person="'+E(s.id)+'" data-curve-mode="theory" data-curve-index="0" aria-label="Ver radar de '+E(name)+' · '+percent(s.value)+'"><title>'+E(name)+' · '+percent(s.value)+'</title><circle cx="'+sx+'" cy="82" r="6" fill="'+s.color+'"/><path d="M'+sx+' 109V'+(155+i*3)+'L'+x+' 225V240" fill="none" stroke="'+s.color+'" stroke-width="2"/><rect class="daily-row-bg" x="'+(x-77)+'" y="242" width="154" height="200" rx="12" fill="#f5f9f9"/>';
+  svg+='<circle cx="'+sx+'" cy="82" r="6" fill="'+s.color+'" pointer-events="none"/><path d="M'+sx+' 109V'+(155+i*3)+'L'+x+' 225V240" fill="none" stroke="'+s.color+'" stroke-width="2" pointer-events="none"/>';
+  svg+='<g class="daily-profile" tabindex="0" role="button" data-curve-person="'+E(s.id)+'" data-curve-mode="theory" data-curve-index="0" aria-label="Ver radar de '+E(name)+' · '+percent(s.value)+'"><title>'+E(name)+' · '+percent(s.value)+'</title><rect class="daily-row-bg" x="'+(x-77)+'" y="242" width="154" height="200" rx="12" fill="#f5f9f9"/>';
   svg+='<svg x="'+(x-25)+'" y="252" width="50" height="50" viewBox="0 0 50 50"><defs><clipPath id="theory-profile-'+i+'"><circle cx="25" cy="25" r="25"/></clipPath></defs><circle cx="25" cy="25" r="25" fill="#e2ecef"/>';
   if(image(s.person.portrait))svg+='<image href="'+E(s.person.portrait)+'" width="50" height="50" preserveAspectRatio="xMidYMid slice" clip-path="url(#theory-profile-'+i+')"/>';
   else svg+='<text x="25" y="31" text-anchor="middle" font-size="14" fill="'+s.color+'">'+E(s.code)+'</text>';

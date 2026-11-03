@@ -1,5 +1,5 @@
 import {radarProfile} from './capacitacion-radar-individual.js?v=20261103-unica-1';
-import {theoryCards} from './capacitacion-avances-teoria.js?v=20261103-horizontal-1';
+import {theoryCards} from './capacitacion-avances-teoria.js?v=20261103-horizontal-2';
 import {loadTheory,progressModel,summarizeTheory,PLAN_ATTEMPTS} from './capacitacion-evaluacion-modelo.js?v=20261103-unica-1';
 import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261102-lineas-libres-3';
 import {dailyCards,dailyChartStyles} from './capacitacion-avances-diario.js?v=20261103-diseno-1';
