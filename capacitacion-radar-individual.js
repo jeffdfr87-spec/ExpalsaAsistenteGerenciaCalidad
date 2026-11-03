@@ -20,7 +20,7 @@ export function radarProfile(model,series,days,competencies,kind,index){
  const count=competencies.length,cx=330,cy=260,r=175;
  const point=(i,v)=>{const angle=-Math.PI/2+i*Math.PI*2/count;return [cx+Math.cos(angle)*r*v/100,cy+Math.sin(angle)*r*v/100];};
  const points=values=>values.map((v,i)=>point(i,v).join(',')).join(' ');
- let svg='<svg viewBox="0 0 660 530" role="img" aria-label="Radar individual de competencias, '+(kind==='theory'?'teoría de la evaluación seleccionada':'práctica acumulada')+'. Línea sólida inspector, punteada promedio del grupo.">';
+ let svg='<svg viewBox="0 0 660 530" role="img" aria-label="Radar individual de competencias, '+(kind==='theory'?'evaluación teórica del plan en etapa única':'práctica acumulada')+'. Línea sólida inspector, punteada promedio del grupo.">';
  for(const v of [25,50,75,100])svg+='<polygon points="'+points(competencies.map(()=>v))+'" fill="none" stroke="#dce5e7" stroke-width="1.5"/>';
  competencies.forEach((c,i)=>{const p=point(i,100),l=point(i,122);svg+='<path d="M'+cx+' '+cy+'L'+p.join(' ')+'" stroke="#dce5e7"/><text x="'+l[0]+'" y="'+l[1]+'" text-anchor="'+(l[0]<cx-5?'end':l[0]>cx+5?'start':'middle')+'" font-size="12" fill="#617688">'+E(labels[i]||c.id)+'<title>'+E(c.label)+'</title></text>';});
  for(const [values,color,dash] of [[group,'#718590','6 5'],[own,'#498e91','']]){
@@ -32,5 +32,5 @@ export function radarProfile(model,series,days,competencies,kind,index){
  const known=own.map((value,i)=>({value,label:labels[i]||competencies[i].label})).filter(p=>finite(p.value)).sort((a,b)=>b.value-a.value);
  const missing=own.map((v,i)=>finite(v)?null:competencies[i].id).filter(Boolean);
  const summary='<dt>Jornadas</dt><dd>'+series.done+'/10</dd><dt>Promedio del radar</dt><dd>'+percent(mean(own))+(missing.length?' · parcial':'')+'</dd><dt>Mayor resultado</dt><dd>'+(known.length?E(known[0].label)+' ('+percent(known[0].value)+')':'Sin evidencia')+'</dd><dt>Menor resultado</dt><dd>'+(known.length?E(known.at(-1).label)+' ('+percent(known.at(-1).value)+')':'Sin evidencia')+'</dd>';
- return {summary,html:'<div class="inspector-radar"><h4>Competencias como inspector · '+(kind==='theory'?'teoría seleccionada':'práctica acumulada')+'</h4>'+svg+'<p class="note">Línea sólida: inspector. Línea punteada: promedio del grupo completo.</p><p class="note">'+(missing.length?'Sin evidencia en '+E(missing.join(', '))+'. Los valores pendientes no se dibujan como cero.':'Escala de 0 a 100%.')+'</p></div>'};
+ return {summary,html:'<div class="inspector-radar"><h4>Competencias como inspector · '+(kind==='theory'?'etapa única del plan':'práctica acumulada')+'</h4>'+svg+'<p class="note">Línea sólida: inspector. Línea punteada: promedio del grupo completo.</p><p class="note">'+(missing.length?'Sin evidencia en '+E(missing.join(', '))+'. Los valores pendientes no se dibujan como cero.':'Escala de 0 a 100%.')+'</p></div>'};
 }
