@@ -65,7 +65,7 @@ import {createPhotoManager} from "./capacitacion-fotos.js?v=20261101-foto-princi
 import {crearReporteCapacitacion} from "./capacitacion-reporte.js?v=20261101-fix2";
 import {createTrainingTimer} from "./capacitacion-cronometro.js?v=20261101-timer2";
 import {createTrainingDocuments} from "./capacitacion-documentos.js?v=20261102-plan-firmado-1";
-import {createProgressGraphs} from "./capacitacion-avances-grafico.js?v=20261103-diseno-1";
+import {createProgressGraphs} from "./capacitacion-avances-grafico.js?v=20261103-ejemplo-inspectores-1";
 import {createFinalReport} from "./capacitacion-informe-final.js?v=20261102-ejecutivo-3";
 import {createResponsible} from "./capacitacion-responsable.js?v=20261102-responsable-1";
 import {createCompliance} from "./capacitacion-complementos.js?v=20261102-solo-activos-2";
@@ -96,7 +96,36 @@ const sourceDay=d=>days[numDay(d)-1];
 const byStation=id=>stations.find(s=>s.id===id);
 const dateNow=()=>{const d=new Date(),z=v=>String(v).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());};
 let fs=null,db=null,auth=null,currentUser=null,photoManager=null,trainingTimer=null;
-const progressGraphs=createProgressGraphs({context:()=>({fs,db,user:currentUser,days,competencies:COMP,nameFor:p=>officialName(p.accountUid)||p.name,identityFor:p=>state.identities.get(p.accountUid)||{},areaFor:p=>stationName(p),photoFor:p=>photoUrl(p.accountUid)}),notify:toast});
+async function loadProgressExamplePeople(){
+ if(!currentUser)throw new Error('Inicia sesión para consultar los inspectores.');
+ const uid=currentUser.uid;
+ const people=state.accounts.filter(a=>a.name).map(a=>{
+  const registered=state.people.find(p=>p.accountUid===a.id&&p.active===true&&p.deleted!==true);
+  return {...registered,id:registered?.id||a.id,accountUid:a.id,name:a.name,active:true,deleted:false};
+ });
+ let storageModule;
+ return Promise.all(people.map(async p=>{
+  let portrait=photoUrl(p.accountUid);
+  if(!/^(data:image\/(jpeg|png);base64,|blob:)/.test(portrait)){
+   portrait='';
+   const photo=state.photoDocs.get(p.accountUid);
+   if(photo?.uid===p.accountUid&&photo.path==='expalsa_calidad_fotos/'+p.accountUid+'/perfil.jpg'){
+    try{
+     storageModule=storageModule||import('https://www.gstatic.com/firebasejs/13.0.0/firebase-storage.js');
+     const st=await storageModule;
+     const blob=await st.getBlob(st.ref(st.getStorage(auth.app),photo.path),1500000);
+     if(blob.type==='image/jpeg'||blob.type==='image/png'){
+      portrait=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
+     }
+    }catch(error){/* La ficha sigue disponible cuando no hay foto accesible. */}
+   }
+  }
+  if(currentUser?.uid!==uid)throw new Error('La sesión cambió.');
+  return {...p,portrait};
+ }));
+}
+
+const progressGraphs=createProgressGraphs({context:()=>({fs,db,user:currentUser,days,competencies:COMP,examplePeople:loadProgressExamplePeople,nameFor:p=>officialName(p.accountUid)||p.name,identityFor:p=>state.identities.get(p.accountUid)||{},areaFor:p=>stationName(p),photoFor:p=>photoUrl(p.accountUid)}),notify:toast});
 const finalReport=createFinalReport({context:()=>({fs,db,user:currentUser,days,competencies:COMP,nameFor:p=>officialName(p.accountUid)||p.name,identityFor:p=>state.identities.get(p.accountUid)||{},areaFor:p=>stationName(p),photoFor:p=>photoUrl(p.accountUid)}),notify:toast});
 const responsible=createResponsible({context:()=>({fs,db,user:currentUser}),notify:toast});
 const compliance=createCompliance({context:()=>({fs,db,user:currentUser,people:state.people.map(p=>({...p,name:officialName(p.accountUid)||p.name}))}),notify:toast});
