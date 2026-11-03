@@ -21,6 +21,7 @@ export function horizontalTheory(series){
 }
 export function theoryCards(series,selected,labels,simulated=false){
  const missing=series.filter(s=>!finite(s.theory[0]));
- return '<section class="daily-card"><h3>Etapa única · Evaluación integral de capacitación</h3><div class="daily-chart-scroll">'+horizontalTheory(series)+'</div><p class="note">Escala horizontal de izquierda a derecha. Inspectores ordenados de menor a mayor puntaje. Pulsa una foto o nombre para abrir el radar individual. '+(simulated?'Notas simuladas para demostración.':'Último intento integral calificado del plan; las comprobaciones por jornada no sustituyen este resultado.')+'</p>'+(missing.length?'<h4>Sin evaluación integral calificada</h4><div class="progress-legend">'+missing.map(s=>'<button type="button" class="progress-person" data-progress-person="'+E(s.id)+'" data-progress-mode="theory">'+E(s.person.name)+' · Sin nota</button>').join('')+'</div>':'')+'</section>';
+ return '<section class="daily-card"><h3>Evaluación integral de capacitación</h3><div class="daily-chart-scroll">'+horizontalTheory(series)+'</div>'+(missing.length?'<h4>Sin evaluación integral calificada</h4><div class="progress-legend">'+missing.map(s=>'<button type="button" class="progress-person" data-progress-person="'+E(s.id)+'" data-progress-mode="theory">'+E(s.person.name)+'</button>').join('')+'</div>':'')+'</section>';
 }
+
 

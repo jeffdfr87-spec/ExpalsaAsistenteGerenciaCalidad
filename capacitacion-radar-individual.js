@@ -34,3 +34,4 @@ export function radarProfile(model,series,days,competencies,kind,index){
  const summary='<dt>Jornadas</dt><dd>'+series.done+'/10</dd><dt>Promedio del radar</dt><dd>'+percent(mean(own))+(missing.length?' · parcial':'')+'</dd><dt>Mayor resultado</dt><dd>'+(known.length?E(known[0].label)+' ('+percent(known[0].value)+')':'Sin evidencia')+'</dd><dt>Menor resultado</dt><dd>'+(known.length?E(known.at(-1).label)+' ('+percent(known.at(-1).value)+')':'Sin evidencia')+'</dd>';
  return {summary,html:'<div class="inspector-radar"><h4>Competencias como inspector · '+(kind==='theory'?'etapa única del plan':'práctica acumulada')+'</h4>'+svg+'<p class="note">Línea sólida: inspector. Línea punteada: promedio del grupo completo.</p><p class="note">'+(missing.length?'Sin evidencia en '+E(missing.join(', '))+'. Los valores pendientes no se dibujan como cero.':'Escala de 0 a 100%.')+'</p></div>'};
 }
+

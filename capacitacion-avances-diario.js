@@ -42,6 +42,7 @@ export function dailyDetail(series,day){
 export function dailyCards(series,selected,days){
  const day=days.find(d=>Number(d.day??d.id)===selected+1)||days[selected];
  const title=typeof day==='string'?day:(day?.title||day?.name||day?.topic||'Jornada '+(selected+1));
- return '<section class="daily-card"><h2>Todas las jornadas</h2><div class="daily-chart-scroll">'+dailyOverview(series,selected)+'</div><p class="note">Un color por inspector. Solo se muestran jornadas completas; sin dato no equivale a cero.</p></section><section class="daily-card"><div class="daily-days" role="group" aria-label="Seleccionar jornada">'+Array.from({length:10},(_,i)=>'<button type="button" data-progress-day="'+i+'" aria-pressed="'+(selected===i)+'" aria-controls="dailyDetailChart">'+dayLabel(i)+'</button>').join('')+'</div><h3>'+dayLabel(selected)+' · '+E(title)+'</h3><div class="daily-chart-scroll" id="dailyDetailChart">'+dailyDetail(series,selected)+'</div><p class="note">Cada marca señala la nota real del inspector en la escala de 0 a 100%. Pulsa su nombre para abrir la ficha.</p></section>';
+ return '<section class="daily-card"><h2>Todas las jornadas</h2><div class="daily-chart-scroll">'+dailyOverview(series,selected)+'</div></section><section class="daily-card"><div class="daily-days" role="group" aria-label="Seleccionar jornada">'+Array.from({length:10},(_,i)=>'<button type="button" data-progress-day="'+i+'" aria-pressed="'+(selected===i)+'" aria-controls="dailyDetailChart">'+dayLabel(i)+'</button>').join('')+'</div><h3>'+dayLabel(selected)+' · '+E(title)+'</h3><div class="daily-chart-scroll" id="dailyDetailChart">'+dailyDetail(series,selected)+'</div></section>';
 }
+
 
