@@ -1,8 +1,8 @@
-import {radarProfile} from './capacitacion-radar-individual.js?v=20261103-unica-1';
-import {theoryCards} from './capacitacion-avances-teoria.js?v=20261103-horizontal-2';
-import {loadTheory,progressModel,summarizeTheory,PLAN_ATTEMPTS} from './capacitacion-evaluacion-modelo.js?v=20261103-unica-1';
-import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261102-lineas-libres-3';
-import {dailyCards,dailyChartStyles} from './capacitacion-avances-diario.js?v=20261103-diseno-1';
+import {radarProfile} from './capacitacion-radar-individual.js?v=20261103-puntos-1';
+import {theoryCards} from './capacitacion-avances-teoria.js?v=20261103-puntos-1';
+import {loadTheory,progressModel,summarizeTheory,PLAN_ATTEMPTS} from './capacitacion-evaluacion-modelo.js?v=20261103-puntos-1';
+import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261103-puntos-1';
+import {dailyCards,dailyChartStyles} from './capacitacion-avances-diario.js?v=20261103-puntos-1';
 const P='expalsa_capacitacion_2026_participantes',S='expalsa_capacitacion_2026_sesiones';
 const image=s=>typeof s==='string'&&(/^(data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+)$/.test(s)||s.startsWith('blob:'));
 const active=p=>p.active===true&&p.deleted!==true;
@@ -13,8 +13,8 @@ export function exampleForInspectors(people,days=[],competencies=[]){
   let seed=0;for(const ch of String(p.id))seed=(seed*31+ch.charCodeAt(0))>>>0;
   for(let day=1;day<=10;day++){
    const value=Math.min(16,Math.max(3,7+(seed%5)+Math.floor(day/2)-i%3));
-   const ratings={};for(let j=0;j<4;j++)ratings['demo'+j]=Math.floor(value/4)+(j<value%4?1:0);
-   sessions.push({id:'example-'+p.id+'-'+day,personId:p.id,day,status:'done',ratings:Object.fromEntries((days.find(d=>Number(d.day)===day)?.checks||[]).map((c,j)=>[c.id,Math.max(0,Math.min(4,ratings['demo'+(j%4)]))])),station:p.station||''});
+   const checks=days.find(d=>Number(d.day)===day)?.checks||[],total=Math.round(value/16*checks.length*4),count=checks.length||1;
+   sessions.push({id:'example-'+p.id+'-'+day,personId:p.id,day,status:'done',ratings:Object.fromEntries(checks.map((c,j)=>[c.id,Math.floor(total/count)+(j<total%count?1:0)])),station:p.station||''});
   }
   const attempts=[1].map(stage=>({key:String(stage),stage,number:1,status:'graded',score:Math.min(100,40+seed%36+stage*8),verified:true,competencies:competencies.map((c,j)=>({id:c.id,score:Math.min(100,Math.max(20,45+(seed+j*7)%35+stage*7)),questions:1}))}));
   theory[p.id]=summarizeTheory(attempts);
@@ -60,3 +60,4 @@ export function createProgressGraphs({context,notify}){
   function clear(){stop();data=null;roster=[];sessions=[];mode='real';filter='all';status='';updated='';theoryDirty=true;}
   return {view,activate,stop,clear};
 }
+

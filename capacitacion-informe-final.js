@@ -1,17 +1,18 @@
-import {buildExecutiveReport} from './capacitacion-informe-ejecutivo.js?v=20261103-unica-1';
-import {loadTheory,summarizeTheory,theorySection,exampleTheory} from './capacitacion-evaluacion-modelo.js?v=20261103-unica-1';
+import {sessionComplete,criterionScore} from './capacitacion-criterios.js?v=20261103-puntos-1';
+import {buildExecutiveReport} from './capacitacion-informe-ejecutivo.js?v=20261103-puntos-1';
+import {loadTheory,summarizeTheory,theorySection,exampleTheory} from './capacitacion-evaluacion-modelo.js?v=20261103-puntos-1';
 const ACTIVE=p=>p.active===true&&p.deleted!==true;
 const INDIVIDUAL=new Set(['resultado','aprendizaje']);
 const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TEXT=s=>E(s||'Sin registro.');
 const PHOTO=s=>typeof s==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(s);
-const score=s=>{const v=Object.values(s?.ratings||{}).filter(v=>Number.isInteger(v)&&v>=0&&v<=4);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length/4*100):null;};
+const score=(s,days)=>{const value=criterionScore(s,days);return value===null?null:Math.round(value);};
 export function analyzeReport(data){
   const people=data.people.filter(ACTIVE),ids=new Set(people.map(p=>p.id));
   const sessions=data.sessions.filter(s=>ids.has(s.personId));
   const records=data.records.filter(r=>!INDIVIDUAL.has(r.type)||ids.has(r.payload.personId));
   const analyses=people.map(p=>{
-    const visits=sessions.filter(s=>s.personId===p.id),done=visits.filter(s=>s.status==='done');
+    const visits=sessions.filter(s=>s.personId===p.id),done=visits.filter(s=>sessionComplete(s,data.days));
     const competencies=data.competencies.map(c=>{const observations=[];for(const s of done){const day=data.days.find(d=>d.day===s.day);for(const check of day?.checks||[]){const value=s.ratings?.[check.id];if(check.c===c.id&&Number.isInteger(value)&&value>=0&&value<=4)observations.push({day:s.day,label:check.label,value,critical:check.critical});}}return {...c,observations,level:observations.length?observations.reduce((a,b)=>a+b.value,0)/observations.length:null};});
     const observed=competencies.filter(c=>c.level!==null),weight=observed.reduce((a,b)=>a+b.w,0);
     const weighted=weight?Math.round(observed.reduce((a,b)=>a+b.level/4*b.w,0)/weight*100):null;
@@ -35,7 +36,7 @@ export function analyzeReport(data){
 const ACTIONS={C1:'Repetir la verificación de higiene, saneamiento y EPP en el puesto, justificando los hallazgos.',C2:'Clasificar muestras de defectos con la ficha técnica vigente y comparar con una referencia aprobada.',C3:'Repetir el muestreo y los cálculos de cuenta y uniformidad, verificando unidades y tolerancias.',C4:'Practicar tara y pesos y las verificaciones autorizadas de balanzas, termómetros y detector de metales, según el puesto.',C5:'Resolver ejercicios de correspondencia entre lote, orden, ficha técnica y resultados de laboratorio.',C6:'Repetir mediciones de temperatura y análisis de tiempos y flujo conforme al procedimiento.',C7:'Resolver una desviación de inocuidad y demostrar los controles HACCP aplicables a su área.',C8:'Simular identificación, contención, trazabilidad, comunicación y verificación de cierre.',C9:'Practicar un relevo y la comunicación técnica completa de un hallazgo.',C10:'Revisar registros y etiquetas, detectar errores y conservar los datos originales.'};
 function table(headers,rows,widths=[]){return `<table><colgroup>${headers.map((_,i)=>`<col${widths[i]?` style="width:${widths[i]}%"`:''}>`).join('')}</colgroup><thead><tr>${headers.map(h=>`<th>${E(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}">Sin registros.</td></tr>`}</tbody></table>`;}
 function fields(payload,labels){return labels.map(([key,label])=>`<p><strong>${E(label)}:</strong> <span class="preserve">${TEXT(payload?.[key])}</span></p>`).join('');}
-const STATUS=p=>p?.status==='done'?'Completo':'Borrador';
+const STATUS=(p,days)=>p?.status==='done'?(p.day===undefined||sessionComplete(p,days)?'Completo':'Pendiente de completar criterios'):'Borrador';
 function figure(jpeg,caption,size){return PHOTO(jpeg)?`<figure class="photo ${size}"><img src="${jpeg}" alt="${E(caption)}"><figcaption>${E(caption)}</figcaption></figure>`:'';}
 export function buildFinalReport(data,{photoSize='medium',includePhotos=true,includeTheoryDetails=true,mode='executive'}={}){
   const a=analyzeReport(data),example=data.example===true;
@@ -61,7 +62,7 @@ export function buildFinalReport(data,{photoSize='medium',includePhotos=true,inc
     body+=`<h3>Competencias C1 a C10</h3>${table(['Competencia','Peso','Nivel medio','Evidencias completas'],p.competencies.map(c=>[E(c.id+' '+c.label),c.w+'%',c.level===null?'Sin evidencia':c.level.toFixed(2)+'/4',String(c.observations.length)]),[52,12,18,18])}`;
     body+=theorySection(p.theory,{details:includeTheoryDetails,competencies:data.competencies});
     for(const day of data.days){const s=p.visits.find(s=>s.day===day.day);body+=`<section class="day"><h3>Día ${day.day} ${E(day.title)}</h3>`;if(!s){body+='<p>Jornada sin registro. No se atribuye asistencia ni resultado.</p></section>';continue;}
-      body+=`<p><strong>Fecha:</strong> ${TEXT(s.date)} · <strong>Asistencia:</strong> ${E({asistio:'Asistió',no_asistio:'No asistió',reprogramado:'Reprogramado'}[s.attendance]||'Sin registro')} · <strong>Duración:</strong> ${E(s.minutes)} minutos · <strong>Estado:</strong> ${STATUS(s)} · <strong>Resultado de la jornada:</strong> ${score(s)===null?'Sin calificación':score(s)+'%'}</p>`;
+      body+=`<p><strong>Fecha:</strong> ${TEXT(s.date)} · <strong>Asistencia:</strong> ${E({asistio:'Asistió',no_asistio:'No asistió',reprogramado:'Reprogramado'}[s.attendance]||'Sin registro')} · <strong>Duración:</strong> ${E(s.minutes)} minutos · <strong>Estado:</strong> ${STATUS(s,data.days)} · <strong>Resultado de la jornada:</strong> ${score(s,data.days)===null?'Sin calificación':score(s,data.days)+'%'}</p>`;
       body+=table(['Competencia','Criterio observado','Nivel'],day.checks.map(c=>[E(c.c),E(c.label)+(c.critical?' · crítico':''),s.ratings?.[c.id]==='na'?'No aplica':Number.isInteger(s.ratings?.[c.id])?`${s.ratings[c.id]}/4`:'Sin calificar']),[15,70,15]);
       body+=fields(s,[['notes','Observaciones y evidencias'],['followup','Acción de refuerzo o seguimiento']])+`<p><strong>Refuerzo verificado:</strong> ${s.followupResolved?'Sí':'No registrado como cerrado'}</p>`;
       const photos=data.photos?.[s.id]||[],seen=new Set();if(PHOTO(s.evidenceImage)){body+=picture(s.evidenceImage,`${p.person.name} · día ${day.day} · evidencia principal`);seen.add(s.evidenceImage);}for(const photo of photos){if(seen.has(photo.jpeg))continue;seen.add(photo.jpeg);const check=day.checks.find(c=>c.id===photo.criterionId);body+=picture(photo.jpeg,`${p.person.name} · día ${day.day} · ${check?check.c+' '+check.label:'evidencia general'}`);}
@@ -95,8 +96,8 @@ export function exampleData(days,competencies){
   const stations=['M02','M05','M06','M07','M08','M09','M10','B12','B345','T01'];
   const people=Array.from({length:10},(_,i)=>({id:'demo_'+i,name:'Inspector Demostrativo '+String(i+1).padStart(2,'0'),firstNames:'Inspector',lastNames:'Demostrativo '+String(i+1).padStart(2,'0'),employeeCode:'EJ-'+String(i+1).padStart(3,'0'),areaLabel:stations[i].startsWith('M')?'Máquina '+Number(stations[i].slice(1)):stations[i]==='T01'?'IQF Tornado 1':stations[i]==='B12'?'IQF Brine 1–2':'IQF Brine 3–4–5',station:stations[i],active:true}));
   const sessions=people.flatMap((p,i)=>days.map(day=>{let values;
-    if(i<6){const fours=Math.min(4,2+Math.floor((day.day-1)/3)+(i%3===0?1:0));values=day.checks.map((_,j)=>j<fours?4:3);}
-    else if(i<8){const threes=Math.min(4,1+Math.floor((day.day-1)/3));values=day.checks.map((_,j)=>j<threes?3:2);}
+    if(i<6){const fours=Math.min(day.checks.length,2+Math.floor((day.day-1)/3)+(i%3===0?1:0));values=day.checks.map((_,j)=>j<fours?4:3);}
+    else if(i<8){const threes=Math.min(day.checks.length,1+Math.floor((day.day-1)/3));values=day.checks.map((_,j)=>j<threes?3:2);}
     else {const twos=Math.min(3,Math.floor(day.day/3));values=day.checks.map((_,j)=>j<twos?2:day.day===1&&j===3?0:1);}
     return {id:p.id+'_'+day.day,personId:p.id,day:day.day,date:'2026-11-'+String(day.day+1).padStart(2,'0'),minutes:30,attendance:'asistio',status:'done',station:p.station,ratings:Object.fromEntries(day.checks.map((c,j)=>[c.id,values[j]])),notes:i<6?'Ejemplo: ejecuta los controles del puesto y documenta resultados conforme a la ficha técnica.':i<8?'Ejemplo: presenta mejora gradual, con brechas de cálculo o interpretación que requieren acompañamiento dirigido.':'Ejemplo: persisten dificultades importantes en la ejecución e interpretación. Requiere revisión técnica y nueva comprobación supervisada.',followup:i>=6?'Ejemplo: práctica supervisada, repaso del procedimiento y nueva comprobación documentada.':'',followupResolved:false,evidenceImage:''};
   }));
@@ -140,3 +141,4 @@ export function createFinalReport({context,notify}){
   function clear(){epoch++;html='';kind='';busy=false;}
   return {view,activate,clear};
 }
+

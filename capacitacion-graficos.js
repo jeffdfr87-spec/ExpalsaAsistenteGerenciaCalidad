@@ -1,15 +1,16 @@
+import {sessionComplete,criterionScore} from './capacitacion-criterios.js?v=20261103-puntos-1';
 export const SERIES_COLORS=['#1565c0','#a64b00','#00866a','#8e3ba3','#c43c48','#007c91','#6353b3','#875c28','#536e1f','#485b6b'];
 export const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const finite=n=>Number.isFinite(n)&&n>=0&&n<=100;
 export const mean=v=>{const a=v.filter(finite);return a.length?a.reduce((s,n)=>s+n,0)/a.length:null;};
 export const percent=n=>finite(n)?n.toFixed(1)+'%':'Sin dato';
-export function sessionScore(s){if(s?.status!=='done')return null;const v=Object.values(s.ratings||{}).filter(n=>Number.isInteger(n)&&n>=0&&n<=4);return v.length?v.reduce((s,n)=>s+n,0)/v.length/4*100:null;}
+export function sessionScore(s,days){return sessionComplete(s,days)?criterionScore(s,days):null;}
 export function trainingBand(practice,theory,needs=false){if((finite(practice)&&practice<50)||(finite(theory)&&theory<50))return {key:'priority',label:'Brecha amplia · revisión prioritaria'};if(!finite(practice)||!finite(theory))return {key:'missing',label:'Evidencia incompleta'};if(practice<85||theory<85||needs)return {key:'reinforce',label:'Requiere refuerzo'};return {key:'target',label:'Meta formativa alcanzada'};}
 export function progressModel(data){
   const people=(data.people||[]).filter(p=>p.active===true&&p.deleted!==true),ids=new Set(people.map(p=>p.id));
   const sessions=(data.sessions||[]).filter(s=>ids.has(s.personId));
   const keys=['1','1_2','2','2_2','3','3_2'].filter(k=>!k.endsWith('_2')||people.some(p=>data.theory?.[p.id]?.attempts.some(a=>String(a.key)===k)));
-  const series=people.map((p,i)=>{const own=sessions.filter(s=>s.personId===p.id),practice=Array.from({length:10},(_,d)=>sessionScore(own.find(s=>s.day===d+1))),t=data.theory?.[p.id];const theory=keys.map(k=>{const a=t?.attempts.find(a=>String(a.key)===k);return a&&['submitted','graded'].includes(a.status)&&finite(a.score)?a.score:null;});const latest=[...practice].reverse().find(finite)??null;const pending=own.some(s=>s.followup?.trim()&&!s.followupResolved);return {id:p.id,person:p,code:'E'+(i+1),color:SERIES_COLORS[i%SERIES_COLORS.length],practice,theory,latest,theoryMean:t?.average??null,done:practice.filter(finite).length,band:trainingBand(latest,t?.average,pending||t?.needsReinforcement),theoryRecord:t};});
+  const series=people.map((p,i)=>{const own=sessions.filter(s=>s.personId===p.id),practice=Array.from({length:10},(_,d)=>sessionScore(own.find(s=>s.day===d+1),data.days)),t=data.theory?.[p.id];const theory=keys.map(k=>{const a=t?.attempts.find(a=>String(a.key)===k);return a&&['submitted','graded'].includes(a.status)&&finite(a.score)?a.score:null;});const latest=[...practice].reverse().find(finite)??null;const pending=own.some(s=>s.followup?.trim()&&!s.followupResolved);return {id:p.id,person:p,code:'E'+(i+1),color:SERIES_COLORS[i%SERIES_COLORS.length],practice,theory,latest,theoryMean:t?.average??null,done:practice.filter(finite).length,band:trainingBand(latest,t?.average,pending||t?.needsReinforcement),theoryRecord:t};});
   const daily=Array.from({length:10},(_,i)=>{const values=series.map(s=>s.practice[i]).filter(finite);return {day:i+1,coverage:values.length,total:people.length,average:mean(values),maximum:values.filter(v=>v===100).length,target:values.filter(v=>v>=85).length,below:values.filter(v=>v<85).length};});
   return {people,sessions,series,daily,theoryKeys:keys,theoryLabels:keys.map(k=>'ET'+k.split('_')[0]+' I'+(k.endsWith('_2')?2:1))};
 }
@@ -53,3 +54,4 @@ export function radarSvg(rows){const width=680,height=285,cx=340,cy=140,r=100,po
   for(const [key,color]of [['practice','#1565c0'],['theory','#a64b00']]){const known=rows.map((row,i)=>({i,v:row[key]})).filter(p=>finite(p.v));for(let i=0;i<10;i++){const next=(i+1)%10;if(finite(rows[i]?.[key])&&finite(rows[next]?.[key])){const a=point(i,rows[i][key]),b=point(next,rows[next][key]);svg+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${color}" stroke-width="2.3"/>`;}}for(const p of known){const xy=point(p.i,p.v);svg+=`<circle cx="${xy[0]}" cy="${xy[1]}" r="3.5" fill="${color}"><title>C${p.i+1} · ${key==='practice'?'Práctica':'Teoría'} · ${percent(p.v)}</title></circle>`;}}
   return svg+'</svg>';
 }
+

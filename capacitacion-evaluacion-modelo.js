@@ -1,5 +1,5 @@
-import {evaluateTraining} from './capacitacion-evaluacion.js?v=20261103-unica-1';
-import {progressModel as baseModel,esc as E,finite,mean,percent} from './capacitacion-graficos.js?v=20261102-lineas-libres-3';
+import {evaluateTraining} from './capacitacion-evaluacion.js?v=20261103-puntos-1';
+import {progressModel as baseModel,esc as E,finite,mean,percent} from './capacitacion-graficos.js?v=20261103-puntos-1';
 export const PLAN_ATTEMPTS='expalsa_capacitacion_2026_evaluaciones';
 const stamp=t=>t?.toMillis?.()??(t?.seconds? t.seconds*1000:0);
 export function selectPlanAttempt(records,person){
@@ -42,3 +42,4 @@ export function theorySection(theory,{details=true,competencies=[]}={}){
  if(details)for(const a of theory.attempts)for(const q of a.questions||[])html+='<article><h4>Jornada '+q.day+' · '+E(q.competency)+'</h4><p>'+E(q.text)+'</p><p>Respuesta: '+E(q.answer)+'</p><p>Esperado: '+E(q.expected)+'</p><p>'+E(q.explanation)+' · '+q.points.toFixed(2)+'/1</p></article>';
  return html;
 }
+

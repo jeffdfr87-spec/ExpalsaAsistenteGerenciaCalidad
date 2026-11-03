@@ -1,3 +1,4 @@
+import {sessionComplete,criterionScore} from './capacitacion-criterios.js?v=20261103-puntos-1';
 // EXPALSA · Informe PDF de capacitación individual
 function clean(s){return String(s??'').replace(/[\u2013\u2014]/g,'-').replace(/\u2022/g,'-').replace(/\s+/g,' ').trim();}
 function fitImage(pdf,picture,x,y,maxW,maxH){
@@ -112,7 +113,7 @@ export async function crearReporteCapacitacion({day,person,session,photos,score,
   for(let page=1;page<=total;page++){
     pdf.setPage(page);
     hline(16,283,178);
-    txt('EXPALSA · Control de capacitacion · '+(session.status==='done'?'Finalizada':'Borrador'),16,289,7,'normal',muted);
+    txt('EXPALSA · Control de capacitacion · '+(sessionComplete(session,[day])?'Finalizada':session.status==='done'?'Pendiente de completar criterios':'Borrador'),16,289,7,'normal',muted);
     txt('Pagina '+page+' de '+total,171,289,7,'normal',muted);
   }
   const safe=(person.name||'inspector').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').slice(0,55);

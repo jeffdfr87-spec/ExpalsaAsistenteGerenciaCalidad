@@ -1,4 +1,4 @@
-import {decodeAnswers,answerLabel,keyLabel,scoreTheory,criterion} from './capacitacion-teoria-core.js?v=20261102-teoria-1';
+import {decodeAnswers,answerLabel,keyLabel,scoreTheory,criterion} from './capacitacion-teoria-core.js?v=20261103-puntos-1';
 export const THEORY_KEYS=Object.freeze(['1','1_2','2','2_2','3','3_2']);
 const finite=n=>Number.isFinite(n)&&n>=0&&n<=100;
 const delivered=a=>a&&['submitted','graded'].includes(a.status);
@@ -106,3 +106,4 @@ export function exampleTheory(people){
     return [p.id,summarizeTheory(reviews,{linkStatus:'linked',note:'Simulación ficticia: tres etapas, treinta preguntas por intento; seis promedios en meta, cuatro por debajo y dos con brechas amplias. Incluye un segundo intento demostrativo. No son exámenes ni notas reales.'})];
   }));
 }
+

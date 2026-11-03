@@ -1,4 +1,4 @@
-import {esc as E,percent,finite,mean} from './capacitacion-graficos.js?v=20261102-lineas-libres-3';
+import {esc as E,percent,finite,mean} from './capacitacion-graficos.js?v=20261103-puntos-1';
 const BANKS='expalsa_capacitacion_2026_bancos',ATTEMPTS='expalsa_capacitacion_2026_evaluaciones',VERSION='cap-plan-20261103-v1';
 export const questionsFor=(bank,scope)=>bank.questions.filter(q=>scope===0||q.day===scope);
 export function evaluateTraining(bank,attempt){
@@ -149,3 +149,4 @@ export function createTrainingEvaluation({context,notify}){
  async function activate(){if(bank){draw();startTimer();}else await load();}
  return {view,activate,beforeLeave,stop,clear};
 }
+

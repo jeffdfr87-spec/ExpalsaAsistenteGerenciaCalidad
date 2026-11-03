@@ -1,4 +1,4 @@
-import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261102-lineas-libres-3';
+import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261103-puntos-1';
 export function theoryRows(series){return series.map((s,order)=>({...s,order,value:s.theory[0]})).filter(s=>finite(s.value)).sort((a,b)=>a.value-b.value||a.order-b.order);}
 const image=p=>typeof p==='string'&&(/^(data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+)$/.test(p)||p.startsWith('blob:'));
 export function horizontalTheory(series){
@@ -23,3 +23,4 @@ export function theoryCards(series,selected,labels,simulated=false){
  const missing=series.filter(s=>!finite(s.theory[0]));
  return '<section class="daily-card"><h3>Etapa única · Evaluación integral de capacitación</h3><div class="daily-chart-scroll">'+horizontalTheory(series)+'</div><p class="note">Escala horizontal de izquierda a derecha. Inspectores ordenados de menor a mayor puntaje. Pulsa una foto o nombre para abrir el radar individual. '+(simulated?'Notas simuladas para demostración.':'Último intento integral calificado del plan; las comprobaciones por jornada no sustituyen este resultado.')+'</p>'+(missing.length?'<h4>Sin evaluación integral calificada</h4><div class="progress-legend">'+missing.map(s=>'<button type="button" class="progress-person" data-progress-person="'+E(s.id)+'" data-progress-mode="theory">'+E(s.person.name)+' · Sin nota</button>').join('')+'</div>':'')+'</section>';
 }
+
