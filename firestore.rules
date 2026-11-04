@@ -1307,7 +1307,7 @@ match /empaque_ejercicio_reportes/{reporteId} {
     function capExamValid(d,id) {
       return expalsaAdmin()
         && d.keys().hasAll(['id','accountUid','scope','purpose','durationMinutes','bankId','status','answers','marks','startedAt','createdAt','updatedAt','submittedAt','gradedAt','submissionKind','createdBy','updatedBy','rev'])
-        && d.keys().hasOnly(['id','accountUid','scope','purpose','durationMinutes','bankId','status','answers','marks','startedAt','createdAt','updatedAt','submittedAt','gradedAt','submissionKind','createdBy','updatedBy','rev','savedThrough','autoScore'])
+        && d.keys().hasOnly(['id','accountUid','scope','purpose','durationMinutes','bankId','status','answers','marks','startedAt','createdAt','updatedAt','submittedAt','gradedAt','submissionKind','createdBy','updatedBy','rev'])
         && d.id==id && id.matches('^[A-Za-z0-9]{20}$')
         && d.accountUid is string && d.accountUid.size()>0 && d.accountUid.size()<=128
         && d.scope is int && d.scope>=0 && d.scope<=10
@@ -1318,8 +1318,6 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && d.status in ['active','submitted','graded']
         && d.answers is string && d.answers.size()>=2 && d.answers.size()<=60000
         && d.marks is string && d.marks.size()>=2 && d.marks.size()<=1500
-        && (!d.keys().hasAny(['savedThrough']) || (d.savedThrough is int && d.savedThrough>=0 && d.savedThrough<=10))
-        && (!d.keys().hasAny(['autoScore']) || d.autoScore==null || (d.autoScore is number && d.autoScore>=0 && d.autoScore<=100))
         && d.startedAt is timestamp && d.createdAt is timestamp && d.updatedAt==request.time
         && d.createdBy is string && d.createdBy.size()>0 && d.createdBy.size()<=128
         && d.updatedBy==request.auth.uid && d.rev is int && d.rev>=1
@@ -1336,12 +1334,10 @@ match /empaque_ejercicio_reportes/{reporteId} {
       let deadline=a.startedAt+duration.value(a.durationMinutes*60,'s');
       return capExamIdentityStable(d,a) && (
         (a.status=='active' && d.status=='active' && request.time<deadline
-          && d.diff(a).affectedKeys().hasOnly(['answers','savedThrough','rev','updatedAt','updatedBy'])
-          && d.get('savedThrough',0)>=a.get('savedThrough',0)
-          && d.get('savedThrough',0)<=a.get('savedThrough',0)+1) ||
+          && d.diff(a).affectedKeys().hasOnly(['answers','rev','updatedAt','updatedBy'])) ||
         (a.status=='active' && d.status=='submitted' && d.answers==a.answers && d.submittedAt==request.time
           && (d.submissionKind=='expired'?request.time>=deadline:request.time<deadline)
-          && d.diff(a).affectedKeys().hasOnly(['status','submittedAt','submissionKind','autoScore','rev','updatedAt','updatedBy'])) ||
+          && d.diff(a).affectedKeys().hasOnly(['status','submittedAt','submissionKind','rev','updatedAt','updatedBy'])) ||
         (a.status=='submitted' && d.status=='graded' && d.answers==a.answers && d.submittedAt==a.submittedAt && d.submissionKind==a.submissionKind
           && d.gradedAt==request.time
           && d.diff(a).affectedKeys().hasOnly(['status','marks','gradedAt','rev','updatedAt','updatedBy']))
@@ -1359,14 +1355,6 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && get(accessDoc(request.resource.data.accountUid)).data.get('deleted',false)!=true;
       allow update: if capExamValid(request.resource.data,id) && capExamUpdate(request.resource.data,resource.data);
       allow delete: if false;
-    }
-    match /expalsa_capacitacion_2026_solicitudes/{id} {
-      allow get, list: if expalsaAdmin();
-      allow create, update, delete: if false;
-    }
-    match /expalsa_capacitacion_2026_permisos/{uid} {
-      allow get, list: if expalsaAdmin();
-      allow create, update, delete: if false;
     }
 
   }
