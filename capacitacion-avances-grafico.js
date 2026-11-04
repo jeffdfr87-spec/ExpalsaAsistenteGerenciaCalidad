@@ -1,7 +1,7 @@
 import {gradeBoard,gradeBoardStyles} from './capacitacion-tablero-notas.js?v=20261103-tablero-1';
 import {radarProfile} from './capacitacion-radar-individual.js?v=20261103-puntos-1';
 import {theoryCards} from './capacitacion-avances-teoria.js?v=20261103-grupo-1';
-import {loadTheory,progressModel,summarizeTheory,PLAN_ATTEMPTS} from './capacitacion-evaluacion-modelo.js?v=20261103-puntos-1';
+import {loadTheory,progressModel,summarizeTheory,PLAN_ATTEMPTS} from './capacitacion-evaluacion-modelo.js?v=20261104-resultados-uid-1';
 import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261103-puntos-1';
 import {dailyCards,dailyChartStyles} from './capacitacion-avances-diario.js?v=20261103-grupo-1';
 const P='expalsa_capacitacion_2026_participantes',S='expalsa_capacitacion_2026_sesiones';
