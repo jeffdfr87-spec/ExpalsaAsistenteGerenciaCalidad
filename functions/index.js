@@ -96,11 +96,11 @@ async function requireTrainingAdmin(request) {
   return identity;
 }
 
-function cleanTrainingBank(bank) {
+function cleanTrainingDay(bank, day) {
   return {
     version: bank.version,
-    questions: (bank.questions || []).map(q => {
-      const {answer, explanation, rubric, criteria, ...publicQuestion} = q;
+    questions: (bank.questions || []).filter(question => question.day === day).map(question => {
+      const {answer, explanation, rubric, criteria, ...publicQuestion} = question;
       return publicQuestion;
     })
   };
@@ -222,10 +222,10 @@ exports.startTrainingEvaluation = onCall(
       if (latest?.status === "active") {
         if (trainingExpiry(latest) <= now.toMillis()) {
           tx.update(db.doc(`${TRAINING_ATTEMPTS}/${latest.id}`), submittedAttempt(latest, true, now));
-          returned = {status: "submitted", attempt: publicTrainingAttempt({...latest, status:"submitted", submissionKind:"expired"}), bank: cleanTrainingBank(bank)};
+          returned = {status: "submitted", attempt: publicTrainingAttempt({...latest, status:"submitted", submissionKind:"expired"}), bank: null};
         } else {
-          const activeAttempt = {...latest, savedThrough:Number(perm[savedDayField(latest.purpose)] || 0)};
-          returned = {status: "active", attempt: publicTrainingAttempt(activeAttempt), bank: cleanTrainingBank(bank)};
+          const activeAttempt = {...latest, savedThrough:Number(perm[savedDayField(latest.purpose)] ?? latest.savedThrough ?? 0)};
+          returned = {status: "active", attempt: publicTrainingAttempt(activeAttempt), bank: cleanTrainingDay(bank, Math.min(activeAttempt.savedThrough + 1,10))};
         }
         return;
       }
@@ -239,7 +239,7 @@ exports.startTrainingEvaluation = onCall(
       const savedField=savedDayField(kind);
       if (kind === "inicial") tx.update(permissionRef, {initialEnabled:false,initialUsed:true,[savedField]:0,updatedAt:now});
       else tx.update(permissionRef, {refuerzoEnabled:false,refuerzoUsed:true,[savedField]:0,updatedAt:now});
-      returned = {status:"active",attempt:publicTrainingAttempt({...record,savedThrough:0}),bank:cleanTrainingBank(bank)};
+      returned = {status:"active",attempt:publicTrainingAttempt({...record,savedThrough:0}),bank:cleanTrainingDay(bank,1)};
     });
     return returned;
   }
@@ -304,7 +304,7 @@ exports.saveTrainingDay = onCall(
       if (!snap.exists || snap.data().accountUid !== user.uid) throw new HttpsError("permission-denied", "Intento no válido.");
       const old = snap.data(), answers = JSON.parse(old.answers || "{}");
       const perm = permSnap.exists ? permSnap.data() : {};
-      const savedField = savedDayField(old.purpose), savedThrough = Number(perm[savedField] || 0);
+      const savedField = savedDayField(old.purpose), savedThrough = Number(perm[savedField] ?? old.savedThrough ?? 0);
       if (old.status !== "active" || trainingExpiry(old) <= now.toMillis()) throw new HttpsError("failed-precondition", "El tiempo de evaluación terminó.");
       if (day !== savedThrough + 1) throw new HttpsError("failed-precondition", "Guarda cada jornada en orden antes de avanzar.");
       const qs = bank.questions.filter(q => q.day === day);
@@ -329,7 +329,7 @@ exports.finishTrainingEvaluation = onCall(
       if (old.status !== "active") return {status:old.status};
       const expired = trainingExpiry(old) <= now.toMillis();
       const perm = permSnap.exists ? permSnap.data() : {};
-      if (!expired && Number(perm[savedDayField(old.purpose)] || 0) !== 10) throw new HttpsError("failed-precondition", "Guarda las diez jornadas antes de entregar la evaluación.");
+      if (!expired && Number(perm[savedDayField(old.purpose)] ?? old.savedThrough ?? 0) !== 10) throw new HttpsError("failed-precondition", "Guarda las diez jornadas antes de entregar la evaluación.");
       tx.update(ref, submittedAttempt(old, expired, now));
       return {status:"submitted",expired};
     });
@@ -360,8 +360,9 @@ exports.getTrainingEvaluationState = onCall(
     else if(latest?.status==="submitted"||latest?.status==="graded")status="completed";
     else if(permission.initialEnabled||permission.refuerzoEnabled)status="enabled";
     else if(pending)status="pending";
-    const publicAttempt=latest?{...latest,savedThrough:Number(permission[savedDayField(latest.purpose)]||0)}:null;
-    return {status,attempt:publicTrainingAttempt(publicAttempt),pendingKind:pending?.kind||"",pendingInitial,pendingRefuerzo,initialEnabled:!!permission.initialEnabled,refuerzoEnabled:!!permission.refuerzoEnabled,canRequestRefuerzo:attempts.some(a=>a.status==="submitted"||a.status==="graded")&&!permission.refuerzoEnabled&&!pendingRefuerzo,bank:bank?cleanTrainingBank(bank):null};
+    const publicAttempt=latest?{...latest,savedThrough:Number(permission[savedDayField(latest.purpose)]??latest.savedThrough??0)}:null;
+    const dayBank=latest?.status==="active"&&bank?cleanTrainingDay(bank,Math.min(publicAttempt.savedThrough+1,10)):null;
+    return {status,attempt:publicTrainingAttempt(publicAttempt),pendingKind:pending?.kind||"",pendingInitial,pendingRefuerzo,initialEnabled:!!permission.initialEnabled,refuerzoEnabled:!!permission.refuerzoEnabled,canRequestRefuerzo:attempts.some(a=>a.status==="submitted"||a.status==="graded")&&!permission.refuerzoEnabled&&!pendingRefuerzo,bank:dayBank};
   }
 );
 
