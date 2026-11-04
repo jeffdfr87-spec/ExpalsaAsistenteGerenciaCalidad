@@ -131,11 +131,13 @@ exports.inspectorAccountAction = onCall({region:"us-central1",maxInstances:10,ti
   if(action==="reviewAccess"){
     await requireTrainingAdmin(request);const owner=String(request.data?.uid||"");
     if(!owner||owner.includes("/"))throw new HttpsError("invalid-argument","Cuenta no válida.");
+    const assignedRole=String(request.data?.role||"inspector");
+    if(request.data?.approve===true&&!["inspector","asistente","coordinador","jefe","gerente","subgerente"].includes(assignedRole))throw new HttpsError("invalid-argument","Rol no válido.");
     const ref=db.doc(`expalsa_calidad_solicitudes/${owner}`),access=db.doc(`expalsa_calidad_accesos/${owner}`),program=db.doc(`expalsa_calidad_programas/${owner}`);
     return db.runTransaction(async tx=>{
       const [snap,p]=await Promise.all([tx.get(ref),tx.get(program)]);
       if(!snap.exists||snap.data().status!=="pending")throw new HttpsError("failed-precondition","La solicitud ya fue atendida.");
-      if(request.data?.approve===true){tx.set(access,{email:snap.data().email,active:true,deleted:false,role:"inspector",note:"Acceso aprobado desde Notificaciones"},{merge:true});if(p.exists)tx.update(program,{active:true});tx.update(ref,{status:"approved",reviewedAt:now,reviewedBy:uid});}
+      if(request.data?.approve===true){tx.set(access,{email:snap.data().email,active:true,deleted:false,role:assignedRole,note:"Acceso aprobado desde Notificaciones"},{merge:true});if(p.exists)tx.update(program,{active:true});tx.update(ref,{status:"approved",assignedRole,reviewedAt:now,reviewedBy:uid});}
       else tx.delete(ref);
       return {saved:true};
     });
