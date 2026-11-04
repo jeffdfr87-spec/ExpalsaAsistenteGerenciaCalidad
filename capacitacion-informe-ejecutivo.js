@@ -1,5 +1,5 @@
 import {sessionComplete,criterionScore} from './capacitacion-criterios.js?v=20261103-puntos-1';
-import {progressModel} from './capacitacion-evaluacion-modelo.js?v=20261103-puntos-1';
+import {progressModel} from './capacitacion-evaluacion-modelo.js?v=20261104-resultados-uid-1';
 import {lineSvg,barsSvg,radarSvg,esc as E,finite,mean,percent,trainingBand} from './capacitacion-graficos.js?v=20261103-puntos-1';
 const short=(s,n=125)=>{const t=String(s||'').replace(/\s+/g,' ').trim();return E(t.length>n?t.slice(0,n-1)+'…':t||'Sin registro');};
 const photo=s=>typeof s==='string'&&/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s);
