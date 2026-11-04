@@ -1,6 +1,6 @@
 import {sessionComplete,criterionScore} from './capacitacion-criterios.js?v=20261103-puntos-1';
-import {buildExecutiveReport} from './capacitacion-informe-ejecutivo.js?v=20261103-puntos-1';
-import {loadTheory,summarizeTheory,theorySection,exampleTheory} from './capacitacion-evaluacion-modelo.js?v=20261103-puntos-1';
+import {buildExecutiveReport} from './capacitacion-informe-ejecutivo.js?v=20261104-resultados-uid-1';
+import {loadTheory,summarizeTheory,theorySection,exampleTheory} from './capacitacion-evaluacion-modelo.js?v=20261104-resultados-uid-1';
 const ACTIVE=p=>p.active===true&&p.deleted!==true;
 const INDIVIDUAL=new Set(['resultado','aprendizaje']);
 const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
