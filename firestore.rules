@@ -1062,6 +1062,27 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && d.updatedBy == request.auth.uid
         && d.updatedAt == request.time;
     }
+    function capBoardScore(v) { return v == null || (v is number && v >= 0 && v <= 100); }
+    function capBoardScoresValid(s) { return s is list && s.size() == 10
+      && capBoardScore(s[0]) && capBoardScore(s[1]) && capBoardScore(s[2]) && capBoardScore(s[3]) && capBoardScore(s[4])
+      && capBoardScore(s[5]) && capBoardScore(s[6]) && capBoardScore(s[7]) && capBoardScore(s[8]) && capBoardScore(s[9]); }
+    function capBoardRowValid(r) { return r is map && r.keys().hasOnly(['name','scores']) && r.keys().hasAll(['name','scores'])
+      && r.name is string && r.name.size() >= 1 && r.name.size() <= 100 && capBoardScoresValid(r.scores); }
+    function capBoardRowsValid(rows) { return rows is list && rows.size() <= 10
+      && (rows.size() < 1 || capBoardRowValid(rows[0])) && (rows.size() < 2 || capBoardRowValid(rows[1]))
+      && (rows.size() < 3 || capBoardRowValid(rows[2])) && (rows.size() < 4 || capBoardRowValid(rows[3]))
+      && (rows.size() < 5 || capBoardRowValid(rows[4])) && (rows.size() < 6 || capBoardRowValid(rows[5]))
+      && (rows.size() < 7 || capBoardRowValid(rows[6])) && (rows.size() < 8 || capBoardRowValid(rows[7]))
+      && (rows.size() < 9 || capBoardRowValid(rows[8])) && (rows.size() < 10 || capBoardRowValid(rows[9])); }
+    match /expalsa_calidad_capacitacion_tablero/{recordId} {
+      allow get: if recordId == 'cohorte_actual' && (expalsaAdmin() || inspector());
+      allow list, delete: if false;
+      allow create, update: if recordId == 'cohorte_actual' && expalsaAdmin()
+        && request.resource.data.keys().hasOnly(['schema','inspectors','updatedAt'])
+        && request.resource.data.keys().hasAll(['schema','inspectors','updatedAt'])
+        && request.resource.data.schema == 1 && capBoardRowsValid(request.resource.data.inspectors)
+        && request.resource.data.updatedAt == request.time;
+    }
     match /expalsa_capacitacion_2026_participantes/{participantId} {
       allow get, list: if expalsaAdmin();
       allow create: if capAdminWrite(request.resource.data)
@@ -1286,7 +1307,7 @@ match /empaque_ejercicio_reportes/{reporteId} {
     function capExamValid(d,id) {
       return expalsaAdmin()
         && d.keys().hasAll(['id','accountUid','scope','purpose','durationMinutes','bankId','status','answers','marks','startedAt','createdAt','updatedAt','submittedAt','gradedAt','submissionKind','createdBy','updatedBy','rev'])
-        && d.keys().hasOnly(['id','accountUid','scope','purpose','durationMinutes','bankId','status','answers','marks','startedAt','createdAt','updatedAt','submittedAt','gradedAt','submissionKind','createdBy','updatedBy','rev'])
+        && d.keys().hasOnly(['id','accountUid','scope','purpose','durationMinutes','bankId','status','answers','marks','startedAt','createdAt','updatedAt','submittedAt','gradedAt','submissionKind','createdBy','updatedBy','rev','savedThrough','autoScore'])
         && d.id==id && id.matches('^[A-Za-z0-9]{20}$')
         && d.accountUid is string && d.accountUid.size()>0 && d.accountUid.size()<=128
         && d.scope is int && d.scope>=0 && d.scope<=10
@@ -1297,6 +1318,8 @@ match /empaque_ejercicio_reportes/{reporteId} {
         && d.status in ['active','submitted','graded']
         && d.answers is string && d.answers.size()>=2 && d.answers.size()<=60000
         && d.marks is string && d.marks.size()>=2 && d.marks.size()<=1500
+        && (!d.keys().hasAny(['savedThrough']) || (d.savedThrough is int && d.savedThrough>=0 && d.savedThrough<=10))
+        && (!d.keys().hasAny(['autoScore']) || d.autoScore==null || (d.autoScore is number && d.autoScore>=0 && d.autoScore<=100))
         && d.startedAt is timestamp && d.createdAt is timestamp && d.updatedAt==request.time
         && d.createdBy is string && d.createdBy.size()>0 && d.createdBy.size()<=128
         && d.updatedBy==request.auth.uid && d.rev is int && d.rev>=1
@@ -1313,10 +1336,12 @@ match /empaque_ejercicio_reportes/{reporteId} {
       let deadline=a.startedAt+duration.value(a.durationMinutes*60,'s');
       return capExamIdentityStable(d,a) && (
         (a.status=='active' && d.status=='active' && request.time<deadline
-          && d.diff(a).affectedKeys().hasOnly(['answers','rev','updatedAt','updatedBy'])) ||
+          && d.diff(a).affectedKeys().hasOnly(['answers','savedThrough','rev','updatedAt','updatedBy'])
+          && d.get('savedThrough',0)>=a.get('savedThrough',0)
+          && d.get('savedThrough',0)<=a.get('savedThrough',0)+1) ||
         (a.status=='active' && d.status=='submitted' && d.answers==a.answers && d.submittedAt==request.time
           && (d.submissionKind=='expired'?request.time>=deadline:request.time<deadline)
-          && d.diff(a).affectedKeys().hasOnly(['status','submittedAt','submissionKind','rev','updatedAt','updatedBy'])) ||
+          && d.diff(a).affectedKeys().hasOnly(['status','submittedAt','submissionKind','autoScore','rev','updatedAt','updatedBy'])) ||
         (a.status=='submitted' && d.status=='graded' && d.answers==a.answers && d.submittedAt==a.submittedAt && d.submissionKind==a.submissionKind
           && d.gradedAt==request.time
           && d.diff(a).affectedKeys().hasOnly(['status','marks','gradedAt','rev','updatedAt','updatedBy']))
@@ -1335,6 +1360,15 @@ match /empaque_ejercicio_reportes/{reporteId} {
       allow update: if capExamValid(request.resource.data,id) && capExamUpdate(request.resource.data,resource.data);
       allow delete: if false;
     }
+    match /expalsa_capacitacion_2026_solicitudes/{id} {
+      allow get, list: if expalsaAdmin();
+      allow create, update, delete: if false;
+    }
+    match /expalsa_capacitacion_2026_permisos/{uid} {
+      allow get, list: if expalsaAdmin();
+      allow create, update, delete: if false;
+    }
 
   }
 }
+
