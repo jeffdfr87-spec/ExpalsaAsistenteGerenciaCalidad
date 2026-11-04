@@ -257,7 +257,9 @@ async function getTrainingContext(request, requirePermission = true) {
     if (active.empty) return {user, permission, permissionRef, bank: null, bankRef: db.doc(TRAINING_BANK)};
   }
   if (!bankSnap.exists) throw new HttpsError("unavailable", "El cuestionario no está disponible.");
-  return {user, permission, permissionRef, bank: bankSnap.data(), bankRef: db.doc(TRAINING_BANK)};
+  const bank=bankSnap.data(),questions=bank.questions||[];
+  if(questions.length!==60||new Set(questions.map(q=>q.id)).size!==60||questions.some(q=>typeof q.id!=="string"||!q.id||!Number.isInteger(q.day)||q.day<1||q.day>10)||Array.from({length:10},(_,i)=>questions.filter(q=>q.day===i+1).length).some(n=>n!==6))throw new HttpsError("failed-precondition","El cuestionario requiere revisión de sus identificadores y jornadas.");
+  return {user, permission, permissionRef, bank, bankRef: db.doc(TRAINING_BANK)};
 }
 
 exports.requestTrainingEvaluation = onCall(
@@ -374,20 +376,22 @@ exports.listTrainingEvaluationRequests = onCall(
 exports.saveTrainingAnswers = onCall(
   {region: "us-central1", maxInstances: 10, timeoutSeconds: 30, memory: "256MiB"},
   async request => {
-    const {user, bank} = await getTrainingContext(request);
+    const {user, bank, permissionRef} = await getTrainingContext(request);
     if (!bank) throw new HttpsError("permission-denied", "La evaluación no está habilitada.");
     const attemptId = String(request.data?.attemptId || ""), raw = request.data?.answers;
     if (!/^[A-Za-z0-9]{20}$/.test(attemptId) || !raw || typeof raw !== "object" || Array.isArray(raw)) throw new HttpsError("invalid-argument", "Respuestas no válidas.");
     const ref = getFirestore().doc(`${TRAINING_ATTEMPTS}/${attemptId}`), now = require("firebase-admin/firestore").Timestamp.now();
     const result = await getFirestore().runTransaction(async tx => {
-      const snap = await tx.get(ref);
+      const [snap,permSnap] = await Promise.all([tx.get(ref),tx.get(permissionRef)]);
       if (!snap.exists || snap.data().accountUid !== user.uid) throw new HttpsError("permission-denied", "Intento no válido.");
       const old = snap.data();
       if (old.status !== "active" || trainingExpiry(old) <= now.toMillis()) throw new HttpsError("failed-precondition", "El tiempo de evaluación terminó.");
+      const perm=permSnap.exists?permSnap.data():{},currentDay=Number(perm[savedDayField(old.purpose)]??old.savedThrough??0)+1;
       const next = JSON.parse(old.answers || "{}");
       for (const [id, value] of Object.entries(raw)) {
         const q = bank.questions.find(item => item.id === id);
         if (!q) throw new HttpsError("invalid-argument", "La pregunta no pertenece al cuestionario.");
+        if(q.day!==currentDay)throw new HttpsError("failed-precondition","Solo puedes responder la jornada actual. Las jornadas guardadas están bloqueadas.");
         if (q.type === "choice" && (!Number.isInteger(value) || value < 0 || value >= q.options.length)) throw new HttpsError("invalid-argument", "Respuesta de selección no válida.");
         if (q.type === "case" && (typeof value !== "string" || value.length > 3000)) throw new HttpsError("invalid-argument", "Respuesta de caso no válida.");
         next[id] = value;
