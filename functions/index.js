@@ -74,6 +74,23 @@ const TRAINING_ATTEMPTS = "expalsa_capacitacion_2026_evaluaciones";
 const TRAINING_REQUESTS = "expalsa_capacitacion_2026_solicitudes";
 const TRAINING_PERMISSIONS = "expalsa_capacitacion_2026_permisos";
 const TRAINING_ADMIN = "jefferson@expalsaevaluations.com";
+const TRAINING_VIEWERS = new Set(["fabio@expalsaevaluations.com","karina@expalsaevaluations.com"]);
+const TRAINING_VIEWER_UIDS = {"fabio@expalsaevaluations.com":"pC14usDq9pWuVoqLOv6CDlwBdmK2","karina@expalsaevaluations.com":"96Q1hgrEKyR2zVL8CfCXf1xe4al2"};
+
+exports.getTrainingProgressView=onCall({region:"us-central1",maxInstances:5,timeoutSeconds:60},async request=>{
+  if(!request.auth||TRAINING_VIEWER_UIDS[String(request.auth.token.email||"").toLowerCase()]!==request.auth.uid)throw new HttpsError("permission-denied","Acceso de consulta no autorizado.");
+  const db=getFirestore();
+  const [participants,sessions,attempts,bankDoc]=await Promise.all([db.collection("expalsa_capacitacion_2026_participantes").get(),db.collection("expalsa_capacitacion_2026_sesiones").get(),db.collection(TRAINING_ATTEMPTS).get(),db.doc(TRAINING_BANK).get()]);
+  const people=[];for(const doc of participants.docs){const p=doc.data();if(p.active!==true||p.deleted===true||!p.accountUid)continue;const [access,identity,photo]=await Promise.all([db.doc(`expalsa_calidad_accesos/${p.accountUid}`).get(),db.doc(`expalsa_calidad_identidades/${p.accountUid}`).get(),db.doc(`expalsa_calidad_fotos_perfil/${p.accountUid}`).get()]);if(!access.exists||access.data().active!==true||access.data().deleted===true)continue;const i=identity.exists?identity.data():{},f=photo.exists?photo.data():{};people.push({id:doc.id,accountUid:p.accountUid,active:true,deleted:false,name:[i.firstNames,i.lastNames].filter(Boolean).join(" ")||p.name||"Inspector",firstNames:i.firstNames||"",lastNames:i.lastNames||"",employeeCode:i.employeeId||"",station:p.station||"",portrait:typeof f.jpeg==="string"&&/^\/9j\/[A-Za-z0-9+/=]+$/.test(f.jpeg)?"data:image/jpeg;base64,"+f.jpeg:"",createdAtMs:p.createdAt?.toMillis?.()||0});}
+  const ids=new Set(people.map(p=>p.id)),rows=sessions.docs.map(d=>({id:d.id,...d.data()})).filter(s=>ids.has(s.personId)).map(s=>({id:s.id,personId:s.personId,day:s.day,status:s.status,ratings:s.ratings||{},station:s.station||"",date:s.date||""}));
+  const bank=bankDoc.exists?bankDoc.data():{questions:[]},records=attempts.docs.map(d=>({id:d.id,...d.data()})),theory={};
+  for(const p of people){const record=records.filter(r=>r.accountUid===p.accountUid&&r.scope===0&&r.status==="graded"&&(r.startedAt?.toMillis?.()||0)>=p.createdAtMs).sort((a,b)=>(b.startedAt?.toMillis?.()||0)-(a.startedAt?.toMillis?.()||0))[0];let assessed=[];
+    if(record&&record.bankId===bank.version){let answers={},marks={};try{answers=JSON.parse(record.answers||"{}");marks=JSON.parse(record.marks||"{}");}catch{}assessed=(bank.questions||[]).map(q=>({id:q.competency,points:q.type==="choice"?(answers[q.id]===q.answer?1:0):Number.isInteger(marks[q.id])&&marks[q.id]>=0&&marks[q.id]<=4?marks[q.id]/4:null}));}
+    const valid=assessed.length>0&&assessed.every(r=>r.points!==null),average=valid?assessed.reduce((n,r)=>n+r.points,0)/assessed.length*100:null,points=Array.from({length:10},(_,i)=>{const id="C"+(i+1),own=assessed.filter(r=>r.id===id);return {id,score:valid&&own.length?own.reduce((n,r)=>n+r.points,0)/own.length*100:null,attempts:valid?1:0,questions:valid?own.length:0};}),ownAttempts=valid?[{key:"1",stage:1,number:1,status:"graded",score:average,verified:true,competencies:points.map(p=>({id:p.id,score:p.score,questions:p.questions})),questions:[],date:record.submittedAt?.toDate?.().toLocaleString("es-EC",{timeZone:"America/Guayaquil"})||""}]:[];
+    theory[p.id]={attempts:ownAttempts,average,completed:ownAttempts.length,verified:ownAttempts.length,points,weak:points.filter(p=>p.score!==null&&p.score<85),strong:points.filter(p=>p.score!==null&&p.score>=85),needsReinforcement:average!==null&&average<85,unavailable:0,linkStatus:"linked",note:valid?"Último intento integral calificado.":"Sin evaluación integral calificada."};delete p.createdAtMs;
+  }
+  return {people,sessions:rows,theory,records:[],photos:{},photoErrors:[]};
+});
 
 exports.accountRecovery = onCall({region:"us-central1",maxInstances:3,timeoutSeconds:60},async request=>{
   const action=String(request.data?.action||""),db=getFirestore(),auth=getAuth(),crypto=require("node:crypto"),now=Date.now();
@@ -229,6 +246,7 @@ function savedDayField(purpose) {
 
 async function getTrainingContext(request, requirePermission = true) {
   const user = await trainingUser(request);
+  if(TRAINING_VIEWERS.has(user.email))throw new HttpsError("permission-denied","Esta cuenta tiene acceso de consulta a los gráficos de avance.");
   if (user.admin) throw new HttpsError("failed-precondition", "El administrador usa la vista de gestión.");
   const db = getFirestore();
   const permissionRef = db.doc(`${TRAINING_PERMISSIONS}/${user.uid}`);
