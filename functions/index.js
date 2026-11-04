@@ -75,6 +75,44 @@ const TRAINING_REQUESTS = "expalsa_capacitacion_2026_solicitudes";
 const TRAINING_PERMISSIONS = "expalsa_capacitacion_2026_permisos";
 const TRAINING_ADMIN = "jefferson@expalsaevaluations.com";
 
+exports.accountRecovery = onCall({region:"us-central1",maxInstances:3,timeoutSeconds:60},async request=>{
+  const action=String(request.data?.action||""),db=getFirestore(),auth=getAuth(),crypto=require("node:crypto"),now=Date.now();
+  const records=db.collection("expalsa_calidad_recuperaciones");
+  const digest=value=>crypto.createHash("sha256").update(value).digest("hex");
+  if(action==="request"||action==="complete"){
+    let email=String(request.data?.username||"").trim().toLowerCase();if(!email.includes("@"))email+="@"+DOMAIN;
+    if(!/^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]@expalsaevaluations\.com$/.test(email))throw new HttpsError("invalid-argument","Revisa tu usuario.");
+    let user;try{user=await auth.getUserByEmail(email);}catch(e){if(e.code!=="auth/user-not-found")throw e;}
+    if(action==="request"){
+      if(user&&!user.disabled)await db.runTransaction(async tx=>{const ref=records.doc(user.uid),old=await tx.get(ref);if(old.exists&&(old.data().status==="pending"||(old.data().status==="issued"&&old.data().expiresAtMs>now)||now-Number(old.data().requestedAtMs||0)<60000))return;tx.set(ref,{uid:user.uid,email,status:"pending",requestedAtMs:now,attempts:0});});
+      return {message:"Solicitud recibida. Contacta al administrador para verificar tu identidad."};
+    }
+    const password=String(request.data?.password||""),code=String(request.data?.code||"").trim();
+    if(password.length<12||password.length>128)throw new HttpsError("invalid-argument","La nueva contraseña debe tener de 12 a 128 caracteres.");
+    if(!user||user.disabled)throw new HttpsError("permission-denied","Clave temporal inválida o vencida.");
+    const ref=records.doc(user.uid);
+    const accepted=await db.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists)return false;const d=snap.data();if(d.status!=="issued"||d.expiresAtMs<=now||Number(d.attempts||0)>=5)return false;const valid=typeof d.codeHash==="string"&&crypto.timingSafeEqual(Buffer.from(digest(code)),Buffer.from(d.codeHash));if(!valid){tx.update(ref,{attempts:Number(d.attempts||0)+1});return false;}tx.update(ref,{status:"processing",codeHash:"",claimedAtMs:now});return true;});
+    if(!accepted)throw new HttpsError("permission-denied","Clave temporal inválida o vencida.");
+    try{await auth.updateUser(user.uid,{password});await auth.revokeRefreshTokens(user.uid);await ref.update({status:"completed",completedAtMs:Date.now()});return {saved:true};}
+    catch(e){await ref.update({status:"failed",failedAtMs:Date.now()});throw new HttpsError("internal","No se completó el cambio. Solicita una nueva clave al administrador.");}
+  }
+  const admin=await requireTrainingAdmin(request);
+  if(action==="list"){
+    const result=await auth.listUsers(1000,request.data?.pageToken||undefined),[identities,accesses,recoveries]=await Promise.all([db.collection("expalsa_calidad_identidades").get(),db.collection("expalsa_calidad_accesos").get(),records.get()]);
+    const identity=new Map(identities.docs.map(d=>[d.id,d.data()])),access=new Map(accesses.docs.map(d=>[d.id,d.data()])),pending=new Map(recoveries.docs.map(d=>[d.id,d.data()]));
+    return {users:result.users.map(u=>{const i=identity.get(u.uid)||{},a=access.get(u.uid)||{},r=pending.get(u.uid)||{};return {uid:u.uid,email:u.email||"",name:[i.firstNames,i.lastNames].filter(Boolean).join(" ")||u.displayName||"",role:u.email===TRAINING_ADMIN?"administrador":a.role||"Sin rol asignado",disabled:u.disabled,deleted:!!a.deleted,recovery:r.status||"",expiresAtMs:r.expiresAtMs||0};}),pageToken:result.pageToken||""};
+  }
+  const uid=String(request.data?.uid||"");if(!uid||uid.includes("/")||uid.length>128)throw new HttpsError("invalid-argument","Cuenta no válida.");
+  if(action==="issue"){
+    const user=await auth.getUser(uid);if(user.disabled)throw new HttpsError("failed-precondition","La cuenta está deshabilitada.");
+    const code=crypto.randomBytes(18).toString("hex"),expiresAtMs=now+30*60000;
+    await records.doc(uid).set({uid,email:user.email||"",status:"issued",codeHash:digest(code),expiresAtMs,attempts:0,issuedAtMs:now,issuedBy:admin.uid});
+    return {code,expiresAtMs};
+  }
+  if(action==="reject"){await records.doc(uid).set({status:"rejected",codeHash:"",reviewedAtMs:now,reviewedBy:admin.uid},{merge:true});return {saved:true};}
+  throw new HttpsError("invalid-argument","Acción no válida.");
+});
+
 exports.inspectorAccountAction = onCall({region:"us-central1",maxInstances:10,timeoutSeconds:30}, async request => {
   const db=getFirestore(), now=require("firebase-admin/firestore").Timestamp.now();
   const action=String(request.data?.action||"");
