@@ -110,6 +110,11 @@ exports.inspectorAccountAction = onCall({region:"us-central1",maxInstances:10,ti
     return db.runTransaction(async tx=>{const ref=changes.doc(owner),snap=await tx.get(ref);if(!snap.exists||snap.data().status!=="pending")throw new HttpsError("failed-precondition","La solicitud ya fue atendida.");tx.update(ref,{status:request.data?.approve===true?"enabled":"rejected",reviewedAt:now,reviewedBy:uid});return {saved:true};});
   }
   await trainingUser(request);
+  if(action==="savePhoto"){
+    const image=request.data?.image||{};
+    if(typeof image.jpeg!=="string"||image.jpeg.length>280000||!/^\/9j\/[A-Za-z0-9+/=]+$/.test(image.jpeg)||!Number.isInteger(image.width)||image.width<1||image.width>1600||!Number.isInteger(image.height)||image.height<1||image.height>1600||!Number.isInteger(image.size)||image.size<1||image.size>210000||Buffer.from(image.jpeg,"base64").length!==image.size)throw new HttpsError("invalid-argument","La fotografía no es válida.");
+    await db.doc(`expalsa_calidad_fotos_perfil/${uid}`).set({uid,path:`expalsa_calidad_fotos/${uid}/perfil.jpg`,origin:"gallery",uploadedBy:uid,storage:"firestore",jpeg:image.jpeg,width:image.width,height:image.height,size:image.size,updatedAt:now});return {saved:true};
+  }
   const permit=changes.doc(uid),identity=db.doc(`expalsa_calidad_identidades/${uid}`);
   if(action==="getProfile"){const [p,i]=await Promise.all([permit.get(),identity.get()]);const d=i.exists?i.data():{};return {status:p.exists?p.data().status:"none",firstNames:d.firstNames||"",lastNames:d.lastNames||"",employeeId:d.employeeId||""};}
   if(action==="requestProfile")return db.runTransaction(async tx=>{const snap=await tx.get(permit);if(snap.exists&&["pending","enabled"].includes(snap.data().status))return {status:snap.data().status};tx.set(permit,{uid,email,status:"pending",requestedAt:now});return {status:"pending"};});
