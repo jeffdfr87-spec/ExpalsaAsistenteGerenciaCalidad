@@ -320,7 +320,7 @@ function renderInspectorTraining(state,bank,attempt){
 }
 async function loadInspectorTraining(){
  if(!inspectorViewActive||!currentUser||!trainingCall)return;const host=document.getElementById('inspectorTrainingApp');if(host)host.innerHTML='<p class="panel">Consultando evaluación…</p>';
- try{const state=(await trainingCall('getTrainingEvaluationState')).data;let bank=state.bank,attempt=state.attempt;if(state.status==='active'){const opened=(await trainingCall('startTrainingEvaluation')).data;bank=opened.bank||bank;attempt=opened.attempt||attempt;state.status=opened.status;}window.inspectorTrainingState=state;window.inspectorTrainingBank=bank;window.inspectorTrainingAttempt=attempt;renderInspectorTraining(state,bank,attempt);}catch(e){showInspectorTrainingError(e);}
+ try{let state=(await trainingCall('getTrainingEvaluationState')).data;let bank=state.bank,attempt=state.attempt;if(state.status==='active'){const opened=(await trainingCall('startTrainingEvaluation')).data;if(opened.status==='submitted'){state=(await trainingCall('getTrainingEvaluationState')).data;bank=state.bank||bank;attempt=state.attempt||opened.attempt;}else{bank=opened.bank||bank;attempt=opened.attempt||attempt;state.status=opened.status;}}window.inspectorTrainingState=state;window.inspectorTrainingBank=bank;window.inspectorTrainingAttempt=attempt;renderInspectorTraining(state,bank,attempt);}catch(e){showInspectorTrainingError(e);}
 }
 function showInspectorTrainingError(e){const el=document.getElementById('inspectorTrainingStatus')||document.getElementById('inspectorTrainingApp');if(el)el.textContent=e?.message||'No se pudo cargar la evaluación.';}
 async function flushInspectorAnswers(){
