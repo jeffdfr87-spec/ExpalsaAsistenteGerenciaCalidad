@@ -75,6 +75,52 @@ const TRAINING_REQUESTS = "expalsa_capacitacion_2026_solicitudes";
 const TRAINING_PERMISSIONS = "expalsa_capacitacion_2026_permisos";
 const TRAINING_ADMIN = "jefferson@expalsaevaluations.com";
 
+exports.inspectorAccountAction = onCall({region:"us-central1",maxInstances:10,timeoutSeconds:30}, async request => {
+  const db=getFirestore(), now=require("firebase-admin/firestore").Timestamp.now();
+  const action=String(request.data?.action||"");
+  if(!request.auth)throw new HttpsError("unauthenticated","Inicia sesión.");
+  const uid=request.auth.uid,email=String(request.auth.token.email||"").toLowerCase();
+  if(action==="requestAccess"){
+    if(!email.endsWith("@"+DOMAIN)||email===TRAINING_ADMIN)throw new HttpsError("permission-denied","Cuenta no válida.");
+    const ref=db.doc(`expalsa_calidad_solicitudes/${uid}`);
+    return db.runTransaction(async tx=>{
+      const [access,old]=await Promise.all([tx.get(db.doc(`expalsa_calidad_accesos/${uid}`)),tx.get(ref)]);
+      if(access.exists&&access.data().active===true&&!access.data().deleted)return {status:"approved"};
+      if(old.exists&&old.data().status==="pending")return {status:"pending"};
+      tx.set(ref,{email,status:"pending",createdAt:now});return {status:"pending"};
+    });
+  }
+  if(action==="reviewAccess"){
+    await requireTrainingAdmin(request);const owner=String(request.data?.uid||"");
+    if(!owner||owner.includes("/"))throw new HttpsError("invalid-argument","Cuenta no válida.");
+    const ref=db.doc(`expalsa_calidad_solicitudes/${owner}`),access=db.doc(`expalsa_calidad_accesos/${owner}`),program=db.doc(`expalsa_calidad_programas/${owner}`);
+    return db.runTransaction(async tx=>{
+      const [snap,p]=await Promise.all([tx.get(ref),tx.get(program)]);
+      if(!snap.exists||snap.data().status!=="pending")throw new HttpsError("failed-precondition","La solicitud ya fue atendida.");
+      if(request.data?.approve===true){tx.set(access,{email:snap.data().email,active:true,deleted:false,role:"inspector",note:"Acceso aprobado desde Notificaciones"},{merge:true});if(p.exists)tx.update(program,{active:true});tx.update(ref,{status:"approved",reviewedAt:now,reviewedBy:uid});}
+      else tx.delete(ref);
+      return {saved:true};
+    });
+  }
+  const changes=db.collection("expalsa_calidad_cambios_perfil");
+  if(action==="listProfiles"||action==="reviewProfile"){
+    await requireTrainingAdmin(request);
+    if(action==="listProfiles"){const rows=await changes.where("status","==","pending").get();return {requests:rows.docs.map(d=>({uid:d.id,email:d.data().email,status:"pending"}))};}
+    const owner=String(request.data?.uid||"");if(!owner||owner.includes("/"))throw new HttpsError("invalid-argument","Cuenta no válida.");
+    return db.runTransaction(async tx=>{const ref=changes.doc(owner),snap=await tx.get(ref);if(!snap.exists||snap.data().status!=="pending")throw new HttpsError("failed-precondition","La solicitud ya fue atendida.");tx.update(ref,{status:request.data?.approve===true?"enabled":"rejected",reviewedAt:now,reviewedBy:uid});return {saved:true};});
+  }
+  await trainingUser(request);
+  const permit=changes.doc(uid),identity=db.doc(`expalsa_calidad_identidades/${uid}`);
+  if(action==="getProfile"){const [p,i]=await Promise.all([permit.get(),identity.get()]);const d=i.exists?i.data():{};return {status:p.exists?p.data().status:"none",firstNames:d.firstNames||"",lastNames:d.lastNames||"",employeeId:d.employeeId||""};}
+  if(action==="requestProfile")return db.runTransaction(async tx=>{const snap=await tx.get(permit);if(snap.exists&&["pending","enabled"].includes(snap.data().status))return {status:snap.data().status};tx.set(permit,{uid,email,status:"pending",requestedAt:now});return {status:"pending"};});
+  if(action==="saveProfile"){
+    const firstNames=String(request.data?.firstNames||"").trim().replace(/\s+/g," "),lastNames=String(request.data?.lastNames||"").trim().replace(/\s+/g," "),employeeId=String(request.data?.employeeId||"").trim();
+    if(firstNames.length<2||firstNames.length>100||lastNames.length<2||lastNames.length>100||! /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(employeeId))throw new HttpsError("invalid-argument","Revisa nombres, apellidos y código.");
+    return db.runTransaction(async tx=>{const [p,i,all]=await Promise.all([tx.get(permit),tx.get(identity),tx.get(db.collection("expalsa_calidad_identidades"))]);if(!p.exists||p.data().status!=="enabled")throw new HttpsError("permission-denied","Solicita autorización para modificar tus datos.");if(!i.exists)throw new HttpsError("failed-precondition","Completa primero tu perfil.");if(all.docs.some(d=>d.id!==uid&&String(d.data().employeeId||"").toLowerCase()===employeeId.toLowerCase()))throw new HttpsError("already-exists","El código pertenece a otro inspector.");tx.update(identity,{firstNames,lastNames,employeeId,updatedAt:now});tx.update(permit,{status:"used",usedAt:now});return {saved:true};});
+  }
+  throw new HttpsError("invalid-argument","Acción no válida.");
+});
+
 async function trainingUser(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
   const uid = request.auth.uid;
