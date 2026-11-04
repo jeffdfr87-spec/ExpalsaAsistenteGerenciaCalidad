@@ -132,12 +132,8 @@ function publicTrainingAttempt(attempt) {
   return out;
 }
 
-function trainingAutoScore(bank, answers) {
-  const questions = bank.questions || [];
-  const choices = questions.filter(q => q.type === "choice");
-  if (!choices.length) return null;
-  const correct = choices.filter(q => Number.isInteger(answers[q.id]) && answers[q.id] === q.answer).length;
-  return Math.round(correct / choices.length * 10000) / 100;
+function savedDayField(purpose) {
+  return purpose === "refuerzo" ? "refuerzoSavedThrough" : "initialSavedThrough";
 }
 
 async function getTrainingContext(request, requirePermission = true) {
@@ -225,9 +221,12 @@ exports.startTrainingEvaluation = onCall(
       const perm = permSnap.exists ? permSnap.data() : {};
       if (latest?.status === "active") {
         if (trainingExpiry(latest) <= now.toMillis()) {
-          tx.update(db.doc(`${TRAINING_ATTEMPTS}/${latest.id}`), {...submittedAttempt(latest, true, now), autoScore: trainingAutoScore(bank, JSON.parse(latest.answers || "{}"))});
+          tx.update(db.doc(`${TRAINING_ATTEMPTS}/${latest.id}`), submittedAttempt(latest, true, now));
           returned = {status: "submitted", attempt: publicTrainingAttempt({...latest, status:"submitted", submissionKind:"expired"}), bank: cleanTrainingBank(bank)};
-        } else returned = {status: "active", attempt: publicTrainingAttempt(latest), bank: cleanTrainingBank(bank)};
+        } else {
+          const activeAttempt = {...latest, savedThrough:Number(perm[savedDayField(latest.purpose)] || 0)};
+          returned = {status: "active", attempt: publicTrainingAttempt(activeAttempt), bank: cleanTrainingBank(bank)};
+        }
         return;
       }
       const kind = perm.initialEnabled && !perm.initialUsed ? "inicial" : perm.refuerzoEnabled && !perm.refuerzoUsed ? "refuerzo" : "";
@@ -235,13 +234,31 @@ exports.startTrainingEvaluation = onCall(
       const durationMinutes = kind === "inicial" ? Number(perm.initialDurationMinutes) : Number(perm.refuerzoDurationMinutes);
       if (!Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 180) throw new HttpsError("failed-precondition", "El administrador debe asignar el tiempo de evaluación.");
       const ref = db.collection(TRAINING_ATTEMPTS).doc();
-      const record = {id:ref.id,accountUid:user.uid,scope:0,purpose:kind,durationMinutes,bankId:bank.version,status:"active",answers:"{}",marks:"{}",savedThrough:0,startedAt:now,createdAt:now,updatedAt:now,submittedAt:null,gradedAt:null,submissionKind:"",createdBy:user.uid,updatedBy:user.uid,rev:1,autoScore:null};
+      const record = {id:ref.id,accountUid:user.uid,scope:0,purpose:kind,durationMinutes,bankId:bank.version,status:"active",answers:"{}",marks:"{}",startedAt:now,createdAt:now,updatedAt:now,submittedAt:null,gradedAt:null,submissionKind:"",createdBy:user.uid,updatedBy:user.uid,rev:1};
       tx.create(ref, record);
-      if (kind === "inicial") tx.update(permissionRef, {initialEnabled:false,initialUsed:true,updatedAt:now});
-      else tx.update(permissionRef, {refuerzoEnabled:false,refuerzoUsed:true,updatedAt:now});
-      returned = {status:"active",attempt:publicTrainingAttempt(record),bank:cleanTrainingBank(bank)};
+      const savedField=savedDayField(kind);
+      if (kind === "inicial") tx.update(permissionRef, {initialEnabled:false,initialUsed:true,[savedField]:0,updatedAt:now});
+      else tx.update(permissionRef, {refuerzoEnabled:false,refuerzoUsed:true,[savedField]:0,updatedAt:now});
+      returned = {status:"active",attempt:publicTrainingAttempt({...record,savedThrough:0}),bank:cleanTrainingBank(bank)};
     });
     return returned;
+  }
+);
+
+exports.listTrainingEvaluationRequests = onCall(
+  {region: "us-central1", maxInstances: 10, timeoutSeconds: 30, memory: "256MiB"},
+  async request => {
+    await requireTrainingAdmin(request);
+    const snapshot = await getFirestore().collection(TRAINING_REQUESTS).get();
+    const requests = snapshot.docs.map(doc => ({id:doc.id,...doc.data()}))
+      .filter(row => row.status === "pending")
+      .sort((a,b) => b.requestedAt.toMillis() - a.requestedAt.toMillis())
+      .slice(0,100)
+      .map(row => {
+        const {requestedAt,...safeRow}=row;
+        return {...safeRow,requestedAtMs:requestedAt.toMillis()};
+      });
+    return {requests};
   }
 );
 
@@ -278,19 +295,21 @@ exports.saveTrainingAnswers = onCall(
 exports.saveTrainingDay = onCall(
   {region: "us-central1", maxInstances: 10, timeoutSeconds: 30, memory: "256MiB"},
   async request => {
-    const {user, bank} = await getTrainingContext(request);
+    const {user, bank, permissionRef} = await getTrainingContext(request);
     const attemptId = String(request.data?.attemptId || ""), day = Number(request.data?.day);
     if (!/^[A-Za-z0-9]{20}$/.test(attemptId) || !Number.isInteger(day) || day < 1 || day > 10) throw new HttpsError("invalid-argument", "Jornada no válida.");
     const ref = getFirestore().doc(`${TRAINING_ATTEMPTS}/${attemptId}`), now = require("firebase-admin/firestore").Timestamp.now();
     return getFirestore().runTransaction(async tx => {
-      const snap = await tx.get(ref);
+      const [snap,permSnap] = await Promise.all([tx.get(ref),tx.get(permissionRef)]);
       if (!snap.exists || snap.data().accountUid !== user.uid) throw new HttpsError("permission-denied", "Intento no válido.");
       const old = snap.data(), answers = JSON.parse(old.answers || "{}");
+      const perm = permSnap.exists ? permSnap.data() : {};
+      const savedField = savedDayField(old.purpose), savedThrough = Number(perm[savedField] || 0);
       if (old.status !== "active" || trainingExpiry(old) <= now.toMillis()) throw new HttpsError("failed-precondition", "El tiempo de evaluación terminó.");
-      if (day !== Number(old.savedThrough || 0) + 1) throw new HttpsError("failed-precondition", "Guarda cada jornada en orden antes de avanzar.");
+      if (day !== savedThrough + 1) throw new HttpsError("failed-precondition", "Guarda cada jornada en orden antes de avanzar.");
       const qs = bank.questions.filter(q => q.day === day);
       if (!qs.length || qs.some(q => !(q.id in answers) || (q.type === "case" && !String(answers[q.id] || "").trim()))) throw new HttpsError("failed-precondition", "Responde todas las preguntas de esta jornada antes de guardarla.");
-      tx.update(ref, {savedThrough:day,updatedAt:now,updatedBy:user.uid,rev:Number(old.rev||1)+1});
+      tx.update(permissionRef, {[savedField]:day,progressUpdatedAt:now,progressUpdatedBy:user.uid});
       return {savedThrough:day,complete:day === 10};
     });
   }
@@ -299,19 +318,19 @@ exports.saveTrainingDay = onCall(
 exports.finishTrainingEvaluation = onCall(
   {region: "us-central1", maxInstances: 10, timeoutSeconds: 30, memory: "256MiB"},
   async request => {
-    const {user, bank} = await getTrainingContext(request);
+    const {user, bank, permissionRef} = await getTrainingContext(request);
     const attemptId = String(request.data?.attemptId || "");
     if (!/^[A-Za-z0-9]{20}$/.test(attemptId)) throw new HttpsError("invalid-argument", "Intento no válido.");
     const ref = getFirestore().doc(`${TRAINING_ATTEMPTS}/${attemptId}`), now = require("firebase-admin/firestore").Timestamp.now();
     return getFirestore().runTransaction(async tx => {
-      const snap = await tx.get(ref);
+      const [snap,permSnap] = await Promise.all([tx.get(ref),tx.get(permissionRef)]);
       if (!snap.exists || snap.data().accountUid !== user.uid) throw new HttpsError("permission-denied", "Intento no válido.");
       const old = snap.data();
       if (old.status !== "active") return {status:old.status};
       const expired = trainingExpiry(old) <= now.toMillis();
-      if (!expired && Number(old.savedThrough || 0) !== 10) throw new HttpsError("failed-precondition", "Guarda las diez jornadas antes de entregar la evaluación.");
-      const answers = JSON.parse(old.answers || "{}");
-      tx.update(ref, {...submittedAttempt(old, expired, now),autoScore:trainingAutoScore(bank,answers)});
+      const perm = permSnap.exists ? permSnap.data() : {};
+      if (!expired && Number(perm[savedDayField(old.purpose)] || 0) !== 10) throw new HttpsError("failed-precondition", "Guarda las diez jornadas antes de entregar la evaluación.");
+      tx.update(ref, submittedAttempt(old, expired, now));
       return {status:"submitted",expired};
     });
   }
@@ -330,8 +349,8 @@ exports.getTrainingEvaluationState = onCall(
     let latest = attempts[0] || null;
     if (latest?.status === "active" && trainingExpiry(latest) <= Date.now()) {
       const ref = db.doc(`${TRAINING_ATTEMPTS}/${latest.id}`), now = require("firebase-admin/firestore").Timestamp.now();
-      await ref.update({...submittedAttempt(latest,true,now),autoScore:trainingAutoScore(bank,JSON.parse(latest.answers||"{}"))});
-      latest = {...latest,...submittedAttempt(latest,true,now),autoScore:trainingAutoScore(bank,JSON.parse(latest.answers||"{}"))};
+      await ref.update(submittedAttempt(latest,true,now));
+      latest = {...latest,...submittedAttempt(latest,true,now)};
     }
     const requestRows=requests.docs.map(d=>d.data()).sort((a,b)=>b.requestedAt.toMillis()-a.requestedAt.toMillis());
     const pending=requestRows.find(r=>r.status==="pending");
@@ -341,7 +360,8 @@ exports.getTrainingEvaluationState = onCall(
     else if(latest?.status==="submitted"||latest?.status==="graded")status="completed";
     else if(permission.initialEnabled||permission.refuerzoEnabled)status="enabled";
     else if(pending)status="pending";
-    return {status,attempt:publicTrainingAttempt(latest),pendingKind:pending?.kind||"",pendingInitial,pendingRefuerzo,initialEnabled:!!permission.initialEnabled,refuerzoEnabled:!!permission.refuerzoEnabled,canRequestRefuerzo:attempts.some(a=>a.status==="submitted"||a.status==="graded")&&!permission.refuerzoEnabled&&!pendingRefuerzo,bank:bank?cleanTrainingBank(bank):null};
+    const publicAttempt=latest?{...latest,savedThrough:Number(permission[savedDayField(latest.purpose)]||0)}:null;
+    return {status,attempt:publicTrainingAttempt(publicAttempt),pendingKind:pending?.kind||"",pendingInitial,pendingRefuerzo,initialEnabled:!!permission.initialEnabled,refuerzoEnabled:!!permission.refuerzoEnabled,canRequestRefuerzo:attempts.some(a=>a.status==="submitted"||a.status==="graded")&&!permission.refuerzoEnabled&&!pendingRefuerzo,bank:bank?cleanTrainingBank(bank):null};
   }
 );
 
