@@ -3,7 +3,7 @@ import {progressModel as baseModel,esc as E,finite,mean,percent} from './capacit
 export const PLAN_ATTEMPTS='expalsa_capacitacion_2026_evaluaciones';
 const stamp=t=>t?.toMillis?.()??(t?.seconds? t.seconds*1000:0);
 export function selectPlanAttempt(records,person){
- return records.filter(r=>r.accountUid===person.accountUid&&r.scope===0&&r.status==='graded'&&(!stamp(person.createdAt)||stamp(r.startedAt)>=stamp(person.createdAt))).sort((a,b)=>stamp(b.startedAt)-stamp(a.startedAt)||String(b.id).localeCompare(String(a.id)))[0]||null;
+ return records.filter(r=>!!person.accountUid&&r.accountUid===person.accountUid&&r.scope===0&&r.status==='graded').sort((a,b)=>stamp(b.startedAt)-stamp(a.startedAt)||String(b.id).localeCompare(String(a.id)))[0]||null;
 }
 export function summarizeTheory(attempts=[],extra={}){
  const a=attempts.filter(a=>a.key==='1'&&a.stage===1&&a.status==='graded'&&finite(a.score)).slice(-1),selected=a[0];
