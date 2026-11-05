@@ -11,6 +11,7 @@ Entrada: `analisis-sabor.html`. Usa el proyecto Firebase existente `oceantreasur
 5. Las evaluaciones enviadas son definitivas y no se pueden sobrescribir. Cada inspector solo consulta sus resultados; el administrador compara todos y exporta CSV.
 6. El administrador cierra la sesión cuando se completan todas las combinaciones muestra–inspector. Cerrar impide nuevos envíos.
 7. **Eliminar sesión** la mueve a la **Papelera** y bloquea nuevos registros. **Restaurar sesión** recupera su estado, muestras, inspectores y resultados. La eliminación es recuperable y no borra físicamente las evaluaciones.
+8. **Ver resultados** abre el modal identificado por el lote. Su botón **PDF** descarga los resultados de esa muestra con logo de EXPALSA, datos de la muestra, resultados y observaciones de cada inspector, pendientes y paginación automática mediante jsPDF-AutoTable. Se exportan los datos cargados que se muestran en el modal; usa Actualizar antes de abrirlo para consultar nuevos resultados.
 
 El registro central conserva el inspector que analizó y la cuenta del administrador que capturó el resultado (`recordedBy`, `recordedByEmail`, `entryMode: laboratory`). Ambos modos comparten el mismo registro único por muestra e inspector y no pueden sobrescribirse entre sí. Los resultados comparativos son parciales mientras falten evaluaciones. Una discrepancia significa que hay votos de ambas categorías; el sistema no decide la liberación comercial del lote. Una nueva evaluación del mismo lote requiere otra sesión y conserva la trazabilidad de la anterior.
 
@@ -23,6 +24,8 @@ Colecciones nuevas: `expalsa_sabor_sesiones/{sessionId}`, `inspectors/{inspector
 El cliente nunca accede directamente a estas colecciones. Las reglas existentes no contienen rutas que las autoricen y conservan la denegación implícita. No se despliegan ni sustituyen reglas de otros módulos. El acceso se realiza por la función autenticada con Admin SDK.
 
 Las listas de sesiones y muestras se paginan de 20 en 20; inspectores y votos, de 200 en 200. Las altas se envían en grupos de 100 por solicitud y pueden repetirse sin límite total configurado, respetando las cuotas operativas de Firebase. Cada inspector puede analizar la misma muestra, con un resultado independiente bajo su UID. Las altas repetidas no duplican miembros ni incrementan el contador. El filtro y los contadores de discrepancias corresponden a las muestras cargadas; el CSV recorre todas las páginas de votos e incluye las evaluaciones pendientes. Los valores que puedan interpretarse como fórmulas de hoja de cálculo se neutralizan al exportar. El botón Actualizar obtiene los nuevos resultados.
+
+El PDF se genera en el navegador, sin enviar los resultados a servicios externos. Las distribuciones fijadas de jsPDF 4.2.1 y jsPDF-AutoTable 5.0.9 y sus licencias están incluidas en `vendor/`; se cargan al solicitar el PDF. El código aparece como dato de muestra, mientras que el encabezado y los títulos del reporte usan el lote.
 
 ## Validación y despliegue
 

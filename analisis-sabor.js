@@ -1,3 +1,4 @@
+import {downloadFlavorResults} from './analisis-sabor-pdf.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserSessionPersistence} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-functions.js';
@@ -78,8 +79,8 @@ function renderDetail(){
  <section class="panel"><div class="panel-head"><div><h3>Muestras de materia prima</h3><p>${state.samples.length} de ${s.sampleCount} muestras cargadas</p></div><div class="actions">${admin?'<button class="button" data-action="export">↓ Exportar CSV</button>':''}${admin&&s.status==='draft'?'<button class="button primary" data-action="new-sample">＋ Agregar muestra</button>':''}</div></div><div class="panel-body filters"><label class="field" for="sample-filter">Buscar muestra</label><input id="sample-filter" type="search" placeholder="Código, lote, importador…" value="${esc(state.filter)}"><button class="button" data-action="refresh">↻ Actualizar</button></div>${rows?`<div class="table-wrap"><table><thead><tr><th>Código / Lote</th><th>Talla / Color</th><th>Sabor de referencia</th><th>Destino / Importador</th><th>${admin?'Avance':'Mi resultado'}</th><th>${admin?'Resultado parcial':''}</th><th>Acciones</th></tr></thead><tbody>${rows}</tbody></table></div>`:`<div class="empty"><strong>${state.samples.length?'Sin coincidencias':'Sin muestras registradas'}</strong>${s.status==='draft'?'Agrega las muestras antes de abrir la evaluación.':'No hay muestras para mostrar.'}</div>`}${state.samplesCursor?'<div class="load-more"><button class="button" data-action="more-samples">Cargar más muestras</button></div>':''}</section>`;
 }
 
-function modal(title,body,submit='',formId=''){
- dialog.innerHTML=`<div class="dialog-head"><h2 id="dialog-title">${esc(title)}</h2><button type="button" data-action="dismiss" aria-label="Cerrar">×</button></div>${formId?`<form id="${formId}">`:''}<div class="dialog-body">${body}<p class="error" id="form-error" role="alert"></p></div><div class="dialog-foot"><button type="button" class="button" data-action="dismiss">${submit?'Cancelar':'Cerrar'}</button>${submit?`<button type="submit" class="button primary">${esc(submit)}</button>`:''}</div>${formId?'</form>':''}`;
+function modal(title,body,submit='',formId='',headerActions=''){
+ dialog.innerHTML=`<div class="dialog-head"><h2 id="dialog-title">${esc(title)}</h2><div class="actions">${headerActions}<button type="button" data-action="dismiss" aria-label="Cerrar">×</button></div></div>${formId?`<form id="${formId}">`:''}<div class="dialog-body">${body}<p class="error" id="form-error" role="alert"></p></div><div class="dialog-foot"><button type="button" class="button" data-action="dismiss">${submit?'Cancelar':'Cerrar'}</button>${submit?`<button type="submit" class="button primary">${esc(submit)}</button>`:''}</div>${formId?'</form>':''}`;
  if(!dialog.open)dialog.showModal();
 }
 async function newSession(){
@@ -102,7 +103,18 @@ function newSample(){modal('Agregar muestra',`<div class="form-grid">${fields.ma
 function evaluate(id){const m=state.samples.find(m=>m.id===id);const vote=state.evaluations.find(e=>e.sampleId===id&&e.inspectorUid===state.user.uid);state.editSampleId=id;const canEvaluate=state.session.status==='open'&&!vote;
  modal(`Muestra ${m.codigo}`,`<dl class="details">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${esc(m[key])}</dd></div>`).join('')}</dl>${vote?`<p>${tag(vote.result==='conforme'?'good':'bad',labels[vote.result])}</p><p>${esc(vote.observations||'Sin observaciones.')}</p><p class="hint">Registrada el ${stamp(vote.createdAtMs)}. La evaluación enviada no puede modificarse.</p>`:canEvaluate?'<fieldset style="border:0;padding:0;margin:0"><legend class="field">Resultado de sabor</legend><div class="radio-row"><label class="radio-card"><input type="radio" name="result" value="conforme" required> Conforme</label><label class="radio-card"><input type="radio" name="result" value="no_conforme" required> No conforme</label></div></fieldset><label class="field">Observaciones<textarea name="observations" maxlength="2000" placeholder="Describe el sabor o defecto identificado"></textarea><small>Obligatorias para un resultado no conforme.</small></label><p class="hint">Al enviar, tu evaluación quedará registrada con tu cuenta y no podrá modificarse.</p>':'<p class="hint">La sesión no está abierta para evaluar.</p>'}`,canEvaluate?'Enviar evaluación':'',canEvaluate?'evaluation-form':'');
 }
-function results(id){const m=state.samples.find(m=>m.id===id),stats=sampleStats(id);modal(`Resultados · ${m.codigo}`,`<dl class="details">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${esc(m[key])}</dd></div>`).join('')}</dl><div class="report">${resultTag(stats)}<span class="hint">${stats.votes.length} de ${state.session.inspectorUids.length} evaluaciones</span></div><div class="table-wrap"><table><thead><tr><th>Inspector</th><th>Resultado</th><th>Observaciones</th></tr></thead><tbody>${state.session.inspectors.map(p=>{const v=stats.votes.find(v=>v.inspectorUid===p.uid);return `<tr><td>${esc(p.name||p.email)}${v?`<small>${stamp(v.createdAtMs)}</small>`:''}</td><td>${v?tag(v.result==='conforme'?'good':'bad',labels[v.result]):tag('draft','Pendiente')}</td><td style="white-space:pre-wrap;min-width:150px">${esc(v?.observations||'—')}</td></tr>`;}).join('')}</tbody></table></div>`);}
+function results(id){
+ const m=state.samples.find(m=>m.id===id),stats=sampleStats(id);
+ modal(`Resultados · Lote ${m.lote}`,
+  `<dl class="details">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${esc(m[key])}</dd></div>`).join('')}</dl>
+  <div class="report">${resultTag(stats)}<span class="hint">${stats.votes.length} de ${count(state.session)} evaluaciones</span></div>
+  <div class="table-wrap"><table><thead><tr><th>Inspector</th><th>Resultado</th><th>Observaciones</th></tr></thead><tbody>${state.session.inspectors.map(p=>{
+   const v=stats.votes.find(v=>v.inspectorUid===p.uid);
+   return `<tr><td>${esc(p.name||p.email)}${v?`<small>${stamp(v.createdAtMs)}</small>`:''}</td><td>${v?tag(v.result==='conforme'?'good':'bad',labels[v.result]):tag('draft','Pendiente')}</td><td style="white-space:pre-wrap;min-width:150px">${esc(v?.observations||'—')}</td></tr>`;
+  }).join('')}</tbody></table></div>`,
+  '','',`<button class="button primary" type="button" data-action="results-pdf" data-id="${esc(m.id)}" aria-label="Descargar PDF de resultados del lote ${esc(m.lote)}">↓ PDF</button>`);
+}
+
 function csvCell(value){let text=String(value??'');if(/^[\s]*[=+@-]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';}
 async function exportCsv(){
  const sessionId=state.session.id,session=state.session;let samples=[],evaluations=[],cursor=null;
@@ -131,6 +143,7 @@ document.addEventListener('click',async e=>{
   else if(action==='new-sample')newSample();
   else if(action==='evaluate')evaluate(b.dataset.id);
   else if(action==='results')results(b.dataset.id);
+  else if(action==='results-pdf'){const sample=state.samples.find(m=>m.id===b.dataset.id);if(!sample)throw Error('La muestra ya no está disponible. Actualiza la sesión.');await downloadFlavorResults({session:state.session,sample,inspectors:state.session.inspectors,evaluations:state.evaluations});notify('PDF de resultados generado.');}
   else if(action==='begin-analysis'){state.analysisMode=true;state.analysisSampleId=b.dataset.id||state.analysisSampleId||state.samples[0]?.id||'';state.analysisInspectorUid='';renderDetail();document.querySelector('#analysis-workbench')?.scrollIntoView({behavior:'smooth',block:'start'});}
   else if(action==='hide-analysis'){state.analysisMode=false;renderDetail();}
   else if(action==='export')await exportCsv();
