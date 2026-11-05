@@ -1,0 +1,35 @@
+# Análisis de sabor de materia prima
+
+Entrada: `analisis-sabor.html`. Usa el proyecto Firebase existente `oceantreasure-app`, base `(default)` Standard en `nam5`, y las cuentas habilitadas en Evaluaciones.
+
+## Operación
+
+1. El administrador existente crea una sesión, elige fecha e inspectores habilitados (hasta 200 por sesión).
+2. Registra las muestras: lote, talla, color, sabor de referencia, destino, código e importador. El código es único dentro de la sesión, sin distinguir mayúsculas ni espacios iniciales/finales.
+3. Abre la sesión. Desde ese momento la composición de las muestras y los inspectores queda fija.
+4. Cada inspector inicia sesión con su propia cuenta y evalúa cada muestra como conforme o no conforme. Un resultado no conforme exige observaciones.
+5. Las evaluaciones enviadas son definitivas y no se pueden sobrescribir. Cada inspector solo consulta sus resultados; el administrador compara todos y exporta CSV.
+6. El administrador cierra la sesión cuando se completan todas las combinaciones muestra–inspector. Cerrar impide nuevos envíos.
+
+Los resultados comparativos son parciales mientras falten evaluaciones. Una discrepancia significa que hay votos de ambas categorías; el sistema no decide la liberación comercial del lote. Una nueva evaluación del mismo lote requiere otra sesión y conserva la trazabilidad de la anterior.
+
+## Implementación y seguridad
+
+La función callable `manageFlavorAnalysis` está en un codebase independiente, `analisis-sabor`, sin modificar las funciones existentes. Verifica el UID y correo del administrador contra `expalsa_calidad_config/administrador`; verifica que las cuentas de inspector estén activas, no eliminadas y coincidan con el correo autenticado en cada solicitud.
+
+Colecciones nuevas: `expalsa_sabor_sesiones/{sessionId}`, `samples/{sampleId}`, `samples/{sampleId}/votes/{inspectorUid}`. El ID de muestra es un hash del código normalizado. Cada evaluación registra cuenta, fecha del servidor, resultado y observaciones. Las transacciones impiden códigos duplicados, doble envío y cambios de estado incompatibles con evaluaciones concurrentes.
+
+El cliente nunca accede directamente a estas colecciones. Las reglas existentes no contienen rutas que las autoricen y conservan la denegación implícita. No se despliegan ni sustituyen reglas de otros módulos. El acceso se realiza por la función autenticada con Admin SDK.
+
+Las listas de sesiones y muestras se paginan de 20 en 20. El filtro y los contadores de discrepancias corresponden a las muestras cargadas; el CSV recorre todas las páginas e incluye las evaluaciones pendientes. Los valores que puedan interpretarse como fórmulas de hoja de cálculo se neutralizan al exportar. El botón Actualizar obtiene los nuevos resultados.
+
+## Validación y despliegue
+
+```powershell
+npm ci --prefix functions-sabor
+npm test --prefix functions-sabor
+node --check analisis-sabor.js
+npx -y firebase-tools@latest deploy --only functions:analisis-sabor:manageFlavorAnalysis --project oceantreasure-app
+```
+
+La interfaz se publica con el GitHub Pages del repositorio. El código de la función debe desplegarse antes de publicar el enlace de la interfaz. Los datos de ejemplo del servidor de pruebas local no forman parte del producto ni se cargan en Firebase.

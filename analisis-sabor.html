@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08283d">
+  <title>EXPALSA · Análisis de sabor</title>
+  <link rel="icon" href="./favicon.png">
+  <link rel="stylesheet" href="./analisis-sabor.css">
+  <script src="./firebase-config.js"></script>
+  <script type="module" src="./analisis-sabor.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <a class="brand" href="./index.html"><img src="./logoexpalsa.png" alt="EXPALSA"><span>GERENCIA DE CALIDAD</span></a>
+      <p class="nav-label">LABORATORIO</p>
+      <a class="nav-link active" href="./analisis-sabor.html" aria-current="page"><span aria-hidden="true">◉</span> Análisis de sabor</a>
+      <a class="nav-link" href="./capacitacion.html"><span aria-hidden="true">▦</span> Capacitación</a>
+      <a class="nav-link" href="./index.html"><span aria-hidden="true">↗</span> Evaluaciones</a>
+      <div class="side-note"><span class="dot"></span> Control de materia prima</div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><div><span class="eyebrow">CONTROL SENSORIAL</span><h1>Análisis de sabor</h1></div><div id="account" class="account"></div></header>
+      <main id="app" tabindex="-1"><div class="empty">Conectando con el laboratorio…</div></main>
+      <footer>EXPALSA <span>·</span> Laboratorio de calidad</footer>
+    </div>
+  </div>
+  <p id="notice" role="status" aria-live="polite" hidden></p>
+  <dialog id="editor" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>
