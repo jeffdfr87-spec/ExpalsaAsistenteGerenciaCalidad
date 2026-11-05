@@ -5,6 +5,11 @@ const {getFirestore} = require("firebase-admin/firestore");
 
 initializeApp();
 
+exports.manageTrainingGroups = onCall(
+  {region:'us-central1',maxInstances:3,timeoutSeconds:60,memory:'256MiB'},
+  require('./training-groups').handler(getFirestore(), requireTrainingAdmin)
+);
+
 const DOMAIN = "expalsaevaluations.com";
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$/;
 const COLLECTIONS = [

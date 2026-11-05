@@ -40,3 +40,15 @@
  @media(max-width:750px){.app{display:block}.sidebar{height:auto;position:relative;padding:13px 14px 10px;gap:14px}.sidebar .brand{padding:0 3px 7px}.brand small{font-size:.62rem}.brand strong{font-size:1.05rem}.nav{gap:5px;padding-bottom:4px;scrollbar-width:thin}.nav button{min-height:42px;font-size:.78rem;padding:10px 13px;flex-shrink:0}.nav-icon{width:16px;height:16px;font-size:1rem}.nav button.active:before{display:none}.side-bottom{display:none}.topbar{min-height:0;padding:20px 17px}.topbar h1{font-size:1.4rem}.top-actions{margin-top:15px;gap:8px}.top-actions .pill{white-space:normal}.content{padding:18px 14px 34px}.panel{padding:18px;border-radius:13px}.stack,.grid2{gap:16px}.hero{padding:23px}.hero h2{font-size:1.3rem}.hero .big{font-size:2.5rem;margin-top:14px}.quick-day{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.split-eval{grid-template-columns:1fr;gap:16px}.criterion .spread{flex-wrap:wrap}.criterion .tag{max-width:100%}.training-minute-line{flex-wrap:wrap}.training-minute-line input{flex-basis:100%}.training-minute-line .button{flex:1}.section-title{flex-wrap:wrap}.spread{min-width:0}.mini-card>.spread{flex-wrap:wrap}.day-document-actions{justify-content:flex-start}.rating{gap:6px}.rating button{min-width:40px}.hero:after{display:none}.login{padding:28px}.inspector-identity .small{font-size:.74rem}}
  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 }
+
+/* Compact team management */
+@media screen {
+ .group-toolbar{display:flex;align-items:end;gap:16px;padding:14px 18px}.group-toolbar .form-field{flex:1;max-width:620px}.group-toolbar select{width:100%}
+ #responsibleMount{padding:16px 18px}#responsibleMount h2{font-size:1rem;margin-bottom:12px}
+ #responsibleMount .responsible-layout{display:grid;grid-template-columns:minmax(220px,1fr) auto;align-items:center;gap:20px}
+ #responsibleMount .form-field{align-self:center}#responsibleMount input{height:40px;min-height:40px;padding:8px 11px;width:100%}
+ #responsibleMount .responsible-photo{display:flex;align-items:center;gap:12px;flex-wrap:wrap}#responsibleMount .avatar{width:64px;height:64px;border-radius:10px}
+ #responsibleMount .responsible-photo-actions{gap:6px}#responsibleMount .note{margin:8px 0 0}#responsibleMount .row{gap:7px}
+ .assigned-people td{padding:10px 12px}.assigned-people th{padding:10px 12px}.assigned-people .avatar{width:38px;height:38px}.assigned-people table{min-width:760px;width:100%}.assigned-people td{white-space:normal;overflow-wrap:anywhere}.assigned-people td:nth-child(4),.assigned-people td:nth-child(5){white-space:nowrap}.person-actions{display:flex;gap:6px;flex-wrap:wrap}
+ @media(max-width:850px){#responsibleMount .responsible-layout{grid-template-columns:1fr}.group-toolbar{align-items:stretch;flex-direction:column}}
+}

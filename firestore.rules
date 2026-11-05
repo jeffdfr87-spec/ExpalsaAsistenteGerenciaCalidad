@@ -1085,15 +1085,15 @@ match /empaque_ejercicio_reportes/{reporteId} {
     }
     match /expalsa_capacitacion_2026_participantes/{participantId} {
       allow get, list: if expalsaAdmin();
-      allow create: if capAdminWrite(request.resource.data)
-        && request.resource.data.id == participantId
-        && participantId.matches('ci_[a-zA-Z0-9]{8,64}')
-        && request.resource.data.createdAt == request.time;
-      allow update: if capAdminWrite(request.resource.data)
-        && request.resource.data.id == participantId
-        && request.resource.data.id == resource.data.id
-        && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if false;
+      // Membership changes go through manageTrainingGroups, which validates
+      // identity across every group in a serialized server transaction.
+      // groupNumber is a positive group number; absent means legacy Group 1.
+      allow create, update, delete: if false;
+    }
+    match /expalsa_capacitacion_2026_grupos/{groupId} {
+      // Server-only metadata: number, name, jpeg, rev and audit timestamps.
+      // One responsible per group; participant references exactly one number.
+      allow read, write: if false;
     }
     function capParticipantActive(personId) {
       let p = get(/databases/$(database)/documents/expalsa_capacitacion_2026_participantes/$(personId)).data;

@@ -119,7 +119,7 @@ export function createFinalReport({context,notify}){
     const cols=['expalsa_capacitacion_2026_participantes','expalsa_capacitacion_2026_sesiones','expalsa_capacitacion_2026_complementos'];
     const [p,s,c,r]=await Promise.all([...cols.map(col=>fs.getDocs(fs.collection(db,col))),fs.getDocFromServer(fs.doc(db,'expalsa_capacitacion_2026_equipo','responsable'))]);
     if(context().user?.uid!==user.uid)throw Error('La sesión ha cambiado.');
-    const people=p.docs.map(d=>({id:d.id,...d.data()})).filter(ACTIVE).map(p=>({...p,name:nameFor?.(p)||p.name,employeeCode:context().identityFor?.(p)?.employeeId||'',areaLabel:context().areaFor?.(p)||p.station,portrait:context().photoFor?.(p)||''}));
+    const people=p.docs.map(d=>({id:d.id,...d.data()})).filter(ACTIVE).filter(p=>!context().groupNumber||(p.groupNumber||1)===context().groupNumber).map(p=>({...p,name:nameFor?.(p)||p.name,employeeCode:context().identityFor?.(p)?.employeeId||'',areaLabel:context().areaFor?.(p)||p.station,portrait:context().photoFor?.(p)||''}));
     const ids=new Set(people.map(p=>p.id)),sessions=s.docs.map(d=>({id:d.id,...d.data()})).filter(s=>ids.has(s.personId)),records=c.docs.map(d=>({id:d.id,...d.data()})),photos={},photoErrors=[];
     async function photosJob(){
       if(!includePhotos)return;
@@ -135,7 +135,7 @@ export function createFinalReport({context,notify}){
       await Promise.all(Array.from({length:Math.min(3,candidates.length)},worker));
     }
     const [,theory]=await Promise.all([photosJob(),loadTheory({fs,db,user,people,scope:theoryScope,getUser:()=>context().user,progress:(n,total)=>status(`Consultando teoría y bancos originales: ${n}/${total} inspectores.`)})]);
-    return {people,sessions,records,days,competencies,responsible:r.exists()?r.data():null,photos,photoErrors,theory};
+    return {people,sessions,records,days,competencies,responsible:context().responsible||(r.exists()?r.data():null),photos,photoErrors,theory};
   }
   async function handle(action){if(busy)return;if(action==='print'){const frame=document.getElementById('finalReportFrame');if(frame&&html){frame.contentWindow.focus();frame.contentWindow.print();}return;}const turn=epoch;busy=true;activate();try{const opt=options();status(action==='example'?'Preparando ejemplo de diseño…':'Reuniendo registros y evidencias reales…');const {days,competencies}=context();const data=action==='example'?exampleData(days,competencies):await realData(opt.includePhotos,opt.theoryScope,opt.mode);if(turn!==epoch)return;html=buildFinalReport(data,opt);kind=action==='example'?'example':'real';display();status(kind==='example'?'Ejemplo con datos ficticios para revisar contenido, extensión y fotografías. No se guardó en Firestore.':data.photoErrors.length?'Informe generado con fotografías pendientes de recuperar.':'Informe generado con los registros disponibles. Revisa los pendientes antes de su cierre.');}catch(e){if(turn===epoch){status('No se pudo generar el informe: '+e.message);notify(e.message);}}finally{if(turn===epoch){busy=false;activate();}}}
   function clear(){epoch++;html='';kind='';busy=false;}
