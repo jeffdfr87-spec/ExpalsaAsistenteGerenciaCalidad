@@ -1,5 +1,6 @@
 const {HttpsError} = require('firebase-functions/v2/https');
 const {FieldValue} = require('firebase-admin/firestore');
+const {createHash} = require('node:crypto');
 const PEOPLE = 'expalsa_capacitacion_2026_participantes';
 const GROUPS = 'expalsa_capacitacion_2026_grupos';
 const LEGACY = 'expalsa_capacitacion_2026_equipo/responsable';
@@ -22,10 +23,25 @@ function validateResponsible(name, jpeg) {
   if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) reject('Escribe el nombre completo del asistente responsable.');
   if (typeof jpeg !== 'string' || jpeg.length > 170000 || (jpeg && !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(jpeg))) reject('La fotografía no es válida.');
 }
+function registry(groupDocs, legacy) {
+  const assistants = groupDocs.filter(d=>d.kind==='assistant').map(d=>({id:d.id,name:d.name,jpeg:d.jpeg||'',rev:d.rev||0}));
+  const rawGroups = groupDocs.filter(d=>Number.isInteger(d.number)&&d.kind!=='assistant');
+  if (!rawGroups.some(g=>g.number===1)) rawGroups.push({number:1,name:legacy?.name||'',jpeg:legacy?.jpeg||'',rev:legacy?.rev||0});
+  const groups=rawGroups.map(g=>{
+    let assistantId=g.assistantId||'';
+    if (!assistantId && g.name) {
+      assistantId='legacy_'+createHash('sha256').update(normalized(g.name)).digest('hex').slice(0,24);
+      if (!assistants.some(a=>a.id===assistantId)) assistants.push({id:assistantId,name:g.name,jpeg:g.jpeg||'',rev:0});
+    }
+    const assistant=assistants.find(a=>a.id===assistantId);
+    return {number:g.number,assistantId,name:assistant?.name||'',jpeg:assistant?.jpeg||'',rev:g.rev||0};
+  }).sort((a,b)=>a.number-b.number);
+  return {groups,assistants:assistants.sort((a,b)=>a.name.localeCompare(b.name,'es'))};
+}
 function handler(db, requireAdmin) {
   return async request => {
     const admin = await requireAdmin(request), data = request.data || {}, action = data.action;
-    if (!['list','create','saveResponsible','add','remove'].includes(action)) throw new HttpsError('invalid-argument', 'Acción no válida.');
+    if (!['list','create','saveResponsible','saveAssistant','assignGroup','add','remove'].includes(action)) throw new HttpsError('invalid-argument', 'Acción no válida.');
     return db.runTransaction(async tx => {
       // The lock serializes membership changes, including two concurrent registrations.
       const lock = db.collection(GROUPS).doc('_lock');
@@ -33,11 +49,32 @@ function handler(db, requireAdmin) {
       const groupsSnap = await tx.get(db.collection(GROUPS));
       const legacySnap = await tx.get(db.doc(LEGACY));
       const peopleSnap = await tx.get(db.collection(PEOPLE));
-      const groups = groupsSnap.docs.filter(d => d.id !== '_lock').map(d => d.data());
-      if (!groups.some(g => g.number === 1)) groups.push({number:1,name:legacySnap.data()?.name || '',jpeg:legacySnap.data()?.jpeg || '',rev:legacySnap.data()?.rev || 0});
-      groups.sort((a,b) => a.number-b.number);
-      if (action === 'list') return {groups};
+      const {groups,assistants}=registry(groupsSnap.docs.map(d=>d.data()),legacySnap.data());
+      if (action === 'list') return {groups,assistants};
       const now = FieldValue.serverTimestamp(), audit = {updatedAt:now,updatedBy:admin.uid};
+      if (action === 'saveAssistant') {
+        validateResponsible(data.name,data.jpeg);
+        const existing=data.assistantId?assistants.find(a=>a.id===data.assistantId):null;
+        if (data.assistantId&&!existing) reject('El asistente ya no está disponible. Actualiza la página.');
+        if (existing&&data.rev!==existing.rev) reject('El asistente cambió en otra ventana. Actualiza antes de guardar.');
+        if (assistants.some(a=>a.id!==existing?.id&&normalized(a.name)===normalized(data.name))) reject('Ya existe un asistente registrado con ese nombre.');
+        const id=existing?.id||'as_'+db.collection(GROUPS).doc().id;
+        tx.set(db.collection(GROUPS).doc('assistant_'+id),{kind:'assistant',id,name:data.name.trim(),jpeg:data.jpeg,rev:(existing?.rev||0)+1,...audit});
+        tx.set(lock,audit);
+        return {assistantId:id};
+      }
+      if (action === 'assignGroup') {
+        if (!Number.isInteger(data.groupNumber)||data.groupNumber<1||data.groupNumber>9999) reject('El número de grupo debe estar entre 1 y 9999.');
+        const assistant=assistants.find(a=>a.id===data.assistantId);
+        if (!assistant) reject('Selecciona un asistente registrado.');
+        const group=groups.find(g=>g.number===data.groupNumber);
+        if ((group?.rev||0)!==data.rev) reject('El grupo cambió en otra ventana. Actualiza antes de guardar.');
+        // Persist synthetic legacy assistants as stable entities before linking.
+        tx.set(db.collection(GROUPS).doc('assistant_'+assistant.id),{kind:'assistant',...assistant,...audit});
+        tx.set(db.collection(GROUPS).doc(String(data.groupNumber)),{number:data.groupNumber,assistantId:assistant.id,rev:(group?.rev||0)+1,...audit});
+        tx.set(lock,audit);
+        return {number:data.groupNumber};
+      }
       if (action === 'create') {
         const number = Math.max(...groups.map(g => g.number)) + 1;
         if (number > 9999) reject('Se alcanzó el límite de grupos.');
@@ -50,7 +87,11 @@ function handler(db, requireAdmin) {
       if (action === 'saveResponsible') {
         validateResponsible(data.name, data.jpeg);
         if (group.rev !== data.rev) reject('El responsable cambió en otra ventana. Actualiza antes de guardar.');
-        const next = {...group,name:data.name.trim(),jpeg:data.jpeg,rev:group.rev+1,...audit};
+        const assistantId=group.assistantId||'as_'+db.collection(GROUPS).doc().id;
+        const assistant=assistants.find(a=>a.id===assistantId);
+        if (assistants.some(a=>a.id!==assistantId&&normalized(a.name)===normalized(data.name))) reject('Ya existe un asistente registrado con ese nombre.');
+        tx.set(db.collection(GROUPS).doc('assistant_'+assistantId),{kind:'assistant',id:assistantId,name:data.name.trim(),jpeg:data.jpeg,rev:(assistant?.rev||0)+1,...audit});
+        const next = {...group,assistantId,name:data.name.trim(),jpeg:data.jpeg,rev:group.rev+1,...audit};
         tx.set(db.collection(GROUPS).doc(String(group.number)), next);
         tx.set(lock, audit);
         return {rev:next.rev};
@@ -60,6 +101,7 @@ function handler(db, requireAdmin) {
         if (!person || !active(person.data()) || groupOf(person.data()) !== group.number) reject('El inspector ya no pertenece a este grupo.');
         tx.update(person.ref, {active:false,...audit});
       } else {
+        if (data.assistantId!==undefined&&data.assistantId!==group.assistantId) reject('El asistente seleccionado no es responsable de ese grupo. Actualiza la asignación.');
         let assignment = {name:data.name,email:data.email,accountUid:data.accountUid,station:data.station};
         if (typeof assignment.accountUid !== 'string' || assignment.accountUid.length > 128 || assignment.accountUid.includes('/')) reject('La cuenta no es válida.');
         // Resolve linked names on the server so a renamed account cannot evade matching.
@@ -80,4 +122,4 @@ function handler(db, requireAdmin) {
     });
   };
 }
-module.exports = {handler,validateAssignment,validateResponsible,groupOf,normalized};
+module.exports = {handler,validateAssignment,validateResponsible,groupOf,normalized,registry};

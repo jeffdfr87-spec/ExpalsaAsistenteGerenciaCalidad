@@ -67,3 +67,38 @@ test('responsible revision rejects a stale save; unauthorized requests stop befo
   await assert.rejects(invoke({data:{action:'saveResponsible',groupNumber:2,name:'Otro asistente',jpeg:'',rev:0}}), /otra ventana/);
   await assert.rejects(handler(db,async()=>{throw Error('Sin autorización');})({data:{action:'list'}}), /autorización/);
 });
+test('assistants are created independently, then assigned to a chosen group number',async()=>{
+  const db=database({}),invoke=handler(db,async()=>({uid:'admin'}));
+  const created=await invoke({data:{action:'saveAssistant',name:'Asistente Nuevo',jpeg:''}});
+  let list=await invoke({data:{action:'list'}});
+  assert.equal(list.assistants.length,1);assert.equal(list.groups[0].name,'');
+  await invoke({data:{action:'assignGroup',groupNumber:7,assistantId:created.assistantId,rev:0}});
+  list=await invoke({data:{action:'list'}});
+  assert.equal(list.groups.find(g=>g.number===7).name,'Asistente Nuevo');
+  await assert.rejects(invoke({data:{action:'saveAssistant',name:'  asistente nuevo ',jpeg:''}}),/Ya existe/);
+  await assert.rejects(invoke({data:{action:'assignGroup',groupNumber:7,assistantId:created.assistantId,rev:0}}),/otra ventana/);
+});
+test('legacy photograph and name survive registry creation and editing',async()=>{
+  const jpeg='data:image/jpeg;base64,AA==';
+  const db=database({'expalsa_capacitacion_2026_equipo/responsable':{name:'Asistente Anterior',jpeg,rev:3}}),invoke=handler(db,async()=>({uid:'admin'}));
+  let list=await invoke({data:{action:'list'}}),assistant=list.assistants[0];
+  assert.equal(list.groups[0].jpeg,jpeg);assert.equal(assistant.jpeg,jpeg);
+  await invoke({data:{action:'saveAssistant',assistantId:assistant.id,name:'Asistente Actualizado',jpeg,rev:0}});
+  list=await invoke({data:{action:'list'}});
+  assert.equal(list.assistants.length,1);assert.equal(list.groups[0].assistantId,assistant.id);
+  assert.equal(list.groups[0].name,'Asistente Actualizado');assert.equal(list.groups[0].jpeg,jpeg);
+  await assert.rejects(invoke({data:{action:'saveAssistant',assistantId:assistant.id,name:'Cambio obsoleto',jpeg,rev:0}}),/otra ventana/);
+});
+test('inspector assignment rejects a mismatched assistant and preserves a single responsible',async()=>{
+  const db=database({}),invoke=handler(db,async()=>({uid:'admin'}));
+  const first=await invoke({data:{action:'saveAssistant',name:'Asistente Primero',jpeg:''}});
+  const second=await invoke({data:{action:'saveAssistant',name:'Asistente Segundo',jpeg:''}});
+  await invoke({data:{action:'assignGroup',groupNumber:1,assistantId:first.assistantId,rev:0}});
+  const data={action:'add',...candidate,accountUid:'',groupNumber:1,assistantId:second.assistantId};
+  await assert.rejects(invoke({data}),/no es responsable/);
+  await invoke({data:{...data,assistantId:first.assistantId}});
+  await invoke({data:{action:'assignGroup',groupNumber:1,assistantId:second.assistantId,rev:1}});
+  const list=await invoke({data:{action:'list'}});
+  assert.equal(list.groups[0].assistantId,second.assistantId);
+  assert.equal([...db.docs].filter(([k,v])=>k.startsWith('expalsa_capacitacion_2026_participantes/')&&v.active).length,1);
+});

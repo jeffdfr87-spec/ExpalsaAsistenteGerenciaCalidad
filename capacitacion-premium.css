@@ -52,3 +52,10 @@
  .assigned-people td{padding:10px 12px}.assigned-people th{padding:10px 12px}.assigned-people .avatar{width:38px;height:38px}.assigned-people table{min-width:760px;width:100%}.assigned-people td{white-space:normal;overflow-wrap:anywhere}.assigned-people td:nth-child(4),.assigned-people td:nth-child(5){white-space:nowrap}.person-actions{display:flex;gap:6px;flex-wrap:wrap}
  @media(max-width:850px){#responsibleMount .responsible-layout{grid-template-columns:1fr}.group-toolbar{align-items:stretch;flex-direction:column}}
 }
+
+@media screen {
+ .group-assignment-form{display:grid;grid-template-columns:minmax(110px,160px) minmax(200px,1fr) auto;gap:14px;align-items:end;margin-bottom:12px}.group-assignment-form .button{min-height:44px}.group-assignment-form input,.group-assignment-form select{width:100%}
+ .assistant-groups-table{width:100%;min-width:660px}.assistant-groups-table td{padding:10px 12px}.assistant-groups-table td:first-child{width:68px}.assistant-groups-table .avatar{width:44px;height:44px}.assistant-groups-table .selected-group{background:#eff7f3}.assistant-groups-table .person-actions{gap:6px}
+ .team-assignment-panel .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.team-assignment-panel .inspector-picker{grid-column:1/-1}.team-assignment-panel select{width:100%}
+ @media(max-width:750px){.group-assignment-form{grid-template-columns:1fr}.team-assignment-panel .form-grid{grid-template-columns:1fr}.assistant-groups-table{min-width:660px}}
+}
