@@ -7,11 +7,11 @@ Entrada: `analisis-sabor.html`. Usa el proyecto Firebase existente `oceantreasur
 1. El administrador existente crea una sesión, elige fecha e inspectores habilitados (hasta 200 por sesión).
 2. Registra las muestras: lote, talla, color, sabor de referencia, destino, código e importador. El código es único dentro de la sesión, sin distinguir mayúsculas ni espacios iniciales/finales.
 3. Abre la sesión. Desde ese momento la composición de las muestras y los inspectores queda fija.
-4. Cada inspector inicia sesión con su propia cuenta y evalúa cada muestra como conforme o no conforme. Un resultado no conforme exige observaciones.
+4. En la misma página, el administrador pulsa **Comenzar análisis**, selecciona muestra e inspector y registra el resultado conforme o no conforme. Un resultado no conforme exige observaciones. También se conserva la evaluación desde la cuenta individual del inspector.
 5. Las evaluaciones enviadas son definitivas y no se pueden sobrescribir. Cada inspector solo consulta sus resultados; el administrador compara todos y exporta CSV.
 6. El administrador cierra la sesión cuando se completan todas las combinaciones muestra–inspector. Cerrar impide nuevos envíos.
 
-Los resultados comparativos son parciales mientras falten evaluaciones. Una discrepancia significa que hay votos de ambas categorías; el sistema no decide la liberación comercial del lote. Una nueva evaluación del mismo lote requiere otra sesión y conserva la trazabilidad de la anterior.
+El registro central conserva el inspector que analizó y la cuenta del administrador que capturó el resultado (`recordedBy`, `recordedByEmail`, `entryMode: laboratory`). Ambos modos comparten el mismo registro único por muestra e inspector y no pueden sobrescribirse entre sí. Los resultados comparativos son parciales mientras falten evaluaciones. Una discrepancia significa que hay votos de ambas categorías; el sistema no decide la liberación comercial del lote. Una nueva evaluación del mismo lote requiere otra sesión y conserva la trazabilidad de la anterior.
 
 ## Implementación y seguridad
 

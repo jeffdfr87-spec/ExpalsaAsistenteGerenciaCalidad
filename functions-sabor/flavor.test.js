@@ -61,3 +61,21 @@ test('un inspector no puede crear sesiones o agregar muestras',async()=>{
  const db=database(seed());await assert.rejects(handler(db)(request({action:'createSession'})),{code:'permission-denied'});
  await assert.rejects(handler(db)(request({action:'addSample',sample})),{code:'permission-denied'});assert.equal(db.writes.length,0);
 });
+function adminRequest(data={}){return {auth:{uid:'admin',token:{email:'jefferson@expalsaevaluations.com'}},data:{action:'recordEvaluation',sessionId:'s1',sampleId:'m1',inspectorUid:'i1',result:'conforme',observations:'',...data}};}
+function labSeed(){const initial=seed();initial['expalsa_calidad_config/administrador']={uid:'admin',email:'jefferson@expalsaevaluations.com'};initial['expalsa_sabor_sesiones/s1'].inspectors=[{uid:'i1',email:inspector.email,name:'Inspector uno'}];return initial;}
+test('el administrador registra para un inspector asignado y conserva la autoría real',async()=>{
+ const db=database(labSeed()),call=handler(db);await call(adminRequest());
+ const created=db.writes.find(w=>w[0]==='create');assert.equal(created[1],'expalsa_sabor_sesiones/s1/samples/m1/votes/i1');
+ assert.equal(created[2].inspectorUid,'i1');assert.equal(created[2].inspectorEmail,inspector.email);assert.equal(created[2].recordedBy,'admin');assert.equal(created[2].entryMode,'laboratory');
+ assert.equal(db.writes.at(-1)[2].evaluationCount,1);await assert.rejects(call(adminRequest()),{code:'already-exists'});
+});
+test('el registro de laboratorio rechaza inspectores ajenos, suspendidos y sesiones cerradas',async()=>{
+ await assert.rejects(handler(database(labSeed()))(adminRequest({inspectorUid:'i2'})),{code:'permission-denied'});
+ const disabled=labSeed();disabled['expalsa_calidad_accesos/i1'].active=false;
+ await assert.rejects(handler(database(disabled))(adminRequest()),{code:'failed-precondition'});
+ const closed=labSeed();closed['expalsa_sabor_sesiones/s1'].status='closed';
+ await assert.rejects(handler(database(closed))(adminRequest()),{code:'failed-precondition'});
+});
+test('un inspector no puede registrar resultados de otro desde la acción administrativa',async()=>{
+ const db=database(seed());await assert.rejects(handler(db)(request({action:'recordEvaluation',inspectorUid:'i2'})),{code:'permission-denied'});assert.equal(db.writes.length,0);
+});

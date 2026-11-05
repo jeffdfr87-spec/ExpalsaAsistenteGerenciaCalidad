@@ -55,7 +55,7 @@ function handler(db){return async request=>{
   const inspectors=[];for(let i=0;i<data.inspectorUids.length;i+=20)inspectors.push(...await Promise.all(data.inspectorUids.slice(i,i+20).map(uid=>inspector(db,uid))));
   const ref=sessions.doc(),now=Date.now();await ref.create({name,date:analysisDate,inspectorUids:inspectors.map(p=>p.uid),inspectors,status:'draft',sampleCount:0,evaluationCount:0,createdBy:user.uid,createdAtMs:now,updatedAt:FieldValue.serverTimestamp()});return {id:ref.id};
  }
- if(!['detail','addSample','openSession','closeSession','evaluate'].includes(action))fail('invalid-argument','Acción no válida.');
+ if(!['detail','addSample','openSession','closeSession','evaluate','recordEvaluation'].includes(action))fail('invalid-argument','Acción no válida.');
  const sessionRef=sessions.doc(id(data.sessionId));
  if(action==='detail'){
   const session=await sessionRef.get();if(!session.exists)fail('not-found','La sesión no existe.');participant(session.data(),user);
@@ -77,12 +77,18 @@ function handler(db){return async request=>{
   if(action==='openSession'||action==='closeSession'){
    const status=action==='openSession'?'open':'closed';canTransition(session,status);tx.update(sessionRef,{status,[status+'AtMs']:Date.now(),...audit});return {status};
   }
-  if(user.admin||!session.inspectorUids.includes(user.uid))fail('permission-denied','Solo los inspectores asignados pueden evaluar.');
+  const targetUid=action==='recordEvaluation'?id(data.inspectorUid):user.uid;
+  if(action==='recordEvaluation'){
+   requireAdmin(user);
+   if(!session.inspectorUids.includes(targetUid))fail('permission-denied','El inspector no está asignado a esta sesión.');
+   await inspector(db,targetUid);
+  }else if(user.admin||!session.inspectorUids.includes(user.uid))fail('permission-denied','Solo los inspectores asignados pueden evaluar.');
   if(session.status!=='open')fail('failed-precondition','La sesión no está abierta para evaluar.');
-  const result=resultData(data),sampleRef=sessionRef.collection('samples').doc(id(data.sampleId)),vote=sampleRef.collection('votes').doc(user.uid);
+  const result=resultData(data),sampleRef=sessionRef.collection('samples').doc(id(data.sampleId)),vote=sampleRef.collection('votes').doc(targetUid);
   const [sample,previous]=await Promise.all([tx.get(sampleRef),tx.get(vote)]);
-  if(!sample.exists)fail('not-found','La muestra no existe.');if(previous.exists)fail('already-exists','Tu evaluación ya fue registrada. Actualiza la página.');
-  tx.create(vote,{...result,sampleId:sampleRef.id,inspectorUid:user.uid,inspectorEmail:user.email,createdAtMs:Date.now(),createdAt:FieldValue.serverTimestamp()});
+  if(!sample.exists)fail('not-found','La muestra no existe.');if(previous.exists)fail('already-exists','La evaluación de este inspector ya fue registrada. Actualiza la página.');
+  const assigned=session.inspectors?.find(p=>p.uid===targetUid);
+  tx.create(vote,{...result,sampleId:sampleRef.id,inspectorUid:targetUid,inspectorEmail:action==='recordEvaluation'?assigned?.email||'':user.email,recordedBy:user.uid,recordedByEmail:user.email,entryMode:action==='recordEvaluation'?'laboratory':'self',createdAtMs:Date.now(),createdAt:FieldValue.serverTimestamp()});
   tx.update(sessionRef,{evaluationCount:session.evaluationCount+1,...audit});return {saved:true};
  });
 };}
