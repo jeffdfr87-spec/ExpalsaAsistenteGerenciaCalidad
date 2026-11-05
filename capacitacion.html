@@ -68,7 +68,7 @@ import {createPhotoManager} from "./capacitacion-fotos.js?v=20261103-puntos-1";
 import {crearReporteCapacitacion} from "./capacitacion-reporte.js?v=20261103-puntos-1";
 import {createTrainingTimer} from "./capacitacion-cronometro.js?v=20261103-puntos-1";
 import {createTrainingDocuments} from "./capacitacion-documentos.js?v=20261103-puntos-1";
-import {createProgressGraphs} from "./capacitacion-avances-grafico.js?v=20261104-asistentes-2";
+import {createProgressGraphs} from "./capacitacion-avances-grafico.js?v=20261104-selector-grupo-1";
 import {createFinalReport} from "./capacitacion-informe-final.js?v=20261104-asistentes-2";
 import {peopleManagement} from "./capacitacion-personal.js?v=20261104-tabla-3";
 import {createResponsible} from "./capacitacion-responsable.js?v=20261104-asistentes-2";
@@ -130,7 +130,7 @@ async function loadPlanPeople(participants=activePeople()){
 }
 
 const trainingEvaluation=createTrainingEvaluation({context:()=>({fs,db,user:currentUser,days,people:()=>activePeople().filter(p=>p.accountUid).map(p=>({...p,name:officialName(p.accountUid)||p.name,portrait:photoUrl(p.accountUid)}))}),notify:toast});
-const progressGraphs=createProgressGraphs({context:()=>({fs,db,user:currentUser,readOnly:graphViewerActive,readProjection:async()=>(await trainingCall('getTrainingProgressView')).data,days,competencies:COMP,people:activePeople,planPeople:loadPlanPeople,nameFor:p=>officialName(p.accountUid)||p.name,identityFor:p=>state.identities.get(p.accountUid)||{},areaFor:p=>stationName(p),photoFor:p=>photoUrl(p.accountUid)}),notify:toast});
+const progressGraphs=createProgressGraphs({context:()=>({fs,db,user:currentUser,readOnly:graphViewerActive,readProjection:async()=>(await trainingCall('getTrainingProgressView')).data,days,competencies:COMP,people:activePeople,groups:()=>state.groups,groupNumber:state.groupNumber,planPeople:loadPlanPeople,nameFor:p=>officialName(p.accountUid)||p.name,identityFor:p=>state.identities.get(p.accountUid)||{},areaFor:p=>stationName(p),photoFor:p=>photoUrl(p.accountUid)}),notify:toast});
 const finalReport=createFinalReport({context:()=>({fs,db,user:currentUser,groupNumber:state.groupNumber,responsible:currentGroup(),days,competencies:COMP,nameFor:p=>officialName(p.accountUid)||p.name,identityFor:p=>state.identities.get(p.accountUid)||{},areaFor:p=>stationName(p),photoFor:p=>photoUrl(p.accountUid)}),notify:toast});
 const responsible=createResponsible({context:()=>({user:currentUser,assistants:()=>state.assistants,saveAssistant:async data=>{await trainingCall('manageTrainingGroups',{action:'saveAssistant',...data});await refreshGroups();},onSaved:()=>setTimeout(()=>render(),0)}),notify:toast});
 const compliance=createCompliance({context:()=>({fs,db,user:currentUser,people:activePeople().map(p=>({...p,name:officialName(p.accountUid)||p.name}))}),notify:toast});
@@ -348,7 +348,7 @@ async function flushInspectorAnswers(){
   const batch=inspectorPendingAnswers;inspectorPendingAnswers={};const attempt=window.inspectorTrainingAttempt;
   if(!attempt||attempt.status!=='active')return;
   const pendingSave=inspectorAnswerQueue.catch(()=>{}).then(()=>trainingCall('saveTrainingAnswers',{attemptId:attempt.id,answers:batch}));inspectorAnswerQueue=pendingSave;
-  
+
   try{await inspectorAnswerQueue;const answers=JSON.parse(attempt.answers||'{}');Object.assign(answers,batch);attempt.answers=JSON.stringify(answers);}
   catch(e){if(window.inspectorTrainingAttempt?.id===attempt.id)inspectorPendingAnswers={...batch,...inspectorPendingAnswers};throw e;}
  }
