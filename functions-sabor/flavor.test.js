@@ -1,6 +1,8 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {FieldValue}=require('firebase-admin/firestore');
+const {imageData}=require('./photos');
+const JPEG=require('./photo-fixture.test');
 const {handler,sampleData,resultData,date,sampleKey,participant,canTransition,identity}=require('./flavor');
 const sample={lote:'L1',talla:'31/35',color:'A3',sabor:'Característico',destino:'España',codigo:'MP1',importador:'Empresa'};
 const inspector={uid:'i1',email:'i1@example.test',admin:false};
@@ -147,4 +149,43 @@ test('dos altas simultáneas del mismo inspector no duplican el contador',async(
  const db=database(initial),call=handler(db);
  const results=await Promise.all([call(adminRequest({action:'addInspectors',inspectorUids:['i2']})),call(adminRequest({action:'addInspectors',inspectorUids:['i2']}))]);
  assert.equal(results.reduce((sum,r)=>sum+r.added,0),1);assert.equal(db.records.get('expalsa_sabor_sesiones/s1').inspectorCount,2);
+});
+test('Fabio y Karina operan todo el laboratorio excepto eliminar sesiones',async()=>{
+ for(const name of ['fabio','karina']){
+  const initial=labSeed(),uid=name,email=name+'@expalsaevaluations.com';initial['expalsa_calidad_accesos/'+uid]={active:true,email};
+  const db=database(initial),call=handler(db),asManager=data=>({auth:{uid,token:{email}},data:{sessionId:'s1',...data}});
+  const bootstrap=await call(asManager({action:'bootstrap'}));assert.equal(bootstrap.manager,true);assert.equal(bootstrap.canDelete,false);
+  assert.equal((await call(asManager({action:'listSessions'}))).sessions.length,1);
+  await call(asManager({action:'recordEvaluation',sampleId:'m1',inspectorUid:'i1',result:'conforme',observations:'Normal'}));
+  await assert.rejects(call(asManager({action:'deleteSession'})),{code:'permission-denied'});assert.notEqual(db.records.get('expalsa_sabor_sesiones/s1').deleted,true);
+  await call(adminRequest({action:'deleteSession'}));await call(asManager({action:'restoreSession'}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').deleted,false);
+ }
+});
+test('la foto de perfil queda asociada a la evaluación al guardar',async()=>{
+ const initial=labSeed();initial['expalsa_calidad_fotos_perfil/i1']={jpeg:JPEG.slice(23)};
+ const db=database(initial);await handler(db)(adminRequest());
+ const portrait=db.records.get('expalsa_sabor_sesiones/s1/samples/m1/votes/i1/photos/profile');assert.equal(portrait.kind,'profile');assert.equal(portrait.dataUrl,JPEG);
+});
+test('se guardan varias fotos de muestra y evidencia sin duplicarlas al reintentar',async()=>{
+ const db=database(labSeed()),call=handler(db);await call(adminRequest());
+ for(const photoId of ['sample1','sample2'])await call(adminRequest({action:'uploadPhoto',kind:'sample',photo:{id:photoId,dataUrl:JPEG,origin:'gallery'}}));
+ const data={action:'uploadPhoto',kind:'evidence',photo:{id:'capture1',dataUrl:JPEG,origin:'camera',capturedAtMs:Date.now()}};
+ await call(adminRequest(data));await call(adminRequest(data));
+ assert.equal((await db.collection('expalsa_sabor_sesiones/s1/samples/m1/photos').get()).size,2);
+ assert.equal((await db.collection('expalsa_sabor_sesiones/s1/samples/m1/votes/i1/photos').get()).size,1);
+ const saved=db.records.get('expalsa_sabor_sesiones/s1/samples/m1/votes/i1/photos/capture1');assert.equal(saved.uploadedBy,'admin');assert.equal(saved.origin,'camera');
+});
+test('las evidencias exigen cámara y evaluación previa; las fotos rechazan contenido inválido',async()=>{
+ const call=handler(database(labSeed()));
+ await assert.rejects(call(adminRequest({action:'uploadPhoto',kind:'evidence',photo:{id:'c1',dataUrl:JPEG,origin:'gallery'}})),{code:'invalid-argument'});
+ await assert.rejects(call(adminRequest({action:'uploadPhoto',kind:'evidence',photo:{id:'c1',dataUrl:JPEG,origin:'camera'}})),{code:'failed-precondition'});
+ assert.equal(imageData(JPEG).width,240);assert.throws(()=>imageData('data:image/jpeg;base64,AAAA'),{code:'invalid-argument'});
+});
+test('no se pueden cargar fotos en sesiones eliminadas ni consultar evidencia de otro inspector',async()=>{
+ const initial=labSeed(),db=database(initial),call=handler(db);await call(adminRequest({action:'deleteSession'}));
+ await assert.rejects(call(adminRequest({action:'uploadPhoto',kind:'sample',photo:{id:'s1',dataUrl:JPEG,origin:'gallery'}})),{code:'not-found'});
+ const ownCall=handler(database(labSeed()));await assert.rejects(ownCall(request({action:'inspectorPhoto',inspectorUid:'i2'})),{code:'permission-denied'});
+});
+test('la versión pública permite verificar que la función publicada está actualizada',async()=>{
+ const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-photos-1');
 });
