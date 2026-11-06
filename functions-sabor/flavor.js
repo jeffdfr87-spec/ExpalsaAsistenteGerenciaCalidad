@@ -4,7 +4,7 @@ const {FieldPath,FieldValue}=require('firebase-admin/firestore');
 const {createHash}=require('node:crypto');
 const {photoAction,imageData}=require('./photos');
 const {normalizarPerfil,perfilMateriaPrima,coincidenPerfiles,fechaRecepcion}=require('./sensory');
-const SERVICE_VERSION='20261105-admin-comparison-1';
+const SERVICE_VERSION='20261105-delete-admin-1';
 const MANAGERS=new Set(['fabio@expalsaevaluations.com','karina@expalsaevaluations.com']);
 const canManage=user=>user.admin===true||user.manager===true;
 const COLLECTION='expalsa_sabor_sesiones';
@@ -68,7 +68,7 @@ function handler(db){return async request=>{
  const data=request.data||{},action=data.action;
  if(action==='serviceInfo')return {version:SERVICE_VERSION};
  const user=await identity(db,request);
- if(action==='bootstrap')return {admin:user.admin,manager:canManage(user),canDelete:user.admin===true,canViewComparisons:user.admin===true,version:SERVICE_VERSION};
+ if(action==='bootstrap')return {admin:user.admin,manager:canManage(user),canDelete:user.admin===true,canViewComparisons:true,version:SERVICE_VERSION};
  if(action==='inspectors'){
   requireManager(user);const snap=await db.collection('expalsa_calidad_accesos').where('active','==',true).get();
   const people=snap.docs.filter(d=>d.data().deleted!==true&&d.data().email!==ADMIN_EMAIL);
@@ -100,8 +100,8 @@ function handler(db){return async request=>{
  }
  if(!['authorizeComparisonReport','updateSample','removeInspector','deletePhoto','replacePhoto','detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
  const sessionRef=sessions.doc(id(data.sessionId));
- if(action==='authorizeComparisonReport'){requireAdmin(user);const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());return {allowed:true};}
- if(action==='updateSample')requireAdmin(user);
+ if(action==='authorizeComparisonReport'){requireManager(user);const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());return {allowed:true};}
+ if(action==='updateSample')requireManager(user);
  if(['inspectorPhoto','uploadPhoto','listPhotos','deletePhoto','replacePhoto'].includes(action)){const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());await checkParticipant(sessionRef,snap.data(),user);return photoAction({db,user,sessionRef,session:snap.data(),data,id,canManage,assignedInspector});}
  if(['detail','listMembers','listVotes'].includes(action)){
   const session=await sessionRef.get();if(!session.exists)fail('not-found','La sesión no existe.');live(session.data());await checkParticipant(sessionRef,session.data(),user);

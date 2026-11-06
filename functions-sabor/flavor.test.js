@@ -184,7 +184,7 @@ test('no se pueden cargar fotos en sesiones eliminadas ni consultar evidencia de
  const ownCall=handler(database(labSeed()));await assert.rejects(ownCall(request({action:'inspectorPhoto',inspectorUid:'i2'})),{code:'permission-denied'});
 });
 test('la versión pública permite verificar que la función publicada está actualizada',async()=>{
- const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-admin-comparison-1');
+ const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-delete-admin-1');
 });
 
 test('eliminar inspector borra resultados y fotos en todas las páginas y conserva otros inspectores',async()=>{
@@ -201,13 +201,17 @@ test('fotos reemplazadas y eliminadas desaparecen de consultas; managers no pued
  await call(adminRequest({action:'deletePhoto',kind:'sample',photoId:'b'}));assert.equal((await call(adminRequest({action:'listPhotos',kind:'sample'}))).photos.length,0);
 });
 
-test('comparativos y correcciones de recepción exclusivos del administrador; managers conservan operaciones anteriores',async()=>{
- const initial=labSeed();initial['expalsa_calidad_accesos/fabio']={active:true,email:'fabio@expalsaevaluations.com'};
- const db=database(initial),call=handler(db),manager=data=>({auth:{uid:'fabio',token:{email:'fabio@expalsaevaluations.com'}},data:{sessionId:'s1',...data}});
- assert.equal((await call(manager({action:'bootstrap'}))).canViewComparisons,false);
- assert.equal((await call(adminRequest({action:'bootstrap'}))).canViewComparisons,true);
- for(const action of ['authorizeComparisonReport','updateSample'])await assert.rejects(call(manager({action,sampleId:'m1',receivedDate:'2026-11-05'})),{code:'permission-denied'});
- assert.equal((await call(adminRequest({action:'authorizeComparisonReport'}))).allowed,true);
- await call(adminRequest({action:'updateSample',receivedDate:'2026-11-05'}));
+test('Fabio y Karina conservan comparativos y correcciones; solo el administrador puede eliminar',async()=>{
+ for(const uid of ['fabio','karina']){
+ const initial=labSeed();initial['expalsa_calidad_accesos/'+uid]={active:true,email:uid+'@expalsaevaluations.com'};
+ const db=database(initial),call=handler(db),manager=data=>({auth:{uid,token:{email:uid+'@expalsaevaluations.com'}},data:{sessionId:'s1',...data}});
+ const bootstrap=await call(manager({action:'bootstrap'}));assert.equal(bootstrap.canViewComparisons,true);assert.equal(bootstrap.canDelete,false);
+ assert.equal((await call(manager({action:'authorizeComparisonReport'}))).allowed,true);
+ await call(manager({action:'updateSample',sampleId:'m1',receivedDate:'2026-11-05'}));
+ for(const action of ['deleteSession','removeInspector','deletePhoto'])await assert.rejects(call(manager({action,sampleId:'m1',inspectorUid:'i1',kind:'sample',photoId:'some-photo'})),{code:'permission-denied'});
+ for(const id of ['old-photo','new-photo'])await call(manager({action:'uploadPhoto',sampleId:'m1',kind:'sample',photo:{id,dataUrl:JPEG,origin:'gallery'}}));
+ assert.equal((await call(manager({action:'replacePhoto',sampleId:'m1',kind:'sample',oldPhotoId:'old-photo',newPhotoId:'new-photo'}))).previousRetained,true);
+ assert.equal((await call(manager({action:'listPhotos',sampleId:'m1',kind:'sample'}))).photos.length,2);
  await call(manager({action:'recordEvaluation',sampleId:'m1',inspectorUid:'i1',counterFlavors:normal,observations:'Normal'}));
+ }
 });
