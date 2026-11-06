@@ -125,6 +125,7 @@ export function createFlavorMedia({api,getState,notify}){
   async saveNewSample(c){this.assertReady();const k=key({...c,inspectorUid:''});pendingSamples.set(k,[...(pendingSamples.get(k)||[]),...sampleDraft]);sampleDraft=[];await saveSamplePhotos(c);},
   uploadEvidence,
   async forReport({session,sample,inspectors}){
+   if(!getState().canViewComparisons)throw Error('Reporte exclusivo del administrador.');
    if(session.memberRemovalPending)throw Error('Termina la eliminación de inspectores antes de generar el PDF.');
    const c={sessionId:session.id,sampleId:sample.id};
    if((pendingSamples.get(key({...c,inspectorUid:''}))||[]).length||inspectors.some(p=>(pendingEvidence.get(key({...c,inspectorUid:p.uid}))||[]).length))throw Error('Guarda las fotografías pendientes antes de generar el PDF.');
