@@ -1,3 +1,4 @@
+import {savePhotoDraft,loadPhotoDraft} from './analisis-sabor-progreso.js?v=20261105-workflow-2';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=c=>`${c.sessionId}/${c.sampleId}/${c.inspectorUid||''}`;
 const jpeg=value=>typeof value==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value);
@@ -19,8 +20,9 @@ export async function compressPhoto(file,origin='gallery'){
  }finally{URL.revokeObjectURL(url);}
 }
 export function createFlavorMedia({api,getState,notify}){
- const pendingEvidence=new Map(),pendingSamples=new Map(),sampleCache=new Map(),evidenceCache=new Map();
- let sampleDraft=[],processing=false,cameraStream=null,cameraContext=null,hydrateVersion=0;
+ const pendingEvidence=new Map(),pendingSamples=new Map(),sampleCache=new Map(),evidenceCache=new Map(),sampleDrafts=new Map();
+ let sampleDraft=[],draftSessionId='',processing=false,cameraStream=null,cameraContext=null,hydrateVersion=0;
+ function persist(){const uid=getState().user?.uid;if(!uid)return;if(draftSessionId)sampleDrafts.set(draftSessionId,sampleDraft);void savePhotoDraft(uid,{drafts:[...sampleDrafts],pendingEvidence:[...pendingEvidence],pendingSamples:[...pendingSamples]}).catch(()=>notify('No se pudo conservar el borrador de fotos en este equipo.'));}
  const camera=document.createElement('dialog');camera.className='flavor-camera';camera.setAttribute('aria-label','Capturar evidencia del análisis');
  camera.innerHTML='<div class="dialog-head"><h2>Evidencia del análisis</h2><button type="button" data-media-action="close-camera" aria-label="Cerrar cámara">×</button></div><div class="dialog-body"><video id="flavor-camera-video" autoplay playsinline muted></video><p id="flavor-camera-status" class="hint">Preparando cámara trasera…</p></div><div class="dialog-foot"><button class="button" type="button" data-media-action="close-camera">Cancelar</button><button class="button primary" type="button" data-media-action="capture" disabled>Tomar foto</button></div>';
  document.body.appendChild(camera);
@@ -30,6 +32,7 @@ export function createFlavorMedia({api,getState,notify}){
  const photosHtml=(photos,remove='')=>photos.map((p,i)=>jpeg(p.dataUrl)?`<figure class="flavor-photo"><img src="${esc(p.dataUrl)}" alt="Fotografía ${i+1}" loading="lazy"><figcaption>Fotografía ${i+1}${remove.startsWith('saved-')?`<div class="actions">${remove==='saved-sample'?`<button class="quiet" type="button" data-media-action="replace-gallery" data-id="${esc(p.id)}">Galería</button><button class="quiet" type="button" data-media-action="retake-sample" data-id="${esc(p.id)}">Volver a tomar</button>`:''}${getState().canDelete?`<button class="quiet danger" type="button" data-media-action="delete-photo" data-kind="${remove==='saved-sample'?'sample':'evidence'}" data-id="${esc(p.id)}">Eliminar</button>`:''}</div>`:remove?` <button type="button" class="quiet" data-media-action="${remove}" data-index="${i}">Quitar</button>${remove==='remove-sample-draft'?` <button type="button" class="quiet" data-media-action="replace-draft" data-index="${i}">Galería</button><button type="button" class="quiet" data-media-action="retake-draft" data-index="${i}">Volver a tomar</button>`:''}`:''}</figcaption></figure>`:'').join('');
  async function allPhotos(c,kind){let cursor=null,photos=[];do{const page=await api('listPhotos',{...c,kind,cursor});photos.push(...page.photos);cursor=page.cursor;}while(cursor);return photos;}
  function showPending(){
+  persist();
   const c=context(),e=document.querySelector('#analysis-evidence'),p=document.querySelector('#sample-photo-pending');
   const pending=pendingEvidence.get(key(c))||[],saved=evidenceCache.get(key(c))||[];
   if(e)e.innerHTML=`<div class="flavor-photo-grid">${photosHtml(saved,'saved-evidence')}${photosHtml(pending,'remove-evidence')}</div>${pending.length?`<p class="hint">${pending.length} fotografías pendientes de guardar.</p>`:''}`;
@@ -84,8 +87,8 @@ export function createFlavorMedia({api,getState,notify}){
   for(const photo of [...pending]){await api('uploadPhoto',{...c,kind,photo});const current=map.get(k)||[];map.set(k,current.filter(p=>p.id!==photo.id));}
  }
  async function uploadEvidence(c){await upload(c,'evidence',pendingEvidence);evidenceCache.delete(key(c));showPending();}
- async function saveSamplePhotos(c){await upload(c,'sample',pendingSamples);sampleCache.delete(key({...c,inspectorUid:''}));}
- function showSampleDraft(){const area=document.querySelector('#new-sample-photo-preview');if(area)area.innerHTML=photosHtml(sampleDraft,'remove-sample-draft');}
+ async function saveSamplePhotos(c){await upload(c,'sample',pendingSamples);sampleCache.delete(key({...c,inspectorUid:''}));persist();}
+ function showSampleDraft(){persist();const area=document.querySelector('#new-sample-photo-preview');if(area)area.innerHTML=photosHtml(sampleDraft,'remove-sample-draft');}
  document.addEventListener('change',async event=>{
   if(event.target.id!=='new-sample-photos')return;if(processing){notify('Espera a que terminen de prepararse las fotografías.');return;}
   processing=true;try{for(const file of event.target.files)sampleDraft.push(await compressPhoto(file));}catch(error){notify(error.message);}finally{showSampleDraft();event.target.value='';processing=false;}
@@ -118,11 +121,13 @@ export function createFlavorMedia({api,getState,notify}){
   }catch(error){showPending();notify(error.message);}finally{processing=false;button.disabled=false;}
  });
  return {
-  hydrate,closeCamera,
-  clear(){hydrateVersion++;closeCamera();sampleDraft=[];pendingSamples.clear();pendingEvidence.clear();sampleCache.clear();evidenceCache.clear();},
-  resetSampleDraft(){sampleDraft=[];},
+  hydrate,closeCamera,showSampleDraft,
+  async restore(){const uid=getState().user?.uid;let value;try{value=await loadPhotoDraft(uid);}catch{return;}if(!value||getState().user?.uid!==uid)return;for(const [k,v] of value.drafts||[])sampleDrafts.set(k,v);for(const [k,v] of value.pendingEvidence||[])pendingEvidence.set(k,v);for(const [k,v] of value.pendingSamples||[])pendingSamples.set(k,v);},
+  async flushSample(c){await saveSamplePhotos(c);for(const [k,list] of pendingEvidence){if(k.startsWith(c.sessionId+'/'+c.sampleId+'/')&&list.length)await uploadEvidence({...c,inspectorUid:k.split('/')[2]});}},
+  clear(){hydrateVersion++;closeCamera();sampleDraft=[];draftSessionId='';sampleDrafts.clear();pendingSamples.clear();pendingEvidence.clear();sampleCache.clear();evidenceCache.clear();},
+  resetSampleDraft(sessionId=''){if(draftSessionId)sampleDrafts.set(draftSessionId,sampleDraft);draftSessionId=sessionId;sampleDraft=sampleDrafts.get(sessionId)||[];},
   assertReady(){if(processing)throw Error('Espera a que terminen de prepararse las fotografías.');},
-  async saveNewSample(c){this.assertReady();const k=key({...c,inspectorUid:''});pendingSamples.set(k,[...(pendingSamples.get(k)||[]),...sampleDraft]);sampleDraft=[];await saveSamplePhotos(c);},
+  async saveNewSample(c){this.assertReady();const k=key({...c,inspectorUid:''});pendingSamples.set(k,[...(pendingSamples.get(k)||[]),...sampleDraft]);sampleDraft=[];sampleDrafts.delete(c.sessionId);draftSessionId='';persist();await saveSamplePhotos(c);},
   uploadEvidence,
   async forReport({session,sample,inspectors}){
    if(!getState().canReadResults)throw Error('No tienes acceso a este reporte.');

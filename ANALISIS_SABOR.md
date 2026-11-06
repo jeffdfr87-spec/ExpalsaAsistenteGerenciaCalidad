@@ -48,3 +48,17 @@ Los votos antiguos se interpretan únicamente cuando las observaciones contienen
 ## Fabio y Karina: consulta y PDF
 
 Las cuentas activas de Fabio y Karina tienen un rol de solo lectura: sesiones, muestras, resultados, perfiles, evidencias y descarga del PDF comparativo. No pueden crear, modificar, evaluar, registrar resultados de terceros, cargar o reemplazar fotografías, administrar inspectores, abrir, cerrar, restaurar ni eliminar sesiones. El servidor usa una lista explícita de operaciones de lectura; rechaza cualquier otra acción antes de procesarla. La interfaz muestra consulta y PDF, sin formularios, CSV ni botones de gestión. El administrador conserva todas sus funciones. Los demás inspectores mantienen su flujo individual previo. No se modifican datos de analistas al aplicar estos permisos.
+
+## Sesiones por muestra y recuperación del trabajo
+
+El administrador crea la sesión y elige inspectores, agrega las muestras y selecciona una desde la tabla. El panel Analizar muestra permanece oculto hasta pulsar Comenzar análisis. Una sesión tiene una única muestra activa; el servidor impide iniciar otra mientras la actual no haya terminado.
+
+Guardar un resultado avanza al siguiente inspector pendiente. Cuando todos los inspectores asignados tienen su evaluación, se habilita Análisis de la muestra terminado. La confirmación se guarda en la muestra, colorea toda su fila y comienza la siguiente pendiente en orden de creación. Terminar sesión solo se habilita cuando todas las muestras están explícitamente terminadas y los contadores de evaluaciones coinciden. La función verifica estas condiciones nuevamente al cerrar. El proceso es idempotente: reintentar una finalización no incrementa dos veces el contador.
+
+Los resultados históricos se conservan. En sesiones abiertas anteriores se pueden finalizar las muestras con sus evaluaciones ya registradas, sin volver a evaluarlas. Las sesiones antiguas ya cerradas se presentan como terminadas. Agregar o quitar inspectores invalida las finalizaciones mediante una revisión de membresía sin borrar votos de los inspectores que permanecen. Una corrección de sabor de recepción invalida la finalización de esa muestra; cambiar solo su fecha no la invalida.
+
+Los formularios de sesión, muestra, recepción y evaluación, y la posición actual, se autoguardan localmente al escribir y en Firebase con una pausa de 600 ms. Los borradores de gestión están bajo `expalsa_sabor_progreso/{adminUid}/drafts/{hash}` y solo el administrador puede leerlos o escribirlos por la función. La interfaz distingue Guardado automáticamente de Guardado en este equipo cuando no hay conexión. Al volver a iniciar sesión se recuperan la sesión, muestra, inspector y formulario pendientes. Las solicitudes de creación llevan un identificador estable para evitar duplicados al reintentar.
+
+Las fotografías todavía pendientes de enviar y las del formulario de una muestra sin guardar se conservan en IndexedDB, separadas por cuenta y sesión. Su recuperación requiere el mismo navegador y equipo mientras no se hayan cargado en Firebase. Las fotos ya enviadas están disponibles en Firebase. Antes de finalizar una muestra se reintentan sus cargas pendientes y se impide finalizar si fallan. No se guardan contraseñas en los borradores.
+
+El administrador carga todas las páginas de muestras y votos de la sesión para ordenar el avance; los lectores mantienen la consulta paginada y su permiso de PDF. Las nuevas acciones de inicio, finalización y autoguardado están denegadas a Fabio y Karina por su rol de consulta.

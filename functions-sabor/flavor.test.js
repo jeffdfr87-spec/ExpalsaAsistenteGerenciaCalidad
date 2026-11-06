@@ -24,7 +24,7 @@ test('solo permite abrir borradores con muestras y cerrar sesiones completas',()
  const s={status:'draft',sampleCount:2,evaluationCount:0,inspectorUids:['i1','i2']};
  canTransition(s,'open');assert.throws(()=>canTransition({...s,sampleCount:0},'open'));
  assert.throws(()=>canTransition({...s,status:'open',evaluationCount:3},'closed'));
- canTransition({...s,status:'open',evaluationCount:4},'closed');
+ canTransition({...s,status:'open',evaluationCount:4,finishedSampleCount:2},'closed');
  assert.throws(()=>canTransition({...s,status:'closed'},'open'));
 });
 test('rechaza inspectores ajenos y cuentas suspendidas',async()=>{
@@ -38,7 +38,7 @@ function database(seed){
  const records=new Map(Object.entries(seed)),writes=[];
  function ref(path){return {path,id:path.split('/').at(-1),collection:n=>collection(path+'/'+n),get:async()=>snap(path),update:async data=>records.set(path,{...records.get(path),...data})};}
  function collection(path,filters=[],after=null,maximum=Infinity){return {
-  doc:k=>ref(path+'/'+(k||'new-id')),
+  doc:function(...args){if(args.length&&args[0]===undefined)throw Error('Firestore doc(undefined) is invalid');return ref(path+'/'+(args[0]||'new-id'));},
   where:(key,op,value)=>collection(path,[...filters,[key,op,value]],after,maximum),
   orderBy:()=>collection(path,filters,after,maximum),startAfter:value=>collection(path,filters,value,maximum),limit:value=>collection(path,filters,after,value),
   get:async()=>{const docs=[...records.keys()].filter(key=>key.startsWith(path+'/')&&key.slice(path.length+1).indexOf('/')<0).sort().map(snap).filter(d=>(!after||d.id>after)&&filters.every(([key,op,value])=>op==='array-contains'?d.data()[key]?.includes(value):d.data()[key]===value)).slice(0,maximum);return {docs,size:docs.length};}
@@ -49,14 +49,14 @@ function database(seed){
   const result=queue.then(async()=>{
    let writing=false;const pending=[];
    const stage=type=>(r,d)=>{writing=true;if(type==='create'&&records.has(r.path))throw Error('duplicate');pending.push([type,r.path,d]);};
-   const tx={get:async r=>{assert.equal(writing,false,'All reads precede writes');return snap(r.path);},create:stage('create'),update:stage('update'),set:stage('set'),delete:stage('delete')};
+   const tx={get:async r=>{assert.equal(writing,false,'All reads precede writes');return r.path?snap(r.path):r.get();},create:stage('create'),update:stage('update'),set:stage('set'),delete:stage('delete')};
    const value=await fn(tx);
    for(const [type,path,data] of pending){if(type==='delete'){records.delete(path);continue;}const next=type==='update'?{...records.get(path),...data}:{...data};for(const [key,v] of Object.entries(next))if(v?.isEqual?.(FieldValue.delete()))delete next[key];records.set(path,next);writes.push([type,path,data]);}
    return value;
   });queue=result.catch(()=>{});return result;
  }};
 }
-function seed(){return {'expalsa_calidad_accesos/i1':{active:true,email:inspector.email},'expalsa_sabor_sesiones/s1':{status:'open',sampleCount:1,evaluationCount:0,inspectorUids:['i1']},'expalsa_sabor_sesiones/s1/samples/m1':sample};}
+function seed(){return {'expalsa_calidad_accesos/i1':{active:true,email:inspector.email},'expalsa_sabor_sesiones/s1':{status:'open',activeSampleId:'m1',sampleCount:1,evaluationCount:0,inspectorUids:['i1']},'expalsa_sabor_sesiones/s1/samples/m1':sample};}
 const request=data=>({auth:{uid:'i1',token:{email:inspector.email}},data:{action:'evaluate',sessionId:'s1',sampleId:'m1',result:'conforme',counterFlavors:normal,observations:'',...data}});
 test('la evaluación usa la cuenta autenticada e impide un segundo envío',async()=>{
  const db=database(seed()),call=handler(db);await call(request({inspectorUid:'i2'}));
@@ -114,7 +114,7 @@ test('agregar inspectores conserva los resultados anteriores y reabre una sesió
 });
 test('dos inspectores pueden analizar la misma muestra con resultados independientes',async()=>{
  const initial=labSeed();initial['expalsa_calidad_accesos/i2']={active:true,email:'i2@example.test'};
- const db=database(initial),call=handler(db);await call(adminRequest({action:'addInspectors',inspectorUids:['i2']}));
+ const db=database(initial),call=handler(db);await call(adminRequest({action:'addInspectors',inspectorUids:['i2']}));await call(adminRequest({action:'startSample'}));
  await call(adminRequest());await call(adminRequest({inspectorUid:'i2',counterFlavors:[{sabor:'Tierra Leve',porcentaje:100}],observations:'Nota terrosa'}));
  assert.equal(db.records.get('expalsa_sabor_sesiones/s1/samples/m1/votes/i1').result,'conforme');
  assert.equal(db.records.get('expalsa_sabor_sesiones/s1/samples/m1/votes/i2').result,'discrepancia');
@@ -136,7 +136,7 @@ test('un inspector no puede agregar participantes, eliminar, restaurar ni consul
 });
 test('la asignación nueva permite al inspector encontrar la sesión y leer solo su evaluación',async()=>{
  const initial=labSeed();initial['expalsa_calidad_accesos/i2']={active:true,email:'i2@example.test'};
- const db=database(initial),call=handler(db);await call(adminRequest({action:'addInspectors',inspectorUids:['i2']}));await call(adminRequest());
+ const db=database(initial),call=handler(db);await call(adminRequest({action:'addInspectors',inspectorUids:['i2']}));await call(adminRequest({action:'startSample'}));await call(adminRequest());
  const asSecond=data=>({auth:{uid:'i2',token:{email:'i2@example.test'}},data});
  const list=await call(asSecond({action:'listSessions'}));assert.equal(list.sessions.length,1);assert.equal(list.sessions[0].inspectorCount,2);
  const detail=await call(asSecond({action:'detail',sessionId:'s1'}));assert.equal(detail.evaluations.length,0);assert.equal(detail.session.inspectors.length,1);assert.equal(detail.session.inspectors[0].uid,'i2');
@@ -173,7 +173,7 @@ test('no se pueden cargar fotos en sesiones eliminadas ni consultar evidencia de
  const ownCall=handler(database(labSeed()));await assert.rejects(ownCall(request({action:'inspectorPhoto',inspectorUid:'i2'})),{code:'permission-denied'});
 });
 test('la versión pública permite verificar que la función publicada está actualizada',async()=>{
- const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-readonly-viewers-1');
+ const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-workflow-2');
 });
 
 test('eliminar inspector borra resultados y fotos en todas las páginas y conserva otros inspectores',async()=>{
@@ -202,7 +202,47 @@ test('Fabio y Karina solo consultan resultados y PDF; todas las escrituras se re
   assert.equal((await call(reader({action:'listVotes'}))).evaluations.length,1);
   assert.equal((await call(reader({action:'authorizeComparisonReport'}))).allowed,true);
   await call(reader({action:'listPhotos',kind:'sample'}));await call(reader({action:'listPhotos',kind:'evidence'}));await call(reader({action:'inspectorPhoto'}));
-  for(const action of ['createSession','inspectors','addInspectors','addSample','updateSample','openSession','closeSession','evaluate','recordEvaluation','uploadPhoto','replacePhoto','deletePhoto','deleteSession','restoreSession','removeInspector'])await assert.rejects(call(reader({action,kind:'sample',photoId:'photo'})),{code:'permission-denied'},action);
+  for(const action of ['createSession','inspectors','addInspectors','addSample','updateSample','openSession','closeSession','evaluate','recordEvaluation','uploadPhoto','replacePhoto','deletePhoto','deleteSession','restoreSession','removeInspector','startSample','finishSample','saveProgress','loadProgress'])await assert.rejects(call(reader({action,kind:'sample',photoId:'photo'})),{code:'permission-denied'},action);
   assert.equal(db.writes.length,writesBefore);
  }
+});
+
+test('flujo secuencial: no finalizar incompleta ni cambiar de muestra; finalizar todas habilita cerrar',async()=>{
+ const initial=labSeed();initial['expalsa_sabor_sesiones/s1'].sampleCount=2;initial['expalsa_sabor_sesiones/s1'].activeSampleId='';initial['expalsa_sabor_sesiones/s1/samples/m2']=sample;
+ const db=database(initial),call=handler(db);
+ await assert.rejects(call(adminRequest()),{code:'failed-precondition'});
+ await call(adminRequest({action:'startSample'}));
+ await assert.rejects(call(adminRequest({action:'finishSample'})),{code:'failed-precondition'});
+ await assert.rejects(call(adminRequest({action:'startSample',sampleId:'m2'})),{code:'failed-precondition'});
+ await call(adminRequest());await call(adminRequest({action:'finishSample'}));await call(adminRequest({action:'finishSample'}));
+ assert.equal(db.records.get('expalsa_sabor_sesiones/s1').finishedSampleCount,1);
+ await assert.rejects(call(adminRequest({action:'closeSession'})),{code:'failed-precondition'});
+ await call(adminRequest({action:'startSample',sampleId:'m2'}));await call(adminRequest({sampleId:'m2'}));await call(adminRequest({action:'finishSample',sampleId:'m2'}));
+ await call(adminRequest({action:'closeSession'}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').status,'closed');
+ assert.equal(db.records.get('expalsa_sabor_sesiones/s1/samples/m1/votes/i1').observations,'');
+});
+test('nuevos inspectores invalidan la finalización sin borrar resultados; fecha sola no la invalida',async()=>{
+ const initial=labSeed();initial['expalsa_calidad_accesos/i2']={active:true,email:'i2@example.test'};
+ const db=database(initial),call=handler(db);await call(adminRequest());await call(adminRequest({action:'finishSample'}));
+ await call(adminRequest({action:'updateSample',receivedDate:'2026-11-05'}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').finishedSampleCount,1);
+ await call(adminRequest({action:'addInspectors',inspectorUids:['i2']}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').finishedSampleCount,0);
+ assert.ok(db.records.get('expalsa_sabor_sesiones/s1/samples/m1/votes/i1'));
+ await call(adminRequest({action:'startSample'}));await assert.rejects(call(adminRequest({action:'finishSample'})),{code:'failed-precondition'});
+});
+test('autoguardado conserva borradores y rechaza sobrescrituras anteriores y acceso de lectores',async()=>{
+ const db=database(labSeed()),call=handler(db);const draft={updatedAtMs:100,values:{name:'Sesión pendiente'},flavors:[{sabor:'Tierra Medio',porcentaje:'30'}]};
+ await call(adminRequest({action:'saveProgress',key:'new-session',draft}));await call(adminRequest({action:'saveProgress',key:'new-session',draft:{updatedAtMs:99}}));
+ assert.deepEqual((await call(adminRequest({action:'loadProgress',key:'new-session'}))).draft,draft);
+ await assert.rejects(call(request({action:'saveProgress',key:'workspace',draft})),{code:'permission-denied'});
+ const initial=labSeed();initial['expalsa_calidad_accesos/fabio']={active:true,email:'fabio@expalsaevaluations.com'};
+ await assert.rejects(handler(database(initial))({auth:{uid:'fabio',token:{email:'fabio@expalsaevaluations.com'}},data:{action:'saveProgress',key:'workspace',draft}}),{code:'permission-denied'});
+});
+test('crear muestra con identificador de solicitud permite reintentar sin duplicar',async()=>{
+ const initial=labSeed();initial['expalsa_sabor_sesiones/s1'].status='draft';const db=database(initial),call=handler(db);
+ const request=adminRequest({action:'addSample',sample,requestId:'stable-request'});const first=await call(request),second=await call(request);assert.equal(first.id,second.id);assert.equal(db.records.get('expalsa_sabor_sesiones/s1').sampleCount,2);
+});
+
+test('inicio requiere inspectores y la creación sin requestId usa un ID automático válido',async()=>{
+ const initial=labSeed();initial['expalsa_sabor_sesiones/s1'].inspectorUids=[];const call=handler(database(initial));await assert.rejects(call(adminRequest({action:'startSample'})),{code:'failed-precondition'});
+ const draft=labSeed();draft['expalsa_sabor_sesiones/s1'].status='draft';const db=database(draft);await handler(db)(adminRequest({action:'addSample',sample}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').sampleCount,2);
 });

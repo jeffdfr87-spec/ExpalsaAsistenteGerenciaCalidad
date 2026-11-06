@@ -3,8 +3,9 @@ const {HttpsError}=require('firebase-functions/v2/https');
 const {FieldPath,FieldValue}=require('firebase-admin/firestore');
 const {createHash}=require('node:crypto');
 const {photoAction,imageData}=require('./photos');
+const {workflowAction,progressAction,finished,revision}=require('./workflow');
 const {normalizarPerfil,perfilMateriaPrima,coincidenPerfiles,fechaRecepcion}=require('./sensory');
-const SERVICE_VERSION='20261105-readonly-viewers-1';
+const SERVICE_VERSION='20261105-workflow-2';
 const VIEWERS=new Set(['fabio@expalsaevaluations.com','karina@expalsaevaluations.com']);
 const canManage=user=>user.admin===true;
 const canReadAll=user=>user.admin===true||user.viewer===true;
@@ -24,7 +25,7 @@ function participant(session,user){if(!canManage(user)&&!session.inspectorUids.i
 function requireManager(user){if(!canManage(user))fail('permission-denied','Acción exclusiva de los responsables del laboratorio.');}
 function requireAdmin(user){if(user.admin!==true)fail('permission-denied','Acción exclusiva del administrador.');}
 const inspectorCount=session=>session.membershipVersion===2?session.inspectorCount:(session.inspectorUids||[]).length;
-function canTransition(session,target){if(target==='open'){if(session.status!=='draft'||session.sampleCount<1||inspectorCount(session)<1)fail('failed-precondition','Solo puedes abrir un borrador con al menos una muestra y un inspector.');}else if(target==='closed'){if(session.status!=='open')fail('failed-precondition','La sesión no está abierta.');if(session.evaluationCount!==session.sampleCount*inspectorCount(session))fail('failed-precondition','Faltan evaluaciones por registrar.');}else fail('invalid-argument','Estado no válido.');}
+function canTransition(session,target){if(target==='open'){if(session.status!=='draft'||session.sampleCount<1||inspectorCount(session)<1)fail('failed-precondition','Solo puedes abrir un borrador con al menos una muestra y un inspector.');}else if(target==='closed'){if((session.finishedSampleCount||0)!==session.sampleCount||session.activeSampleId)fail('failed-precondition','Finaliza el análisis de todas las muestras antes de terminar la sesión.');if(session.status!=='open')fail('failed-precondition','La sesión no está abierta.');if(session.evaluationCount!==session.sampleCount*inspectorCount(session))fail('failed-precondition','Faltan evaluaciones por registrar.');}else fail('invalid-argument','Estado no válido.');}
 function publicDoc(doc){const d=doc.data();return {id:doc.id,...Object.fromEntries(Object.entries(d).map(([k,v])=>[k,v&&typeof v.toMillis==='function'?v.toMillis():v]))};}
 function publicSession(doc,user){const d=publicDoc(doc);d.inspectorCount=inspectorCount(d);d.inspectors=canReadAll(user)?(d.inspectors||[]):(d.inspectors||[]).filter(p=>p.uid===user.uid);d.inspectorUids=canReadAll(user)?(d.inspectorUids||[]):(d.inspectorUids||[]).filter(uid=>uid===user.uid);return d;}
 function inspectorIds(value){if(!Array.isArray(value)||!value.length||value.length>INSPECTOR_BATCH_SIZE||new Set(value).size!==value.length)fail('invalid-argument','Selecciona inspectores sin repetir.');return value.map(id);}
@@ -72,6 +73,7 @@ function handler(db){return async request=>{
  const user=await identity(db,request);
  if(user.viewer&&!['bootstrap','listSessions','detail','listMembers','listVotes','inspectorPhoto','listPhotos','authorizeComparisonReport'].includes(action))fail('permission-denied','Tu cuenta solo permite consultar y descargar PDF.');
  if(action==='bootstrap')return {admin:user.admin,manager:canManage(user),viewer:user.viewer===true,canReadResults:canReadAll(user),canDelete:user.admin===true,canViewComparisons:true,version:SERVICE_VERSION};
+ if(['saveProgress','loadProgress'].includes(action))return progressAction(db,user,data);
  if(action==='inspectors'){
   requireManager(user);const snap=await db.collection('expalsa_calidad_accesos').where('active','==',true).get();
   const people=snap.docs.filter(d=>d.data().deleted!==true&&d.data().email!==ADMIN_EMAIL);
@@ -95,14 +97,16 @@ function handler(db){return async request=>{
  if(action==='createSession'){
   requireManager(user);const name=text(data.name,'nombre de sesión'),analysisDate=date(data.date);
   const inspectors=await resolveInspectors(db,inspectorIds(data.inspectorUids));
-  const ref=sessions.doc(),now=Date.now();
+  const ref=data.requestId?sessions.doc(id(data.requestId)):sessions.doc(),now=Date.now();
   await db.runTransaction(async tx=>{
-   tx.create(ref,{name,date:analysisDate,membershipVersion:2,inspectorCount:inspectors.length,status:'draft',sampleCount:0,evaluationCount:0,deleted:false,createdBy:user.uid,createdAtMs:now,updatedAt:FieldValue.serverTimestamp()});
+   const existing=await tx.get(ref);if(existing.exists){if(existing.data().createdBy!==user.uid)fail('already-exists','La sesión ya existe.');return;}
+   tx.create(ref,{name,date:analysisDate,membershipVersion:2,inspectorCount:inspectors.length,status:'draft',workflowVersion:1,membershipRevision:0,finishedSampleCount:0,activeSampleId:'',sampleCount:0,evaluationCount:0,deleted:false,createdBy:user.uid,createdAtMs:now,updatedAt:FieldValue.serverTimestamp()});
    for(const person of inspectors){tx.create(ref.collection('inspectors').doc(person.uid),{...person,addedBy:user.uid,addedAtMs:now});tx.set(assignment(db,person.uid,ref.id),{sessionId:ref.id});}
   });return {id:ref.id};
  }
- if(!['authorizeComparisonReport','updateSample','removeInspector','deletePhoto','replacePhoto','detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
+ if(!['startSample','finishSample','authorizeComparisonReport','updateSample','removeInspector','deletePhoto','replacePhoto','detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
  const sessionRef=sessions.doc(id(data.sessionId));
+ if(['startSample','finishSample'].includes(action))return workflowAction(db,sessionRef,user,data,id);
  if(action==='authorizeComparisonReport'){requireReader(user);const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());return {allowed:true};}
  if(action==='updateSample')requireManager(user);
  if(['inspectorPhoto','uploadPhoto','listPhotos','deletePhoto','replacePhoto'].includes(action)){const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());await checkParticipant(sessionRef,snap.data(),user);return photoAction({db,user,sessionRef,session:snap.data(),data,id,canManage:canReadAll,assignedInspector});}
@@ -119,7 +123,7 @@ function handler(db){return async request=>{
  if(action!=='evaluate')requireManager(user);
  if(action==='removeInspector'){
   requireAdmin(user);await migrateMembers(db,sessionRef,user);const uid=id(data.inspectorUid),memberRef=sessionRef.collection('inspectors').doc(uid);
-  await db.runTransaction(async tx=>{const root=await tx.get(sessionRef),member=await tx.get(memberRef);live(root.data());if(member.exists&&!member.data().removing){tx.update(memberRef,{removing:true});tx.delete(assignment(db,uid,sessionRef.id));tx.update(sessionRef,{inspectorCount:root.data().inspectorCount-1,memberRemovalPending:(root.data().memberRemovalPending||0)+1});}});
+  await db.runTransaction(async tx=>{const root=await tx.get(sessionRef),member=await tx.get(memberRef);live(root.data());if(member.exists&&!member.data().removing){tx.update(memberRef,{removing:true});tx.delete(assignment(db,uid,sessionRef.id));tx.update(sessionRef,{inspectorCount:root.data().inspectorCount-1,memberRemovalPending:(root.data().memberRemovalPending||0)+1,membershipRevision:revision(root.data())+1,finishedSampleCount:0,activeSampleId:'',...(root.data().status==='closed'?{status:'open'}:{})});}});
   const member=await memberRef.get();if(!member.exists)return {done:true};
   let query=sessionRef.collection('samples').orderBy(FieldPath.documentId());if(member.data().removalCursor)query=query.startAfter(member.data().removalCursor);
   const page=await query.limit(20).get();
@@ -135,7 +139,7 @@ function handler(db){return async request=>{
    if(existing.some(d=>d.exists&&d.data().removing))fail('failed-precondition','Termina de eliminar al inspector antes de agregarlo nuevamente.');
    const added=inspectors.filter((p,i)=>!existing[i].exists),now=Date.now();
    for(const person of added){tx.create(sessionRef.collection('inspectors').doc(person.uid),{...person,addedBy:user.uid,addedAtMs:now});tx.set(assignment(db,person.uid,sessionRef.id),{sessionId:sessionRef.id});}
-   if(added.length)tx.update(sessionRef,{inspectorCount:session.inspectorCount+added.length,...(session.status==='closed'?{status:'open',reopenedAtMs:now}:{}),updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid});
+   if(added.length)tx.update(sessionRef,{inspectorCount:session.inspectorCount+added.length,membershipRevision:revision(session)+1,finishedSampleCount:0,activeSampleId:'',...(session.status==='closed'?{status:'open',reopenedAtMs:now}:{}),updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid});
    return {added:added.length};
   });
  }
@@ -147,14 +151,14 @@ function handler(db){return async request=>{
   if(action==='deleteSession'){requireAdmin(user);tx.update(sessionRef,{deleted:true,deletedAtMs:Date.now(),deletedBy:user.uid,...audit});return {deleted:true};}
   if(action==='addSample'){
    if(session.status!=='draft')fail('failed-precondition','Solo puedes agregar muestras a un borrador.');
-   const sample=sampleData(data.sample),ref=sessionRef.collection('samples').doc();
-   if((await tx.get(ref)).exists)fail('already-exists','El código de muestra ya está registrado en esta sesión.');
-   tx.create(ref,{...sample,createdBy:user.uid,createdAtMs:Date.now()});tx.update(sessionRef,{sampleCount:session.sampleCount+1,...audit});return {id:ref.id};
+   const sample=sampleData(data.sample),ref=data.requestId?sessionRef.collection('samples').doc(id(data.requestId)):sessionRef.collection('samples').doc();
+   if((await tx.get(ref)).exists){if(data.requestId)return {id:ref.id};fail('already-exists','La muestra ya está registrada.');}
+   tx.create(ref,{...sample,sequence:session.sampleCount+1,createdBy:user.uid,createdAtMs:Date.now()});tx.update(sessionRef,{sampleCount:session.sampleCount+1,...audit});return {id:ref.id};
   }
-  if(action==='updateSample'){const ref=sessionRef.collection('samples').doc(id(data.sampleId)),old=await tx.get(ref);if(!old.exists)fail('not-found','La muestra no existe.');const update=data.receiptFlavors?sampleData({...old.data(),...data}):{receivedDate:fechaRecepcion(data.receivedDate||'')};tx.update(ref,update);return {saved:true};}
+  if(action==='updateSample'){const ref=sessionRef.collection('samples').doc(id(data.sampleId)),old=await tx.get(ref);if(!old.exists)fail('not-found','La muestra no existe.');const update=data.receiptFlavors?sampleData({...old.data(),...data}):{receivedDate:fechaRecepcion(data.receivedDate||'')};tx.update(ref,{...update,...(data.receiptFlavors&&finished(old.data(),session)?{finishedRevision:-1}:{})});if(data.receiptFlavors&&finished(old.data(),session))tx.update(sessionRef,{finishedSampleCount:Math.max(0,(session.finishedSampleCount||0)-1),...(session.status==='closed'?{status:'open'}:{})});return {saved:true};}
   if(action==='openSession'||action==='closeSession'){
    if(session.memberRemovalPending)fail('failed-precondition','Termina de eliminar los inspectores antes de cambiar el estado.');
-   const status=action==='openSession'?'open':'closed';canTransition(session,status);tx.update(sessionRef,{status,[status+'AtMs']:Date.now(),...audit});return {status};
+   const status=action==='openSession'?'open':'closed';canTransition(session,status);tx.update(sessionRef,{status,...(status==='open'?{workflowVersion:1}:{}),[status+'AtMs']:Date.now(),...audit});return {status};
   }
   const targetUid=action==='recordEvaluation'?id(data.inspectorUid):user.uid;
   const member=session.membershipVersion===2?await tx.get(sessionRef.collection('inspectors').doc(targetUid)):null;
@@ -168,6 +172,7 @@ function handler(db){return async request=>{
   const sampleRef=sessionRef.collection('samples').doc(id(data.sampleId)),vote=sampleRef.collection('votes').doc(targetUid);
   const [sample,previous]=await Promise.all([tx.get(sampleRef),tx.get(vote)]);
   if(!sample.exists)fail('not-found','La muestra no existe.');if(previous.exists)fail('already-exists','La evaluación de este inspector ya fue registrada. Actualiza la página.');
+  if(session.activeSampleId!==sampleRef.id||finished(sample.data(),session))fail('failed-precondition','Selecciona y comienza la muestra activa antes de registrar resultados.');
   const result=resultData(data,perfilMateriaPrima(sample.data()));
   const portraitSnap=await tx.get(db.doc(`expalsa_calidad_fotos_perfil/${targetUid}`));
   let portrait=null;try{if(portraitSnap.exists&&typeof portraitSnap.data().jpeg==='string')portrait=imageData('data:image/jpeg;base64,'+portraitSnap.data().jpeg);}catch{}
