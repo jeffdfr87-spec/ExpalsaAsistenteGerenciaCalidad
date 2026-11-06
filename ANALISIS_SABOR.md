@@ -1,48 +1,38 @@
-# Análisis de sabor de materia prima
+# Análisis de sabor EXPALSA
 
-Entrada: `analisis-sabor.html`. Usa el proyecto Firebase existente `oceantreasure-app`, base `(default)` Standard en `nam5`, y las cuentas habilitadas en Evaluaciones.
+Aplicación `analisis-sabor.html`, publicada por GitHub Pages. Usa la autenticación existente y la función callable `manageFlavorAnalysis`, codebase `analisis-sabor`, proyecto `oceantreasure-app`, Firestore Standard.
 
 ## Operación
 
-1. El administrador existente crea una sesión, elige fecha e inspectores habilitados. No hay un límite fijo de inspectores por sesión en la aplicación.
-2. Registra las muestras: lote, talla, color, sabor de referencia, destino, código e importador. El código es único dentro de la sesión, sin distinguir mayúsculas ni espacios iniciales/finales.
-3. Abre la sesión. Desde ese momento las muestras quedan fijas; **Agregar inspectores** permite seguir incorporando participantes en cualquier estado. Agregar nuevos inspectores a una sesión finalizada la reabre para recibir sus resultados.
-4. En la misma página, el administrador pulsa **Comenzar análisis**, selecciona muestra e inspector y registra el resultado conforme o no conforme. Un resultado no conforme exige observaciones. También se conserva la evaluación desde la cuenta individual del inspector.
-5. Las evaluaciones enviadas son definitivas y no se pueden sobrescribir. Cada inspector solo consulta sus resultados; el administrador compara todos y exporta CSV.
-6. El administrador cierra la sesión cuando se completan todas las combinaciones muestra–inspector. Cerrar impide nuevos envíos.
-7. **Eliminar sesión** la mueve a la **Papelera** y bloquea nuevos registros. **Restaurar sesión** recupera su estado, muestras, inspectores y resultados. La eliminación es recuperable y no borra físicamente las evaluaciones.
-8. **Ver resultados** abre el modal identificado por el lote. Su botón **PDF** descarga los resultados de esa muestra con logo de EXPALSA, datos de la muestra, resultados y observaciones de cada inspector, pendientes y paginación automática mediante jsPDF-AutoTable. Se exportan los datos cargados que se muestran en el modal; usa Actualizar antes de abrirlo para consultar nuevos resultados.
-9. **Agregar muestra** permite seleccionar una o varias fotos. En **Analizar muestra** se muestra la foto de perfil del inspector y se pueden incorporar más fotos de la muestra, incluida una muestra existente.
-10. **Tomar foto con cámara trasera** solicita la cámara posterior; si el equipo no dispone de ella utiliza la cámara disponible. La captura conserva las observaciones escritas. Las evidencias se guardan con la evaluación; si la evaluación ya está registrada, **Guardar evidencias** adjunta las nuevas capturas. Las cargas interrumpidas conservan los elementos pendientes para reintentar sin duplicarlos.
-11. El PDF incorpora todas las fotos guardadas de la muestra, la foto de perfil de cada inspector y sus evidencias, con páginas adicionales y leyendas que identifican al inspector, la hora de captura y la cuenta que registró la foto. No genera el PDF mientras existan fotos pendientes de guardar para esa muestra.
+- Las sesiones admiten múltiples inspectores; cada inspector registra un resultado independiente para cada muestra. Las altas se procesan de 100 en 100, sin un límite total configurado.
+- La muestra contiene lote, fecha de recepción opcional y composición de sabor de recepción de materia prima. La fecha admite `dd/mm/aaaa` y se muestra completa en español. Se puede guardar solo la fecha de una muestra antigua.
+- El catálogo contiene Normal y Tierra, Fito o Combustible con intensidad Leve, Medio o Fuerte. Cada fila incluye un porcentaje numérico mayor que cero. La composición debe sumar 100 %. Se combinan filas repetidas del mismo sabor e intensidad.
+- La contramuestra usa el mismo catálogo. El servidor calcula Conforme cuando coinciden los conjuntos de sabores e intensidades; las diferencias de porcentaje no afectan la conformidad. Si no coinciden se registra Discrepancia.
+- El sabor predominante es el de mayor intensidad: Fuerte, Medio, Leve y Normal, en ese orden. Dentro de la misma intensidad se ordena por porcentaje y nombre. No se confunde intensidad con proporción.
+- La evaluación conserva una copia de la composición de recepción utilizada. Las evaluaciones anteriores a esta actualización no se convierten ni se sobrescriben. Los perfiles antiguos incompletos requieren completar la recepción antes de registrar otra evaluación. Los antiguos campos de talla, color, código, destino e importador se conservan internamente pero desaparecen de las pantallas y reportes nuevos.
+- El administrador elimina sesiones desde su encabezado, moviéndolas a la papelera. Eliminar un inspector elimina su asignación y todos sus resultados y fotografías de evidencia de esa sesión, sin eliminar la cuenta global. Se procesa por páginas reintentables de 20 muestras; una eliminación pendiente puede continuarse desde el botón junto al nombre.
+- Fabio y Karina, con sus cuentas activas `fabio@expalsaevaluations.com` y `karina@expalsaevaluations.com`, pueden gestionar el laboratorio y exportar reportes. Las acciones de eliminación quedan reservadas al administrador y se verifican también en el servidor.
 
-El registro central conserva el inspector que analizó y la cuenta del administrador que capturó el resultado (`recordedBy`, `recordedByEmail`, `entryMode: laboratory`). Ambos modos comparten el mismo registro único por muestra e inspector y no pueden sobrescribirse entre sí. Los resultados comparativos son parciales mientras falten evaluaciones. Una discrepancia significa que hay votos de ambas categorías; el sistema no decide la liberación comercial del lote. Una nueva evaluación del mismo lote requiere otra sesión y conserva la trazabilidad de la anterior.
+## Fotografías y PDF
 
-## Implementación y seguridad
+Se muestra el perfil del inspector seleccionado. Las fotos de muestra se agregan desde galería o cámara y pueden reemplazarse o eliminarse. Las capturas de evidencia usan preferentemente la cámara trasera y se guardan inmediatamente, incluso antes del resultado. Si la carga falla permanecen pendientes para reintentar; no se descartan las observaciones escritas.
 
-La función callable `manageFlavorAnalysis` está en un codebase independiente, `analisis-sabor`, sin modificar las funciones existentes. Verifica el UID y correo del administrador contra `expalsa_calidad_config/administrador`; verifica que las cuentas de inspector estén activas, no eliminadas y coincidan con el correo autenticado en cada solicitud.
+Las fotografías se comprimen a JPEG y se guardan en documentos individuales; el servidor valida dimensiones y un máximo de 220 000 bytes. No existen enlaces públicos. Los reemplazos y eliminaciones de fotos retiran el documento de galerías y reportes mediante una marca de auditoría. Las listas de fotos se paginan de cuatro en cuatro.
 
-Fabio (`fabio@expalsaevaluations.com`) y Karina (`karina@expalsaevaluations.com`) son responsables de este laboratorio y pueden crear, consultar, completar y restaurar sesiones, gestionar participantes y muestras, registrar resultados y fotos y exportar reportes. Eliminar sesiones está restringido exclusivamente al administrador tanto en la interfaz como en la función. Sus cuentas también deben permanecer habilitadas en el registro de accesos existente. El permiso se aplica solo a este módulo.
+El botón PDF del modal genera el reporte por lote con logo EXPALSA, fecha de recepción, composición ordenada, resultados de contramuestra y observaciones, pendientes y todas las fotos guardadas de muestra, perfiles y evidencias. Usa las distribuciones locales de jsPDF 4.2.1 y AutoTable 5.0.9 con paginación automática. No genera reportes con fotografías o eliminaciones de inspectores pendientes. El CSV recorre todas las páginas de muestras y resultados.
 
-La operación pública `serviceInfo` devuelve únicamente la versión del servicio; el resto de operaciones requiere autenticación. La interfaz comprueba la versión en `bootstrap`. Después del despliegue se verifica la versión real para evitar publicar una interfaz con acciones que la función anterior no reconoce.
+## Datos y seguridad
 
-Colecciones nuevas: `expalsa_sabor_sesiones/{sessionId}`, `inspectors/{inspectorUid}`, `samples/{sampleId}`, `samples/{sampleId}/votes/{inspectorUid}` y el índice de asignación `expalsa_sabor_inspectores/{uid}/sesiones/{sessionId}`. El padrón se almacena en documentos separados; el documento de sesión conserva únicamente el contador. Las sesiones del formato anterior se migran automáticamente al agregar participantes, sin alterar votos existentes. El ID de muestra es un hash del código normalizado. Cada evaluación registra cuenta, fecha del servidor, resultado y observaciones. Las transacciones impiden códigos duplicados, doble envío y cambios de estado incompatibles con evaluaciones concurrentes.
+Colección raíz `expalsa_sabor_sesiones/{sessionId}`; subcolecciones `inspectors`, `samples`, `samples/{sampleId}/votes`, fotos de muestra y fotos por evaluación. El índice `expalsa_sabor_inspectores/{uid}/sesiones` permite consultar asignaciones. Las nuevas muestras reciben un ID automático; las existentes conservan sus IDs. Cada voto tiene el UID del inspector como ID y conserva la cuenta responsable, fecha y modo de registro. Las transacciones evitan doble envío e inconsistencias en contadores.
 
-El cliente nunca accede directamente a estas colecciones. Las reglas existentes no contienen rutas que las autoricen y conservan la denegación implícita. No se despliegan ni sustituyen reglas de otros módulos. El acceso se realiza por la función autenticada con Admin SDK.
+El cliente accede exclusivamente por callable autenticada. Las reglas existentes mantienen la denegación directa de estas colecciones; no se modifican reglas de otros módulos. El administrador se valida contra `expalsa_calidad_config/administrador` y los inspectores contra su acceso activo. `serviceInfo` expone solamente la versión del servicio.
 
-Las fotos se comprimen a JPEG en el navegador y se guardan en documentos individuales bajo `samples/{sampleId}/photos` y `samples/{sampleId}/votes/{uid}/photos`. El servidor valida tipo JPEG, dimensiones y tamaño (máximo 220 000 bytes por imagen). Las listas de fotos se paginan de cuatro en cuatro. Se registra origen, cuenta responsable y fechas. La foto de perfil existente proviene de `expalsa_calidad_fotos_perfil/{uid}`; al guardar una evaluación nueva se conserva una copia de esa foto si está disponible. No se crean enlaces públicos a las fotografías.
-
-Las listas de sesiones y muestras se paginan de 20 en 20; inspectores y votos, de 200 en 200. Las altas se envían en grupos de 100 por solicitud y pueden repetirse sin límite total configurado, respetando las cuotas operativas de Firebase. Cada inspector puede analizar la misma muestra, con un resultado independiente bajo su UID. Las altas repetidas no duplican miembros ni incrementan el contador. El filtro y los contadores de discrepancias corresponden a las muestras cargadas; el CSV recorre todas las páginas de votos e incluye las evaluaciones pendientes. Los valores que puedan interpretarse como fórmulas de hoja de cálculo se neutralizan al exportar. El botón Actualizar obtiene los nuevos resultados.
-
-El PDF se genera en el navegador, sin enviar los resultados a servicios externos. Las distribuciones fijadas de jsPDF 4.2.1 y jsPDF-AutoTable 5.0.9 y sus licencias están incluidas en `vendor/`; se cargan al solicitar el PDF. El código aparece como dato de muestra, mientras que el encabezado y los títulos del reporte usan el lote.
-
-## Validación y despliegue
+## Validación y publicación
 
 ```powershell
-npm ci --prefix functions-sabor
 npm test --prefix functions-sabor
 node --check analisis-sabor.js
 npx -y firebase-tools@latest deploy --only functions:analisis-sabor:manageFlavorAnalysis --project oceantreasure-app
 ```
 
-La interfaz se publica con el GitHub Pages del repositorio. El código de la función debe desplegarse antes de publicar el enlace de la interfaz. Los datos de ejemplo del servidor de pruebas local no forman parte del producto ni se cargan en Firebase.
+Desplegar la función y verificar `serviceInfo` antes de publicar la interfaz. Los módulos `sabor-modelo.js` y `functions-sabor/sensory.js` contienen la misma lógica para navegador y servidor; actualizar ambos a la vez. Los ejemplos de pruebas nunca se cargan en la base de producción.

@@ -1,3 +1,4 @@
+import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores} from './sabor-modelo.js?v=20261105-sensory-1';
 // EXPALSA - Resultados de una muestra, con jsPDF y jsPDF-AutoTable.
 const COLORS={ink:[25,53,74],navy:[8,40,61],teal:[8,125,137],muted:[104,126,139],line:[220,229,234],soft:[243,248,250]};
 const clean=value=>String(value??'').replace(/[\u2010-\u2015]/g,'-').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -8,16 +9,17 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
  if(!sample||!session||!Array.isArray(inspectors)||!logoData)throw Error('No se pudo preparar el reporte de la muestra.');
  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
  const votes=new Map(evaluations.filter(v=>v.sampleId===sample.id).map(v=>[v.inspectorUid,v]));
+ const reception=ordenarSabores(perfilMateriaPrima(sample)||[]);
  const rows=inspectors.map(person=>{
   const vote=votes.get(person.uid);
   const name=person.name||person.email||'Inspector';
   const identity=[name,person.email&&person.email!==name?person.email:'',vote?.createdAtMs?dateTime(vote.createdAtMs):''].filter(Boolean).join('\n');
-  return [clean(identity),vote?(vote.result==='conforme'?'Conforme':'No conforme'):'Pendiente',clean(vote?.observations||'-')];
+  return [clean(identity),vote?(vote.result==='conforme'?'Conforme':'Discrepancia'):'Pendiente',clean([vote?.counterFlavors?textoPerfil(vote.counterFlavors):'Composición no registrada',vote?.observations||''].filter(Boolean).join('\n'))];
  });
  const received=inspectors.filter(p=>votes.has(p.uid)).length;
  const good=inspectors.filter(p=>votes.get(p.uid)?.result==='conforme').length;
  const bad=received-good,pending=inspectors.length-received;
- const result=!received?'Sin resultados':good&&bad?'Discrepancia':bad?'No conforme':'Conforme';
+ const result=!received?'Sin resultados':good&&bad?'Discrepancia':bad?'Discrepancia':'Conforme';
  const write=(value,x,y,size=9,style='normal',color=COLORS.ink,options={})=>{
   pdf.setFont('helvetica',style);pdf.setFontSize(size);pdf.setTextColor(...color);pdf.text(Array.isArray(value)?value.map(clean):clean(value),x,y,options);
  };
@@ -30,14 +32,13 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
  autoTable(pdf,{
   ...common,startY:top,theme:'grid',body:[
    ['Sesión',clean(session.name),'Fecha',clean(session.date)],
-   ['Código',clean(sample.codigo),'Talla',clean(sample.talla)],
-   ['Color',clean(sample.color),'Sabor de referencia',clean(sample.sabor)],
-   ['Destino',clean(sample.destino),'Importador',clean(sample.importador)]
+   ['Lote',clean(sample.lote),'Fecha de recepción',clean(mostrarFechaRecepcion(sample.receivedDate))],
+   ...((reception.length?reception:[{sabor:'Pendiente de completar',porcentaje:null}]).map((f,i)=>[i===0?{content:'Sabor de recepción de materia prima',rowSpan:Math.max(1,reception.length)}:null,{content:clean((f.porcentaje===null?'':'Sabor ')+f.sabor+(f.porcentaje===null?'':` · ${f.porcentaje}%`)),colSpan:3,styles:{fontStyle:i===0?'bold':'normal'}}].filter(Boolean)))
   ],
   columnStyles:{0:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},1:{cellWidth:64},2:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},3:{cellWidth:64}}
  });
  let y=pdf.lastAutoTable.finalY+9;
- const summary=`Evaluaciones: ${received} de ${inspectors.length}  |  Conformes: ${good}  |  No conformes: ${bad}  |  Pendientes: ${pending}`;
+ const summary=`Evaluaciones: ${received} de ${inspectors.length}  |  Conformes: ${good}  |  Discrepancias: ${bad}  |  Pendientes: ${pending}`;
  pdf.setFont('helvetica','normal');pdf.setFontSize(9);
  const summaryLines=pdf.splitTextToSize(summary,182);
  if(y+summaryLines.length*5+18>277){pdf.addPage();y=top;}
@@ -46,13 +47,13 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
  // AutoTable handles long observations and repeats the table header on each page.
  autoTable(pdf,{
   ...common,startY:y+summaryLines.length*5+11,theme:'grid',
-  head:[['INSPECTOR','RESULTADO','OBSERVACIONES']],body:rows,
+  head:[['INSPECTOR','RESULTADO','CONTRAMUESTRA / OBSERVACIONES']],body:rows,
   headStyles:{fillColor:COLORS.navy,textColor:[255,255,255],fontSize:8,fontStyle:'bold'},
   alternateRowStyles:{fillColor:[248,251,252]},
   columnStyles:{0:{cellWidth:62},1:{cellWidth:28},2:{cellWidth:92}},
   rowPageBreak:'avoid',showHead:'everyPage',
   didParseCell:cell=>{
-   if(cell.section==='body'&&cell.column.index===1){const value=cell.cell.raw;cell.cell.styles.fontStyle='bold';cell.cell.styles.textColor=value==='Conforme'?[19,127,99]:value==='No conforme'?[172,60,80]:COLORS.muted;}
+   if(cell.section==='body'&&cell.column.index===1){const value=cell.cell.raw;cell.cell.styles.fontStyle='bold';cell.cell.styles.textColor=value==='Conforme'?[19,127,99]:value==='Discrepancia'?[172,60,80]:COLORS.muted;}
   }
  });
  const gallery=[];
@@ -96,7 +97,7 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   write(`Emitido: ${dateTime(generatedAt)}`,14,286,7,'normal',COLORS.muted);
   write(`Página ${page} de ${pages}`,196,286,7,'normal',COLORS.muted,{align:'right'});
  }
- return {pdf,filename:`EXPALSA-resultados-lote-${safeName(sample.lote)}-muestra-${safeName(sample.codigo)}.pdf`};
+ return {pdf,filename:`EXPALSA-resultados-lote-${safeName(sample.lote)}.pdf`};
 }
 
 let librariesPromise;

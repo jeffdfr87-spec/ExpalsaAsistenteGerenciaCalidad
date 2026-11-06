@@ -42,8 +42,10 @@ async function photoAction({db,user,sessionRef,session,data,id,canManage,assigne
  if(data.action==='listPhotos'){
   let query=photos.orderBy('__name__');if(data.cursor)query=query.startAfter(id(data.cursor));
   const snap=await query.limit(PHOTO_PAGE_SIZE+1).get(),docs=snap.docs.slice(0,PHOTO_PAGE_SIZE);
-  return {photos:docs.filter(d=>d.data().kind!=='profile').map(d=>({id:d.id,...d.data()})),cursor:snap.size>PHOTO_PAGE_SIZE?docs.at(-1).id:null};
+  return {photos:docs.filter(d=>d.data().kind!=='profile'&&!d.data().deleted).map(d=>({id:d.id,...d.data()})),cursor:snap.size>PHOTO_PAGE_SIZE?docs.at(-1).id:null};
  }
+ if(data.action==='replacePhoto'){if(!canManage(user)||data.kind!=='sample')throw new HttpsError('permission-denied','Acción exclusiva de responsables.');const old=photos.doc(id(data.oldPhotoId)),fresh=photos.doc(id(data.newPhotoId));if(old.id===fresh.id)throw new HttpsError('invalid-argument','Selecciona otra fotografía.');return db.runTransaction(async tx=>{const [a,b]=await Promise.all([tx.get(old),tx.get(fresh)]);if(!a.exists||!b.exists||b.data().deleted)throw new HttpsError('not-found','La fotografía no está disponible.');tx.update(old,{deleted:true,replacedBy:fresh.id,deletedAtMs:Date.now(),deletedBy:user.uid});return {saved:true};});}
+ if(data.action==='deletePhoto'){if(!user.admin)throw new HttpsError('permission-denied','Solo el administrador puede eliminar fotografías.');const ref=photos.doc(id(data.photoId));if(ref.id==='profile')throw new HttpsError('invalid-argument','No puedes eliminar el perfil.');await ref.update({deleted:true,deletedAtMs:Date.now(),deletedBy:user.uid});return {deleted:true};}
  if(!canManage(user)&&data.kind==='sample')throw new HttpsError('permission-denied','Solo los responsables pueden agregar fotos de muestras.');
  if(data.kind==='evidence'&&data.photo?.origin!=='camera')throw new HttpsError('invalid-argument','La evidencia del análisis debe capturarse con la cámara.');
  const photo=imageData(data.photo?.dataUrl),photoId=id(data.photo?.id),origin=data.kind==='evidence'?'camera':data.photo?.origin;
@@ -53,7 +55,7 @@ async function photoAction({db,user,sessionRef,session,data,id,canManage,assigne
  return db.runTransaction(async tx=>{
   const fresh=await tx.get(sessionRef),sample=await tx.get(sampleRef),existing=await tx.get(ref);
   if(!fresh.exists||fresh.data().deleted===true||!sample.exists)throw new HttpsError('not-found','La sesión o la muestra ya no está disponible.');
-  if(data.kind==='evidence'&&!(await tx.get(voteRef)).exists)throw new HttpsError('failed-precondition','Guarda primero la evaluación del inspector.');
+  if(data.kind==='evidence'&&fresh.data().status!=='open'&&!(await tx.get(voteRef)).exists)throw new HttpsError('failed-precondition','Guarda primero la evaluación del inspector.');
   if(existing.exists){if(existing.data().digest!==digest)throw new HttpsError('already-exists','Esta fotografía ya fue registrada con otro contenido.');return {saved:true,id:ref.id};}
   const now=Date.now(),captured=Number(data.photo.capturedAtMs);
   tx.create(ref,{...photo,kind:data.kind,origin,digest,inspectorUid:targetUid,uploadedBy:user.uid,uploadedByEmail:user.email,uploadedAtMs:now,capturedAtMs:Number.isFinite(captured)&&captured>0&&captured<=now+300000?captured:now});

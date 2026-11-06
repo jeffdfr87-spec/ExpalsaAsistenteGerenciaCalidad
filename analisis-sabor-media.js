@@ -27,27 +27,27 @@ export function createFlavorMedia({api,getState,notify}){
  const samplePicker=document.createElement('input');samplePicker.type='file';samplePicker.accept='image/*';samplePicker.multiple=true;samplePicker.hidden=true;document.body.appendChild(samplePicker);
  const context=()=>{const s=getState();return {sessionId:s.session?.id,sampleId:s.analysisSampleId,inspectorUid:s.analysisInspectorUid};};
  function validContext(c){return !!(c.sessionId&&c.sampleId);}
- const photosHtml=(photos,remove='')=>photos.map((p,i)=>jpeg(p.dataUrl)?`<figure class="flavor-photo"><img src="${esc(p.dataUrl)}" alt="Fotografía ${i+1}" loading="lazy"><figcaption>${p.origin==='camera'?'Cámara':'Fotografía'} ${i+1}${remove?` <button type="button" class="quiet" data-media-action="${remove}" data-index="${i}">Quitar</button>`:''}</figcaption></figure>`:'').join('');
+ const photosHtml=(photos,remove='')=>photos.map((p,i)=>jpeg(p.dataUrl)?`<figure class="flavor-photo"><img src="${esc(p.dataUrl)}" alt="Fotografía ${i+1}" loading="lazy"><figcaption>Fotografía ${i+1}${remove.startsWith('saved-')?`<div class="actions">${remove==='saved-sample'?`<button class="quiet" type="button" data-media-action="replace-gallery" data-id="${esc(p.id)}">Galería</button><button class="quiet" type="button" data-media-action="retake-sample" data-id="${esc(p.id)}">Volver a tomar</button>`:''}${getState().canDelete?`<button class="quiet danger" type="button" data-media-action="delete-photo" data-kind="${remove==='saved-sample'?'sample':'evidence'}" data-id="${esc(p.id)}">Eliminar</button>`:''}</div>`:remove?` <button type="button" class="quiet" data-media-action="${remove}" data-index="${i}">Quitar</button>${remove==='remove-sample-draft'?` <button type="button" class="quiet" data-media-action="replace-draft" data-index="${i}">Galería</button><button type="button" class="quiet" data-media-action="retake-draft" data-index="${i}">Volver a tomar</button>`:''}`:''}</figcaption></figure>`:'').join('');
  async function allPhotos(c,kind){let cursor=null,photos=[];do{const page=await api('listPhotos',{...c,kind,cursor});photos.push(...page.photos);cursor=page.cursor;}while(cursor);return photos;}
  function showPending(){
   const c=context(),e=document.querySelector('#analysis-evidence'),p=document.querySelector('#sample-photo-pending');
   const pending=pendingEvidence.get(key(c))||[],saved=evidenceCache.get(key(c))||[];
-  if(e)e.innerHTML=`<div class="flavor-photo-grid">${photosHtml(saved)}${photosHtml(pending,'remove-evidence')}</div>${pending.length?`<p class="hint">${pending.length} fotografías pendientes de guardar.</p>`:''}`;
+  if(e)e.innerHTML=`<div class="flavor-photo-grid">${photosHtml(saved,'saved-evidence')}${photosHtml(pending,'remove-evidence')}</div>${pending.length?`<p class="hint">${pending.length} fotografías pendientes de guardar.</p>`:''}`;
   const vote=getState().evaluations?.find(v=>v.sampleId===c.sampleId&&v.inspectorUid===c.inspectorUid);
-  const save=document.querySelector('#save-pending-evidence');if(save)save.hidden=!vote||!pending.length;
+  const save=document.querySelector('#save-pending-evidence');if(save)save.hidden=!pending.length;
   const samplePending=pendingSamples.get(key({...c,inspectorUid:''}))||[];
   if(p)p.innerHTML=`${samplePending.length?`<p class="hint">${samplePending.length} fotos de muestra pendientes.</p><button type="button" class="button" data-media-action="retry-sample-photos">Guardar fotos pendientes</button>`:''}`;
  }
  async function hydrate(){
-  const c=context();if(!validContext(c)||!c.inspectorUid)return;
+  const c=context();if(!validContext(c))return;
   const marker=key(c),area=document.querySelector('#inspector-photo-area'),version=++hydrateVersion;if(!area)return;area.dataset.context=marker;
   showPending();
   try{
-   const [profile,photos,evidence]=await Promise.all([api('inspectorPhoto',c),allPhotos(c,'sample'),allPhotos(c,'evidence')]);
+   const [profile,photos,evidence]=await Promise.all([c.inspectorUid?api('inspectorPhoto',c):Promise.resolve({photo:null}),allPhotos(c,'sample'),c.inspectorUid?allPhotos(c,'evidence'):Promise.resolve([])]);
    if(version!==hydrateVersion)return;sampleCache.set(key({...c,inspectorUid:''}),photos);evidenceCache.set(marker,evidence);
    if(document.querySelector('#inspector-photo-area')?.dataset.context!==marker)return;
    area.innerHTML=jpeg(profile.photo?.dataUrl)?`<img class="inspector-portrait" src="${esc(profile.photo.dataUrl)}" alt="Foto de perfil del inspector seleccionado"><span class="hint">Foto de perfil</span>`:'<div class="portrait-empty">Sin foto de perfil</div>';
-   const gallery=document.querySelector('#sample-photo-preview');if(gallery)gallery.innerHTML=photos.length?photosHtml(photos):'<p class="hint">Sin fotos de la muestra.</p>';
+   const gallery=document.querySelector('#sample-photo-preview');if(gallery)gallery.innerHTML=photos.length?photosHtml(photos,'saved-sample'):'<p class="hint">Sin fotos de la muestra.</p>';
    showPending();
   }catch(error){if(area.dataset.context===marker){area.textContent='No se pudieron cargar las fotografías.';notify(error.message);}}
  }
@@ -55,10 +55,10 @@ export function createFlavorMedia({api,getState,notify}){
  function closeCamera(){if(camera.open)camera.close();stopCamera();}
  camera.addEventListener('close',stopCamera);
  document.addEventListener('visibilitychange',()=>{if(document.hidden)closeCamera();});
- async function openCamera(){
-  const c=context();if(!validContext(c)||!c.inspectorUid)throw Error('Selecciona una muestra y un inspector.');
+ async function openCamera(options={}){
+  const c=context();if(!options.draft&&(!validContext(c)||(options.kind!=='sample'&&!c.inspectorUid)))throw Error('Selecciona una muestra y un inspector.');
   if(!navigator.mediaDevices?.getUserMedia)throw Error('La cámara no está disponible en este navegador. Abre la página con HTTPS en tu teléfono.');
-  cameraContext={...c};camera.showModal();camera.querySelector('#flavor-camera-status').textContent='Preparando cámara trasera…';
+  cameraContext={...c,...options};camera.showModal();camera.querySelector('#flavor-camera-status').textContent='Preparando cámara trasera…';
   try{
    try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:'environment'},width:{ideal:1280},height:{ideal:960}},audio:false});}
    catch(error){if(!['OverconstrainedError','NotFoundError'].includes(error.name))throw error;cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}},audio:false});}
@@ -70,9 +70,14 @@ export function createFlavorMedia({api,getState,notify}){
  }
  async function capture(){
   const video=camera.querySelector('video');if(!video.videoWidth)throw Error('Espera a que la cámara esté lista.');
-  const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.getContext('2d').drawImage(video,0,0);
-  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('No se pudo capturar la fotografía.')),'image/jpeg',.9));
-  const photo=await compressPhoto(blob,'camera'),c={...cameraContext};const list=pendingEvidence.get(key(c))||[];list.push(photo);pendingEvidence.set(key(c),list);closeCamera();showPending();notify('Foto capturada. Se guardará con la evaluación.');
+  const c={...cameraContext},canvas=document.createElement('canvas');let scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight)),dataUrl='';
+  for(let attempt=0;attempt<6;attempt++){canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);dataUrl=canvas.toDataURL('image/jpeg',.7);if(dataUrl.length<=240000)break;scale*=.72;}
+  if(!jpeg(dataUrl)||dataUrl.length>240000)throw Error('No se pudo preparar la foto. Vuelve a intentarlo.');
+  const photo={id:uid(),dataUrl,origin:'camera',capturedAtMs:Date.now()};closeCamera();
+  if(c.draft){if(Number.isInteger(c.draftIndex))sampleDraft.splice(c.draftIndex,1,photo);else sampleDraft.push(photo);showSampleDraft();notify('Foto de muestra agregada.');return;}
+  const map=c.kind==='sample'?pendingSamples:pendingEvidence,k=key(c.kind==='sample'?{...c,inspectorUid:''}:c),list=map.get(k)||[];list.push(photo);map.set(k,list);showPending();
+  if(c.kind==='sample'){await saveSamplePhotos(c);if(c.replaceId)await api('replacePhoto',{...c,kind:'sample',oldPhotoId:c.replaceId,newPhotoId:photo.id});}else await uploadEvidence(c);
+  await hydrate();notify('Foto capturada y guardada.');
  }
  async function upload(c,kind,map){
   const k=key(kind==='sample'?{...c,inspectorUid:''}:c),pending=map.get(k)||[];
@@ -87,17 +92,24 @@ export function createFlavorMedia({api,getState,notify}){
  });
  samplePicker.addEventListener('change',async()=>{
   const c={...samplePicker.photoContext};if(processing)return;processing=true;
-  try{const k=key({...c,inspectorUid:''}),pending=pendingSamples.get(k)||[];pendingSamples.set(k,pending);for(const file of samplePicker.files)pending.push(await compressPhoto(file));showPending();await saveSamplePhotos(c);await hydrate();notify('Fotografías de la muestra guardadas.');}
+  try{if(c.draft){const photo=await compressPhoto(samplePicker.files[0]);sampleDraft.splice(c.index,1,photo);showSampleDraft();return;}const k=key({...c,inspectorUid:''}),pending=pendingSamples.get(k)||[];pendingSamples.set(k,pending);for(const file of samplePicker.files)pending.push(await compressPhoto(file));showPending();await saveSamplePhotos(c);if(c.replaceId){const photos=await allPhotos(c,'sample');const fresh=photos.find(p=>pending.some(n=>n.id===p.id));if(fresh)await api('replacePhoto',{...c,kind:'sample',oldPhotoId:c.replaceId,newPhotoId:fresh.id});}await hydrate();notify('Fotografías de la muestra guardadas.');}
   catch(error){showPending();notify('Hay fotos pendientes de guardar: '+error.message);}finally{processing=false;samplePicker.value='';}
  });
  document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-media-action]');if(!button)return;event.preventDefault();const action=button.dataset.mediaAction;
   if(action==='close-camera'){closeCamera();return;}
   if(processing||getState().busy){notify('Espera a que termine la operación actual.');return;}
-  if(action==='add-sample-photos'){samplePicker.photoContext=context();samplePicker.click();return;}
+  if(action==='replace-draft'){samplePicker.multiple=false;samplePicker.photoContext={draft:true,index:Number(button.dataset.index)};samplePicker.click();return;}
+  if(action==='replace-gallery'){samplePicker.multiple=false;samplePicker.photoContext={...context(),replaceId:button.dataset.id};samplePicker.click();return;}
+  if(action==='add-sample-photos'){samplePicker.multiple=true;samplePicker.photoContext=context();samplePicker.click();return;}
   processing=true;button.disabled=true;
   try{
    if(action==='open-camera')await openCamera();
+   else if(action==='retake-draft')await openCamera({draft:true,kind:'sample',draftIndex:Number(button.dataset.index)});
+   else if(action==='draft-camera')await openCamera({draft:true,kind:'sample'});
+   else if(action==='sample-camera')await openCamera({kind:'sample'});
+   else if(action==='retake-sample')await openCamera({kind:'sample',replaceId:button.dataset.id});
+   else if(action==='delete-photo'){await api('deletePhoto',{...context(),kind:button.dataset.kind,photoId:button.dataset.id});await hydrate();notify('Fotografía eliminada.');}
    else if(action==='capture')await capture();
    else if(action==='remove-evidence'){const c=context(),list=pendingEvidence.get(key(c))||[];list.splice(Number(button.dataset.index),1);showPending();}
    else if(action==='remove-sample-draft'){sampleDraft.splice(Number(button.dataset.index),1);showSampleDraft();}
@@ -113,6 +125,7 @@ export function createFlavorMedia({api,getState,notify}){
   async saveNewSample(c){this.assertReady();const k=key({...c,inspectorUid:''});pendingSamples.set(k,[...(pendingSamples.get(k)||[]),...sampleDraft]);sampleDraft=[];await saveSamplePhotos(c);},
   uploadEvidence,
   async forReport({session,sample,inspectors}){
+   if(session.memberRemovalPending)throw Error('Termina la eliminación de inspectores antes de generar el PDF.');
    const c={sessionId:session.id,sampleId:sample.id};
    if((pendingSamples.get(key({...c,inspectorUid:''}))||[]).length||inspectors.some(p=>(pendingEvidence.get(key({...c,inspectorUid:p.uid}))||[]).length))throw Error('Guarda las fotografías pendientes antes de generar el PDF.');
    const samplePhotos=await allPhotos(c,'sample'),inspectorPhotos=[];

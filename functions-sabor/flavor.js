@@ -3,7 +3,8 @@ const {HttpsError}=require('firebase-functions/v2/https');
 const {FieldPath,FieldValue}=require('firebase-admin/firestore');
 const {createHash}=require('node:crypto');
 const {photoAction,imageData}=require('./photos');
-const SERVICE_VERSION='20261105-photos-1';
+const {normalizarPerfil,perfilMateriaPrima,coincidenPerfiles,fechaRecepcion}=require('./sensory');
+const SERVICE_VERSION='20261105-sensory-1';
 const MANAGERS=new Set(['fabio@expalsaevaluations.com','karina@expalsaevaluations.com']);
 const canManage=user=>user.admin===true||user.manager===true;
 const COLLECTION='expalsa_sabor_sesiones';
@@ -13,8 +14,8 @@ const FIELDS=['lote','talla','color','sabor','destino','codigo','importador'];
 function fail(code,message){throw new HttpsError(code,message);}
 function text(value,label,max=120){if(typeof value!=='string'||!value.trim()||value.trim().length>max)fail('invalid-argument',`Revisa el campo ${label} (máximo ${max} caracteres).`);return value.trim();}
 function id(value){if(typeof value!=='string'||!value||value.length>128||!/^[A-Za-z0-9_-]+$/.test(value))fail('invalid-argument','Identificador no válido.');return value;}
-function sampleData(value){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!FIELDS.includes(k)))fail('invalid-argument','Muestra no válida.');return Object.fromEntries(FIELDS.map(k=>[k,text(value[k],k,k==='sabor'?200:120)]));}
-function resultData(data){if(!['conforme','no_conforme'].includes(data.result))fail('invalid-argument','Selecciona conforme o no conforme.');if(typeof data.observations!=='string'||data.observations.length>2000)fail('invalid-argument','Las observaciones no pueden superar los 2000 caracteres.');const observations=data.observations.trim();if(data.result==='no_conforme'&&!observations)fail('invalid-argument','Describe la observación del resultado no conforme.');return {result:data.result,observations};}
+function sampleData(value){try{return {lote:text(value?.lote,'lote'),receivedDate:fechaRecepcion(value.receivedDate||''),receiptFlavors:normalizarPerfil(value.receiptFlavors)};}catch(e){fail('invalid-argument',e.message);}}
+function resultData(data,baseline){try{const counterFlavors=normalizarPerfil(data.counterFlavors);if(!baseline)fail('failed-precondition','Completa el sabor de recepción de materia prima antes de evaluar.');if(typeof data.observations!=='string'||data.observations.length>2000)fail('invalid-argument','Revisa las observaciones.');return {counterFlavors,receiptSnapshot:baseline,result:coincidenPerfiles(baseline,counterFlavors)?'conforme':'discrepancia',observations:data.observations.trim()};}catch(e){if(e.code)throw e;fail('invalid-argument',e.message);}}
 function date(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(Date.parse(value))||new Date(value).toISOString().slice(0,10)!==value)fail('invalid-argument','Fecha no válida.');return value;}
 function sampleKey(code){return createHash('sha256').update(code.normalize('NFKC').trim().toLocaleLowerCase('es')).digest('hex');}
 function participant(session,user){if(!canManage(user)&&!session.inspectorUids.includes(user.uid))fail('permission-denied','No estás asignado a esta sesión.');}
@@ -27,7 +28,7 @@ function publicSession(doc,user){const d=publicDoc(doc);d.inspectorCount=inspect
 function inspectorIds(value){if(!Array.isArray(value)||!value.length||value.length>INSPECTOR_BATCH_SIZE||new Set(value).size!==value.length)fail('invalid-argument','Selecciona inspectores sin repetir.');return value.map(id);}
 const assignment=(db,uid,sessionId)=>db.doc(`expalsa_sabor_inspectores/${uid}/sesiones/${sessionId}`);
 async function assignedInspector(ref,session,uid){
- if(session.membershipVersion===2){const snap=await ref.collection('inspectors').doc(uid).get();return snap.exists?snap.data():null;}
+ if(session.membershipVersion===2){const snap=await ref.collection('inspectors').doc(uid).get();return snap.exists&&!snap.data().removing?snap.data():null;}
  return session.inspectorUids?.includes(uid)?session.inspectors?.find(p=>p.uid===uid)||{uid}:null;
 }
 async function checkParticipant(ref,session,user){if(!canManage(user)&&!await assignedInspector(ref,session,user.uid))fail('permission-denied','No estás asignado a esta sesión.');}
@@ -97,9 +98,9 @@ function handler(db){return async request=>{
    for(const person of inspectors){tx.create(ref.collection('inspectors').doc(person.uid),{...person,addedBy:user.uid,addedAtMs:now});tx.set(assignment(db,person.uid,ref.id),{sessionId:ref.id});}
   });return {id:ref.id};
  }
- if(!['detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
+ if(!['updateSample','removeInspector','deletePhoto','replacePhoto','detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
  const sessionRef=sessions.doc(id(data.sessionId));
- if(['inspectorPhoto','uploadPhoto','listPhotos'].includes(action)){const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());await checkParticipant(sessionRef,snap.data(),user);return photoAction({db,user,sessionRef,session:snap.data(),data,id,canManage,assignedInspector});}
+ if(['inspectorPhoto','uploadPhoto','listPhotos','deletePhoto','replacePhoto'].includes(action)){const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());await checkParticipant(sessionRef,snap.data(),user);return photoAction({db,user,sessionRef,session:snap.data(),data,id,canManage,assignedInspector});}
  if(['detail','listMembers','listVotes'].includes(action)){
   const session=await sessionRef.get();if(!session.exists)fail('not-found','La sesión no existe.');live(session.data());await checkParticipant(sessionRef,session.data(),user);
   if(action==='listMembers')return membersPage(sessionRef,session.data(),user,data.cursor);
@@ -111,11 +112,22 @@ function handler(db){return async request=>{
   return {session:{...publicSession(session,user),inspectors:roster.inspectors,inspectorUids:roster.inspectors.map(p=>p.uid)},membersCursor:roster.cursor,samples:docs.map(publicDoc),evaluations,evaluationCursors,cursor:page.size>PAGE_SIZE?docs.at(-1).id:null};
  }
  if(action!=='evaluate')requireManager(user);
+ if(action==='removeInspector'){
+  requireAdmin(user);await migrateMembers(db,sessionRef,user);const uid=id(data.inspectorUid),memberRef=sessionRef.collection('inspectors').doc(uid);
+  await db.runTransaction(async tx=>{const root=await tx.get(sessionRef),member=await tx.get(memberRef);live(root.data());if(member.exists&&!member.data().removing){tx.update(memberRef,{removing:true});tx.delete(assignment(db,uid,sessionRef.id));tx.update(sessionRef,{inspectorCount:root.data().inspectorCount-1,memberRemovalPending:(root.data().memberRemovalPending||0)+1});}});
+  const member=await memberRef.get();if(!member.exists)return {done:true};
+  let query=sessionRef.collection('samples').orderBy(FieldPath.documentId());if(member.data().removalCursor)query=query.startAfter(member.data().removalCursor);
+  const page=await query.limit(20).get();
+  for(const sample of page.docs){const vote=sample.ref.collection('votes').doc(uid);await db.runTransaction(async tx=>{const root=await tx.get(sessionRef),v=await tx.get(vote);if(v.exists){tx.delete(vote);tx.update(sessionRef,{evaluationCount:Math.max(0,root.data().evaluationCount-1)});}});await db.recursiveDelete(vote);}
+  await db.runTransaction(async tx=>{const root=await tx.get(sessionRef),fresh=await tx.get(memberRef);if(!fresh.exists)return;if(page.size===20)tx.update(memberRef,{removalCursor:page.docs.at(-1).id});else{tx.delete(memberRef);tx.update(sessionRef,{memberRemovalPending:Math.max(0,(root.data().memberRemovalPending||0)-1)});}});
+  return {done:page.size<20};
+ }
  if(action==='addInspectors'){
   const inspectors=await resolveInspectors(db,inspectorIds(data.inspectorUids));await migrateMembers(db,sessionRef,user);
   return db.runTransaction(async tx=>{
    const snap=await tx.get(sessionRef);if(!snap.exists)fail('not-found','La sesión no existe.');const session=snap.data();live(session);
    const existing=await Promise.all(inspectors.map(p=>tx.get(sessionRef.collection('inspectors').doc(p.uid))));
+   if(existing.some(d=>d.exists&&d.data().removing))fail('failed-precondition','Termina de eliminar al inspector antes de agregarlo nuevamente.');
    const added=inspectors.filter((p,i)=>!existing[i].exists),now=Date.now();
    for(const person of added){tx.create(sessionRef.collection('inspectors').doc(person.uid),{...person,addedBy:user.uid,addedAtMs:now});tx.set(assignment(db,person.uid,sessionRef.id),{sessionId:sessionRef.id});}
    if(added.length)tx.update(sessionRef,{inspectorCount:session.inspectorCount+added.length,...(session.status==='closed'?{status:'open',reopenedAtMs:now}:{}),updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid});
@@ -130,25 +142,28 @@ function handler(db){return async request=>{
   if(action==='deleteSession'){requireAdmin(user);tx.update(sessionRef,{deleted:true,deletedAtMs:Date.now(),deletedBy:user.uid,...audit});return {deleted:true};}
   if(action==='addSample'){
    if(session.status!=='draft')fail('failed-precondition','Solo puedes agregar muestras a un borrador.');
-   const sample=sampleData(data.sample),ref=sessionRef.collection('samples').doc(sampleKey(sample.codigo));
+   const sample=sampleData(data.sample),ref=sessionRef.collection('samples').doc();
    if((await tx.get(ref)).exists)fail('already-exists','El código de muestra ya está registrado en esta sesión.');
    tx.create(ref,{...sample,createdBy:user.uid,createdAtMs:Date.now()});tx.update(sessionRef,{sampleCount:session.sampleCount+1,...audit});return {id:ref.id};
   }
+  if(action==='updateSample'){const ref=sessionRef.collection('samples').doc(id(data.sampleId)),old=await tx.get(ref);if(!old.exists)fail('not-found','La muestra no existe.');const update=data.receiptFlavors?sampleData({...old.data(),...data}):{receivedDate:fechaRecepcion(data.receivedDate||'')};tx.update(ref,update);return {saved:true};}
   if(action==='openSession'||action==='closeSession'){
+   if(session.memberRemovalPending)fail('failed-precondition','Termina de eliminar los inspectores antes de cambiar el estado.');
    const status=action==='openSession'?'open':'closed';canTransition(session,status);tx.update(sessionRef,{status,[status+'AtMs']:Date.now(),...audit});return {status};
   }
   const targetUid=action==='recordEvaluation'?id(data.inspectorUid):user.uid;
   const member=session.membershipVersion===2?await tx.get(sessionRef.collection('inspectors').doc(targetUid)):null;
-  const assigned=session.membershipVersion===2?(member.exists?member.data():null):(session.inspectorUids?.includes(targetUid)?session.inspectors?.find(p=>p.uid===targetUid)||{uid:targetUid}:null);
+  const assigned=session.membershipVersion===2?(member.exists&&!member.data().removing?member.data():null):(session.inspectorUids?.includes(targetUid)?session.inspectors?.find(p=>p.uid===targetUid)||{uid:targetUid}:null);
   if(action==='recordEvaluation'){
    requireManager(user);
    if(!assigned)fail('permission-denied','El inspector no está asignado a esta sesión.');
    await inspector(db,targetUid);
   }else if(canManage(user)||!assigned)fail('permission-denied','Solo los inspectores asignados pueden evaluar.');
   if(session.status!=='open')fail('failed-precondition','La sesión no está abierta para evaluar.');
-  const result=resultData(data),sampleRef=sessionRef.collection('samples').doc(id(data.sampleId)),vote=sampleRef.collection('votes').doc(targetUid);
+  const sampleRef=sessionRef.collection('samples').doc(id(data.sampleId)),vote=sampleRef.collection('votes').doc(targetUid);
   const [sample,previous]=await Promise.all([tx.get(sampleRef),tx.get(vote)]);
   if(!sample.exists)fail('not-found','La muestra no existe.');if(previous.exists)fail('already-exists','La evaluación de este inspector ya fue registrada. Actualiza la página.');
+  const result=resultData(data,perfilMateriaPrima(sample.data()));
   const portraitSnap=await tx.get(db.doc(`expalsa_calidad_fotos_perfil/${targetUid}`));
   let portrait=null;try{if(portraitSnap.exists&&typeof portraitSnap.data().jpeg==='string')portrait=imageData('data:image/jpeg;base64,'+portraitSnap.data().jpeg);}catch{}
   if(portrait)tx.create(vote.collection('photos').doc('profile'),{...portrait,kind:'profile',origin:'profile',uploadedBy:user.uid,uploadedAtMs:Date.now()});
