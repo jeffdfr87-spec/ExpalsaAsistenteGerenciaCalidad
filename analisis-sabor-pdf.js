@@ -1,4 +1,4 @@
-import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra} from './sabor-modelo.js?v=20261105-delete-admin-1';
+import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra} from './sabor-modelo.js?v=20261105-readonly-viewers-1';
 // EXPALSA - Resultados de una muestra, con jsPDF y jsPDF-AutoTable.
 const COLORS={ink:[25,53,74],navy:[8,40,61],teal:[8,125,137],muted:[104,126,139],line:[220,229,234],soft:[243,248,250]};
 const clean=value=>String(value??'').replace(/[\u2010-\u2015]/g,'-').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');

@@ -147,17 +147,6 @@ test('dos altas simultáneas del mismo inspector no duplican el contador',async(
  const results=await Promise.all([call(adminRequest({action:'addInspectors',inspectorUids:['i2']})),call(adminRequest({action:'addInspectors',inspectorUids:['i2']}))]);
  assert.equal(results.reduce((sum,r)=>sum+r.added,0),1);assert.equal(db.records.get('expalsa_sabor_sesiones/s1').inspectorCount,2);
 });
-test('Fabio y Karina operan todo el laboratorio excepto eliminar sesiones',async()=>{
- for(const name of ['fabio','karina']){
-  const initial=labSeed(),uid=name,email=name+'@expalsaevaluations.com';initial['expalsa_calidad_accesos/'+uid]={active:true,email};
-  const db=database(initial),call=handler(db),asManager=data=>({auth:{uid,token:{email}},data:{sessionId:'s1',...data}});
-  const bootstrap=await call(asManager({action:'bootstrap'}));assert.equal(bootstrap.manager,true);assert.equal(bootstrap.canDelete,false);
-  assert.equal((await call(asManager({action:'listSessions'}))).sessions.length,1);
-  await call(asManager({action:'recordEvaluation',sampleId:'m1',inspectorUid:'i1',result:'conforme',counterFlavors:normal,observations:'Normal'}));
-  await assert.rejects(call(asManager({action:'deleteSession'})),{code:'permission-denied'});assert.notEqual(db.records.get('expalsa_sabor_sesiones/s1').deleted,true);
-  await call(adminRequest({action:'deleteSession'}));await call(asManager({action:'restoreSession'}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').deleted,false);
- }
-});
 test('la foto de perfil queda asociada a la evaluación al guardar',async()=>{
  const initial=labSeed();initial['expalsa_calidad_fotos_perfil/i1']={jpeg:JPEG.slice(23)};
  const db=database(initial);await handler(db)(adminRequest());
@@ -184,7 +173,7 @@ test('no se pueden cargar fotos en sesiones eliminadas ni consultar evidencia de
  const ownCall=handler(database(labSeed()));await assert.rejects(ownCall(request({action:'inspectorPhoto',inspectorUid:'i2'})),{code:'permission-denied'});
 });
 test('la versión pública permite verificar que la función publicada está actualizada',async()=>{
- const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-delete-admin-1');
+ const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-readonly-viewers-1');
 });
 
 test('eliminar inspector borra resultados y fotos en todas las páginas y conserva otros inspectores',async()=>{
@@ -201,17 +190,19 @@ test('fotos reemplazadas y eliminadas desaparecen de consultas; managers no pued
  await call(adminRequest({action:'deletePhoto',kind:'sample',photoId:'b'}));assert.equal((await call(adminRequest({action:'listPhotos',kind:'sample'}))).photos.length,0);
 });
 
-test('Fabio y Karina conservan comparativos y correcciones; solo el administrador puede eliminar',async()=>{
+test('Fabio y Karina solo consultan resultados y PDF; todas las escrituras se rechazan sin cambiar datos',async()=>{
  for(const uid of ['fabio','karina']){
- const initial=labSeed();initial['expalsa_calidad_accesos/'+uid]={active:true,email:uid+'@expalsaevaluations.com'};
- const db=database(initial),call=handler(db),manager=data=>({auth:{uid,token:{email:uid+'@expalsaevaluations.com'}},data:{sessionId:'s1',...data}});
- const bootstrap=await call(manager({action:'bootstrap'}));assert.equal(bootstrap.canViewComparisons,true);assert.equal(bootstrap.canDelete,false);
- assert.equal((await call(manager({action:'authorizeComparisonReport'}))).allowed,true);
- await call(manager({action:'updateSample',sampleId:'m1',receivedDate:'2026-11-05'}));
- for(const action of ['deleteSession','removeInspector','deletePhoto'])await assert.rejects(call(manager({action,sampleId:'m1',inspectorUid:'i1',kind:'sample',photoId:'some-photo'})),{code:'permission-denied'});
- for(const id of ['old-photo','new-photo'])await call(manager({action:'uploadPhoto',sampleId:'m1',kind:'sample',photo:{id,dataUrl:JPEG,origin:'gallery'}}));
- assert.equal((await call(manager({action:'replacePhoto',sampleId:'m1',kind:'sample',oldPhotoId:'old-photo',newPhotoId:'new-photo'}))).previousRetained,true);
- assert.equal((await call(manager({action:'listPhotos',sampleId:'m1',kind:'sample'}))).photos.length,2);
- await call(manager({action:'recordEvaluation',sampleId:'m1',inspectorUid:'i1',counterFlavors:normal,observations:'Normal'}));
+  const initial=labSeed();initial['expalsa_calidad_accesos/'+uid]={active:true,email:uid+'@expalsaevaluations.com'};
+  const db=database(initial),call=handler(db),reader=data=>({auth:{uid,token:{email:uid+'@expalsaevaluations.com'}},data:{sessionId:'s1',sampleId:'m1',inspectorUid:'i1',...data}});
+  await call(adminRequest());const writesBefore=db.writes.length;
+  const access=await call(reader({action:'bootstrap'}));assert.equal(access.viewer,true);assert.equal(access.manager,false);assert.equal(access.canReadResults,true);assert.equal(access.canDelete,false);
+  assert.equal((await call(reader({action:'listSessions'}))).sessions.length,1);
+  assert.equal((await call(reader({action:'detail'}))).evaluations.length,1);
+  assert.equal((await call(reader({action:'listMembers'}))).inspectors.length,1);
+  assert.equal((await call(reader({action:'listVotes'}))).evaluations.length,1);
+  assert.equal((await call(reader({action:'authorizeComparisonReport'}))).allowed,true);
+  await call(reader({action:'listPhotos',kind:'sample'}));await call(reader({action:'listPhotos',kind:'evidence'}));await call(reader({action:'inspectorPhoto'}));
+  for(const action of ['createSession','inspectors','addInspectors','addSample','updateSample','openSession','closeSession','evaluate','recordEvaluation','uploadPhoto','replacePhoto','deletePhoto','deleteSession','restoreSession','removeInspector'])await assert.rejects(call(reader({action,kind:'sample',photoId:'photo'})),{code:'permission-denied'},action);
+  assert.equal(db.writes.length,writesBefore);
  }
 });

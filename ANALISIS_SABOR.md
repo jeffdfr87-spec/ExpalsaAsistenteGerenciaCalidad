@@ -11,7 +11,7 @@ Aplicación `analisis-sabor.html`, publicada por GitHub Pages. Usa la autenticac
 - El sabor predominante es el de mayor intensidad: Fuerte, Medio, Leve y Normal, en ese orden. Dentro de la misma intensidad se ordena por porcentaje y nombre. No se confunde intensidad con proporción.
 - La evaluación conserva una copia de la composición de recepción utilizada. Las evaluaciones anteriores a esta actualización no se convierten ni se sobrescriben. Los perfiles antiguos incompletos requieren completar la recepción antes de registrar otra evaluación. Los antiguos campos de talla, color, código, destino e importador se conservan internamente pero desaparecen de las pantallas y reportes nuevos.
 - El administrador elimina sesiones desde su encabezado, moviéndolas a la papelera. Eliminar un inspector elimina su asignación y todos sus resultados y fotografías de evidencia de esa sesión, sin eliminar la cuenta global. Se procesa por páginas reintentables de 20 muestras; una eliminación pendiente puede continuarse desde el botón junto al nombre.
-- Fabio y Karina, con sus cuentas activas `fabio@expalsaevaluations.com` y `karina@expalsaevaluations.com`, pueden gestionar el laboratorio y exportar reportes. Las acciones de eliminación quedan reservadas al administrador y se verifican también en el servidor.
+- Fabio y Karina, con sus cuentas activas `fabio@expalsaevaluations.com` y `karina@expalsaevaluations.com`, únicamente pueden consultar y descargar PDF. Toda operación que modifique datos se reserva al administrador y se verifica también en el servidor.
 
 ## Fotografías y PDF
 
@@ -45,6 +45,6 @@ Conformidad = coincidencias / evaluaciones recibidas × 100; Discrepancia = dife
 
 Los votos antiguos se interpretan únicamente cuando las observaciones contienen sabores explícitos del catálogo y frases reconocidas como «Le dio sabor normal» o «Normal, reproceso». No se deducen sabores a partir de la categoría manual antigua; textos ambiguos o negados requieren revisión. No se inventan porcentajes de composición para esas observaciones. La interpretación y el resumen son derivados: no sobrescriben votos, observaciones, fechas ni fotografías de los analistas.
 
-## Solo las eliminaciones son exclusivas del administrador
+## Fabio y Karina: consulta y PDF
 
-Fabio y Karina conservan todas las funciones de gestión, corrección de recepción, interpretación, porcentajes comparativos y reportes. La única restricción es eliminar: sesiones, inspectores y sus resultados, y fotografías guardadas. Estas operaciones exigen administrador validado en el servidor; los botones correspondientes no se muestran a Fabio ni a Karina. Las cuentas de inspector conservan su acceso individual previo. No se alteran resultados ni fotografías al aplicar estos permisos.
+Las cuentas activas de Fabio y Karina tienen un rol de solo lectura: sesiones, muestras, resultados, perfiles, evidencias y descarga del PDF comparativo. No pueden crear, modificar, evaluar, registrar resultados de terceros, cargar o reemplazar fotografías, administrar inspectores, abrir, cerrar, restaurar ni eliminar sesiones. El servidor usa una lista explícita de operaciones de lectura; rechaza cualquier otra acción antes de procesarla. La interfaz muestra consulta y PDF, sin formularios, CSV ni botones de gestión. El administrador conserva todas sus funciones. Los demás inspectores mantienen su flujo individual previo. No se modifican datos de analistas al aplicar estos permisos.
