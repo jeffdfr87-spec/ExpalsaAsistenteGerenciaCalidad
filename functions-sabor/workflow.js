@@ -18,7 +18,7 @@ async function workflowAction(db,ref,user,data,id){
  return db.runTransaction(async tx=>{
   const root=await tx.get(ref);if(!root.exists||root.data().deleted)throw new HttpsError('not-found','La sesión no está disponible.');
   const session=root.data();if(session.status!=='open'||session.memberRemovalPending)error('La sesión no está disponible para analizar muestras.');
-  const sampleRef=ref.collection('samples').doc(id(data.sampleId)),snap=await tx.get(sampleRef);if(!snap.exists)throw new HttpsError('not-found','La muestra no existe.');const sample=snap.data();
+  const sampleRef=ref.collection('samples').doc(id(data.sampleId)),snap=await tx.get(sampleRef);if(!snap.exists||snap.data().deleted)throw new HttpsError('not-found','La muestra no existe.');const sample=snap.data();
   if(data.action==='startSample'){
    if(!(session.membershipVersion===2?session.inspectorCount:session.inspectorUids?.length))error('Agrega inspectores antes de comenzar el análisis.');
    if(finished(sample,session))error('Esta muestra ya está finalizada.');

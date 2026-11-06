@@ -17,6 +17,14 @@ export function normalizarPerfil(filas){
  if(Math.abs(perfil.reduce((total,fila)=>total+fila.porcentaje,0)-100)>.00001)throw Error('Los porcentajes de los sabores deben sumar 100 %.');
  return ordenarSabores(perfil);
 }
+export function completarNormal(filas){
+ if(!Array.isArray(filas)||!filas.length)return normalizarPerfil(filas);
+ // Validate every submitted component before filling the unclassified remainder.
+ const total=filas.reduce((n,f)=>n+Number(String(f?.porcentaje??'').replace(',','.')),0);
+ if(!Number.isFinite(total)||total<=0||total>100)return normalizarPerfil(filas);
+ const resto=Math.round((100-total)*10000)/10000;
+ return normalizarPerfil(resto>0?[...filas,{sabor:'Normal',porcentaje:resto}]:filas);
+}
 export function perfilAnterior(texto){
  if(typeof texto!=='string'||!texto.trim())return null;
  const normal=texto.trim().toLowerCase();if(normal==='normal')return [{sabor:'Normal',porcentaje:100}];

@@ -1,4 +1,4 @@
-import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra} from './sabor-modelo.js?v=20261105-workflow-2';
+import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra} from './sabor-modelo.js?v=20261106-reception-1';
 // EXPALSA - Resultados de una muestra, con jsPDF y jsPDF-AutoTable.
 const COLORS={ink:[25,53,74],navy:[8,40,61],teal:[8,125,137],muted:[104,126,139],line:[220,229,234],soft:[243,248,250]};
 const clean=value=>String(value??'').replace(/[\u2010-\u2015]/g,'-').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -32,6 +32,7 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   ...common,startY:top,theme:'grid',body:[
    ['Sesión',clean(session.name),'Fecha',clean(session.date)],
    ['Lote',clean(sample.lote),'Fecha de recepción',clean(mostrarFechaRecepcion(sample.receivedDate))],
+   ['Letra de muestra',clean(sample.blindLetter||'Sin asignar'),'Analista de recepción',clean(sample.receptionAnalyst||'Sin registrar')],
    ...((reception.length?reception:[{sabor:'Pendiente de completar',porcentaje:null}]).map((f,i)=>[i===0?{content:'Sabor de recepción de materia prima',rowSpan:Math.max(1,reception.length)}:null,{content:clean((f.porcentaje===null?'':'Sabor ')+f.sabor+(f.porcentaje===null?'':` · ${f.porcentaje}%`)),colSpan:3,styles:{fontStyle:i===0?'bold':'normal'}}].filter(Boolean)))
   ],
   columnStyles:{0:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},1:{cellWidth:64},2:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},3:{cellWidth:64}}

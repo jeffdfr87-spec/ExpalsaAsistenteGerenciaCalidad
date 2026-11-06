@@ -25,7 +25,7 @@ async function profilePhoto(db,uid){
 }
 async function photoAction({db,user,sessionRef,session,data,id,canManage,assignedInspector}){
  const sampleRef=sessionRef.collection('samples').doc(id(data.sampleId));
- if(!(await sampleRef.get()).exists)throw new HttpsError('not-found','La muestra no existe.');
+ const initialSample=await sampleRef.get();if(!initialSample.exists||initialSample.data().deleted)throw new HttpsError('not-found','La muestra no existe.');
  let targetUid='',voteRef;
  if(data.action==='inspectorPhoto'||data.kind==='evidence'){
   targetUid=id(data.inspectorUid);
@@ -54,7 +54,7 @@ async function photoAction({db,user,sessionRef,session,data,id,canManage,assigne
  const ref=photos.doc(photoId),digest=createHash('sha256').update(photo.dataUrl).digest('hex');
  return db.runTransaction(async tx=>{
   const fresh=await tx.get(sessionRef),sample=await tx.get(sampleRef),existing=await tx.get(ref);
-  if(!fresh.exists||fresh.data().deleted===true||!sample.exists)throw new HttpsError('not-found','La sesión o la muestra ya no está disponible.');
+  if(!fresh.exists||fresh.data().deleted===true||!sample.exists||sample.data().deleted)throw new HttpsError('not-found','La sesión o la muestra ya no está disponible.');
   if(data.kind==='evidence'&&fresh.data().status!=='open'&&!(await tx.get(voteRef)).exists)throw new HttpsError('failed-precondition','Guarda primero la evaluación del inspector.');
   if(existing.exists){if(existing.data().digest!==digest)throw new HttpsError('already-exists','Esta fotografía ya fue registrada con otro contenido.');return {saved:true,id:ref.id};}
   const now=Date.now(),captured=Number(data.photo.capturedAtMs);

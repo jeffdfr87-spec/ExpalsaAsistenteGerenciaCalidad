@@ -1,4 +1,4 @@
-import {savePhotoDraft,loadPhotoDraft} from './analisis-sabor-progreso.js?v=20261105-workflow-2';
+import {savePhotoDraft,loadPhotoDraft} from './analisis-sabor-progreso.js?v=20261106-reception-1';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=c=>`${c.sessionId}/${c.sampleId}/${c.inspectorUid||''}`;
 const jpeg=value=>typeof value==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value);

@@ -5,14 +5,14 @@ const {imageData}=require('./photos');
 const JPEG=require('./photo-fixture.test');
 const {handler,sampleData,resultData,date,sampleKey,participant,canTransition,identity}=require('./flavor');
 const normal=[{sabor:'Normal',porcentaje:100}];
-const sample={lote:'L1',receivedDate:'2026-11-05',receiptFlavors:normal};
+const sample={lote:'L1',receivedDate:'2026-11-05',receiptFlavors:normal,receptionAnalyst:'',blindLetter:''};
 const inspector={uid:'i1',email:'i1@example.test',admin:false};
-test('muestra exige lote y composición completa; admite fecha pendiente',()=>{assert.deepEqual(sampleData(sample),sample);assert.throws(()=>sampleData({...sample,receiptFlavors:[{sabor:'Normal',porcentaje:90}]}));assert.equal(sampleData({...sample,receivedDate:''}).receivedDate,'');});
+test('muestra completa Normal sin alterar sabores ingresados y conserva metadatos',()=>{assert.deepEqual(sampleData(sample),sample);assert.deepEqual(sampleData({...sample,receiptFlavors:[{sabor:'Tierra Leve',porcentaje:30}]}).receiptFlavors,[{sabor:'Tierra Leve',porcentaje:30},{sabor:'Normal',porcentaje:70}]);assert.equal(sampleData({...sample,receivedDate:''}).receivedDate,'');});
 test('resultado compara sabores e intensidades e ignora porcentajes',()=>{
  const baseline=[{sabor:'Tierra Medio',porcentaje:20},{sabor:'Tierra Leve',porcentaje:30},{sabor:'Normal',porcentaje:50}];
  assert.equal(resultData({counterFlavors:[{sabor:'Normal',porcentaje:20},{sabor:'Tierra Leve',porcentaje:70},{sabor:'Tierra Medio',porcentaje:10}],observations:''},baseline).result,'conforme');
  assert.equal(resultData({counterFlavors:normal,observations:'',result:'conforme'},baseline).result,'discrepancia');
- assert.throws(()=>resultData({counterFlavors:[{sabor:'Normal',porcentaje:99}],observations:''},baseline));
+ assert.equal(resultData({counterFlavors:[{sabor:'Normal',porcentaje:99}],observations:''},baseline).counterFlavors[0].porcentaje,100);
 });
 test('códigos equivalentes producen una única muestra',()=>{
  assert.equal(sampleKey(' MP-01 '),sampleKey('mp-01'));
@@ -56,7 +56,7 @@ function database(seed){
   });queue=result.catch(()=>{});return result;
  }};
 }
-function seed(){return {'expalsa_calidad_accesos/i1':{active:true,email:inspector.email},'expalsa_sabor_sesiones/s1':{status:'open',activeSampleId:'m1',sampleCount:1,evaluationCount:0,inspectorUids:['i1']},'expalsa_sabor_sesiones/s1/samples/m1':sample};}
+function seed(){return {'expalsa_calidad_accesos/i1':{active:true,email:inspector.email},'expalsa_sabor_sesiones/s1':{status:'open',activeSampleId:'m1',sampleCount:1,evaluationCount:0,inspectorUids:['i1']},'expalsa_sabor_sesiones/s1/samples/m1':{...sample}};}
 const request=data=>({auth:{uid:'i1',token:{email:inspector.email}},data:{action:'evaluate',sessionId:'s1',sampleId:'m1',result:'conforme',counterFlavors:normal,observations:'',...data}});
 test('la evaluación usa la cuenta autenticada e impide un segundo envío',async()=>{
  const db=database(seed()),call=handler(db);await call(request({inspectorUid:'i2'}));
@@ -173,7 +173,7 @@ test('no se pueden cargar fotos en sesiones eliminadas ni consultar evidencia de
  const ownCall=handler(database(labSeed()));await assert.rejects(ownCall(request({action:'inspectorPhoto',inspectorUid:'i2'})),{code:'permission-denied'});
 });
 test('la versión pública permite verificar que la función publicada está actualizada',async()=>{
- const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261105-workflow-2');
+ const version=await handler(database({}))({data:{action:'serviceInfo'}});assert.equal(version.version,'20261106-reception-1');
 });
 
 test('eliminar inspector borra resultados y fotos en todas las páginas y conserva otros inspectores',async()=>{
@@ -202,7 +202,7 @@ test('Fabio y Karina solo consultan resultados y PDF; todas las escrituras se re
   assert.equal((await call(reader({action:'listVotes'}))).evaluations.length,1);
   assert.equal((await call(reader({action:'authorizeComparisonReport'}))).allowed,true);
   await call(reader({action:'listPhotos',kind:'sample'}));await call(reader({action:'listPhotos',kind:'evidence'}));await call(reader({action:'inspectorPhoto'}));
-  for(const action of ['createSession','inspectors','addInspectors','addSample','updateSample','openSession','closeSession','evaluate','recordEvaluation','uploadPhoto','replacePhoto','deletePhoto','deleteSession','restoreSession','removeInspector','startSample','finishSample','saveProgress','loadProgress'])await assert.rejects(call(reader({action,kind:'sample',photoId:'photo'})),{code:'permission-denied'},action);
+  for(const action of ['deleteSample','createSession','inspectors','addInspectors','addSample','updateSample','openSession','closeSession','evaluate','recordEvaluation','uploadPhoto','replacePhoto','deletePhoto','deleteSession','restoreSession','removeInspector','startSample','finishSample','saveProgress','loadProgress'])await assert.rejects(call(reader({action,kind:'sample',photoId:'photo'})),{code:'permission-denied'},action);
   assert.equal(db.writes.length,writesBefore);
  }
 });
@@ -245,4 +245,43 @@ test('crear muestra con identificador de solicitud permite reintentar sin duplic
 test('inicio requiere inspectores y la creación sin requestId usa un ID automático válido',async()=>{
  const initial=labSeed();initial['expalsa_sabor_sesiones/s1'].inspectorUids=[];const call=handler(database(initial));await assert.rejects(call(adminRequest({action:'startSample'})),{code:'failed-precondition'});
  const draft=labSeed();draft['expalsa_sabor_sesiones/s1'].status='draft';const db=database(draft);await handler(db)(adminRequest({action:'addSample',sample}));assert.equal(db.records.get('expalsa_sabor_sesiones/s1').sampleCount,2);
+});
+
+test('letras únicas por sesión, fecha real, nombre y Normal automático en cualquier etapa',async()=>{
+ for(const status of ['draft','open','closed']){
+  const initial=labSeed();initial['expalsa_sabor_sesiones/s1'].status=status;
+  const db=database(initial),call=handler(db);
+  const input={...sample,blindLetter:'A',receptionAnalyst:'Ana Recepción',receivedDate:'05/11/2026',receiptFlavors:[{sabor:'Tierra Leve',porcentaje:30}]};
+  await call(adminRequest({action:'addSample',requestId:'new-letter',sample:input}));
+  const saved=db.records.get('expalsa_sabor_sesiones/s1/samples/new-letter');assert.equal(saved.receivedDate,'2026-11-05');assert.equal(saved.blindLetter,'A');assert.equal(saved.receptionAnalyst,'Ana Recepción');assert.deepEqual(saved.receiptFlavors,[{sabor:'Tierra Leve',porcentaje:30},{sabor:'Normal',porcentaje:70}]);
+  assert.equal(db.records.get('expalsa_sabor_sesiones/s1').status,status==='closed'?'open':status);
+  await assert.rejects(call(adminRequest({action:'addSample',requestId:'duplicate',sample:input})),{code:'already-exists'});
+  await assert.rejects(call(adminRequest({action:'updateSample',sampleId:'m1',...input})),{code:'already-exists'});
+  await assert.rejects(call(adminRequest({action:'addSample',sample:{...input,receivedDate:''}})),{code:'invalid-argument'});
+  await assert.rejects(call(adminRequest({action:'addSample',sample:{...input,blindLetter:'AA'}})),{code:'invalid-argument'});
+  await assert.rejects(call(adminRequest({action:'addSample',sample:{...input,blindLetter:'B',receiptFlavors:[{sabor:'Tierra Leve',porcentaje:110}]}})),{code:'invalid-argument'});
+ }
+});
+
+test('eliminar muestra es idempotente, conserva otras evaluaciones y cuenta correctamente al retirar inspectores',async()=>{
+ const initial=labSeed(),root='expalsa_sabor_sesiones/s1';
+ Object.assign(initial[root],{membershipRevision:0,finishedSampleCount:1,sampleCount:2,evaluationCount:2});
+ initial[root+'/samples/m1'].finishedRevision=0;
+ initial[root+'/samples/m1/votes/i1']={sampleId:'m1',inspectorUid:'i1',counterFlavors:normal,observations:'Original uno'};
+ initial[root+'/samples/m2']={...sample,lote:'OTRO'};
+ initial[root+'/samples/m2/votes/i1']={sampleId:'m2',inspectorUid:'i1',counterFlavors:normal,observations:'Original dos'};
+ const db=database(initial),call=handler(db),other=JSON.stringify(initial[root+'/samples/m2/votes/i1']);
+ await call(adminRequest({action:'deleteSample'}));await call(adminRequest({action:'deleteSample'}));
+ assert.equal(db.records.get(root).sampleCount,1);assert.equal(db.records.get(root).evaluationCount,1);assert.equal(db.records.get(root).finishedSampleCount,0);assert.equal(db.records.get(root).activeSampleId,'');
+ assert.equal(JSON.stringify(db.records.get(root+'/samples/m2/votes/i1')),other);
+ assert.equal((await call(adminRequest({action:'detail'}))).samples.length,1);
+ for(const action of ['startSample','updateSample','listVotes','listPhotos'])await assert.rejects(call(adminRequest({action,kind:'sample',...sample})),{code:'not-found'});
+ await call(adminRequest({action:'removeInspector'}));assert.equal(db.records.get(root).evaluationCount,0);
+ assert.ok(db.records.has(root+'/samples/m1/votes/i1'),'El registro archivado se conserva y no se descuenta dos veces');
+});
+
+test('los inspectores reciben la letra sin revelar lote ni composición de recepción',async()=>{
+ const initial=labSeed();initial['expalsa_sabor_sesiones/s1/samples/m1']={...sample,blindLetter:'B',receptionAnalyst:'Privado'};
+ const db=database(initial);await handler(db)(request());const result=await handler(db)(request({action:'detail'}));
+ assert.equal(result.samples[0].blindLetter,'B');assert.equal(result.samples[0].lote,undefined);assert.equal(result.samples[0].receiptFlavors,undefined);assert.equal(result.evaluations[0].receiptSnapshot,undefined);
 });
