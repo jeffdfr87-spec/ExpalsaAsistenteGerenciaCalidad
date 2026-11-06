@@ -11,3 +11,5 @@
 @media(max-width:600px){.analysis-summary{grid-template-columns:1fr}.inspector-photo-area{order:-1;max-width:170px;justify-self:center}.flavor-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.analysis-workbench .actions{align-items:stretch}.analysis-workbench .actions>.button{white-space:normal}.flavor-camera .dialog-body{padding:12px}}
 
 .flavor-row{display:flex;gap:8px;align-items:center;margin:10px 0}.flavor-row select{flex:1;min-width:130px}.percent{display:flex;align-items:center;gap:6px}.percent input{width:100px}.flavor-line{margin:5px 0}.flavor-editor{margin-bottom:20px}.flavor-photo figcaption .actions{gap:4px;flex-wrap:wrap}@media(max-width:600px){.flavor-row{flex-wrap:wrap}.flavor-row select{width:100%}.percent input{width:90px}}
+
+.result-comparison{display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;white-space:nowrap}

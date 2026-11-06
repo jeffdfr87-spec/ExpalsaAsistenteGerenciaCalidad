@@ -36,3 +36,11 @@ npx -y firebase-tools@latest deploy --only functions:analisis-sabor:manageFlavor
 ```
 
 Desplegar la función y verificar `serviceInfo` antes de publicar la interfaz. Los módulos `sabor-modelo.js` y `functions-sabor/sensory.js` contienen la misma lógica para navegador y servidor; actualizar ambos a la vez. Los ejemplos de pruebas nunca se cargan en la base de producción.
+
+## Porcentajes de conformidad
+
+Tabla, modal, vista individual, PDF y CSV comparan cada contramuestra con la recepción actual mediante la misma función. Se comparan conjuntos de sabores e intensidades, ignorando los porcentajes de composición. Los resultados se agrupan en una sola pasada por muestra e inspector; no se duplican evaluaciones ni se cuentan inspectores retirados.
+
+Conformidad = coincidencias / evaluaciones recibidas × 100; Discrepancia = diferencias / evaluaciones recibidas × 100. Se redondea a dos decimales (2 de 3 = 66.67 %; 1 de 3 = 33.33 %). Las evaluaciones no enviadas siguen pendientes y no se consideran discrepancias. Durante una sesión incompleta los porcentajes son parciales. Los casos sin composición interpretable se muestran como Por revisar y participan en el denominador para no inflar la conformidad.
+
+Los votos antiguos se interpretan únicamente cuando las observaciones contienen sabores explícitos del catálogo y frases reconocidas como «Le dio sabor normal» o «Normal, reproceso». No se deducen sabores a partir de la categoría manual antigua; textos ambiguos o negados requieren revisión. No se inventan porcentajes de composición para esas observaciones. La interpretación y el resumen son derivados: no sobrescriben votos, observaciones, fechas ni fotografías de los analistas.

@@ -1,4 +1,4 @@
-import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores} from './sabor-modelo.js?v=20261105-sensory-1';
+import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra} from './sabor-modelo.js?v=20261105-percent-1';
 // EXPALSA - Resultados de una muestra, con jsPDF y jsPDF-AutoTable.
 const COLORS={ink:[25,53,74],navy:[8,40,61],teal:[8,125,137],muted:[104,126,139],line:[220,229,234],soft:[243,248,250]};
 const clean=value=>String(value??'').replace(/[\u2010-\u2015]/g,'-').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -10,16 +10,15 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
  const votes=new Map(evaluations.filter(v=>v.sampleId===sample.id).map(v=>[v.inspectorUid,v]));
  const reception=ordenarSabores(perfilMateriaPrima(sample)||[]);
+ const stats=indexarComparaciones([sample],evaluations,inspectors).get(sample.id);
  const rows=inspectors.map(person=>{
   const vote=votes.get(person.uid);
   const name=person.name||person.email||'Inspector';
   const identity=[name,person.email&&person.email!==name?person.email:'',vote?.createdAtMs?dateTime(vote.createdAtMs):''].filter(Boolean).join('\n');
-  return [clean(identity),vote?(vote.result==='conforme'?'Conforme':'Discrepancia'):'Pendiente',clean([vote?.counterFlavors?textoPerfil(vote.counterFlavors):'Composición no registrada',vote?.observations||''].filter(Boolean).join('\n'))];
+  return [clean(identity),compararContramuestra(sample,vote).label,clean([vote?.counterFlavors?textoPerfil(vote.counterFlavors):'',vote?.observations||''].filter(Boolean).join('\n'))];
  });
- const received=inspectors.filter(p=>votes.has(p.uid)).length;
- const good=inspectors.filter(p=>votes.get(p.uid)?.result==='conforme').length;
- const bad=received-good,pending=inspectors.length-received;
- const result=!received?'Sin resultados':good&&bad?'Discrepancia':bad?'Discrepancia':'Conforme';
+ const received=stats.total,good=stats.good,bad=stats.bad,pending=stats.pending;
+ const result=!received?'Sin resultados':[good?`Conformidad ${stats.goodPercent}%`:'',bad?`Discrepancia ${stats.badPercent}%`:'',stats.review?`Por revisar ${stats.reviewPercent}%`:''].filter(Boolean).join(' | ');
  const write=(value,x,y,size=9,style='normal',color=COLORS.ink,options={})=>{
   pdf.setFont('helvetica',style);pdf.setFontSize(size);pdf.setTextColor(...color);pdf.text(Array.isArray(value)?value.map(clean):clean(value),x,y,options);
  };
@@ -38,11 +37,12 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   columnStyles:{0:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},1:{cellWidth:64},2:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},3:{cellWidth:64}}
  });
  let y=pdf.lastAutoTable.finalY+9;
- const summary=`Evaluaciones: ${received} de ${inspectors.length}  |  Conformes: ${good}  |  Discrepancias: ${bad}  |  Pendientes: ${pending}`;
+ const summary=`Evaluaciones: ${received} de ${inspectors.length}  |  Conformes: ${good}  |  Discrepancias: ${bad}  |  Por revisar: ${stats.review}  |  Pendientes: ${pending}`;
  pdf.setFont('helvetica','normal');pdf.setFontSize(9);
  const summaryLines=pdf.splitTextToSize(summary,182);
  if(y+summaryLines.length*5+18>277){pdf.addPage();y=top;}
- write(`${pending?'Resultado parcial':'Resultado'}: ${result}`,14,y,10,'bold',COLORS.teal);
+ pdf.setFont('helvetica','bold');pdf.setFontSize(10);const resultLines=pdf.splitTextToSize(`${pending?'Resultado parcial':'Resultado'}: ${result}`,182);
+ write(resultLines,14,y,10,'bold',COLORS.teal);y+=(resultLines.length-1)*5;
  write(summaryLines,14,y+6,8.5,'normal',COLORS.muted);
  // AutoTable handles long observations and repeats the table header on each page.
  autoTable(pdf,{

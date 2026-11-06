@@ -27,3 +27,31 @@ export function perfilAnterior(texto){
 export function perfilMateriaPrima(muestra){try{return normalizarPerfil(muestra.receiptFlavors);}catch{return perfilAnterior(muestra.sabor);}}
 export function coincidenPerfiles(recepcion,contramuestra){const a=normalizarPerfil(recepcion).map(f=>f.sabor).sort(),b=normalizarPerfil(contramuestra).map(f=>f.sabor).sort();return a.length===b.length&&a.every((s,i)=>s===b[i]);}
 export function textoPerfil(perfil){return ordenarSabores(perfil).map(f=>`${f.sabor} ${f.porcentaje}%`).join(' | ');}
+// Interpret only explicit flavor statements in old observations. Never infer from the old manual flag.
+export function saboresContramuestra(voto){
+ if(!voto)return null;
+ if(voto.counterFlavors!==undefined){try{return normalizarPerfil(voto.counterFlavors).map(f=>f.sabor);}catch{return null;}}
+ let texto=String(voto.observations||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+ const sabores=[];
+ texto=texto.replace(/\b(normal|(?:tierra|fito|combustible)\s+(?:leve|medio|fuerte))\b(?:\s*\d+(?:[.,]\d+)?\s*%)?/g,(match,label)=>{const sabor=SABORES.find(s=>s.toLowerCase()===label.replace(/\s+/g,' '));if(sabor)sabores.push(sabor);return ' ';});
+ texto=texto.replace(/\b(?:le dio|sabor|reproceso)\b/g,' ').replace(/[\s,;|/.()+\-]+/g,' ').replace(/\by\b/g,' ').trim();
+ return sabores.length&&!texto?[...new Set(sabores)].sort():null;
+}
+export function compararContramuestra(muestra,voto){
+ if(!voto)return {status:'pendiente',label:'Pendiente',sabores:null};
+ const recepcion=perfilMateriaPrima(muestra),sabores=saboresContramuestra(voto);
+ if(!recepcion||!sabores)return {status:'revisar',label:'Por revisar',sabores};
+ const esperados=recepcion.map(f=>f.sabor).sort(),actuales=[...sabores].sort();
+ const conforme=esperados.length===actuales.length&&esperados.every((s,i)=>s===actuales[i]);
+ return {status:conforme?'conforme':'discrepancia',label:conforme?'Conforme':'Discrepancia',sabores};
+}
+export function porcentajeComparacion(cantidad,total){return total?(cantidad*100/total).toFixed(2).replace(/\.00$/,''):'0';}
+export function indexarComparaciones(muestras,evaluaciones,inspectores){
+ const index=new Map(muestras.map(m=>[m.id,{sample:m,votes:[],good:0,bad:0,review:0,byInspector:new Map()}]));
+ const asignados=Array.isArray(inspectores)?new Set(inspectores.filter(p=>!p.removing).map(p=>p.uid)):null;
+ for(const voto of evaluaciones){const stats=index.get(voto.sampleId);if(!stats||(asignados&&!asignados.has(voto.inspectorUid))||stats.byInspector.has(voto.inspectorUid))continue;
+  const comparison=compararContramuestra(stats.sample,voto);stats.byInspector.set(voto.inspectorUid,{vote:voto,...comparison});stats.votes.push(voto);if(comparison.status==='conforme')stats.good++;else if(comparison.status==='discrepancia')stats.bad++;else stats.review++;
+ }
+ for(const stats of index.values()){stats.total=stats.votes.length;stats.pending=Math.max(0,(asignados?.size||0)-stats.total);stats.goodPercent=porcentajeComparacion(stats.good,stats.total);stats.badPercent=porcentajeComparacion(stats.bad,stats.total);stats.reviewPercent=porcentajeComparacion(stats.review,stats.total);}
+ return index;
+}

@@ -1,7 +1,7 @@
-import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,fechaRecepcion} from './sabor-modelo.js?v=20261105-sensory-1';
-import {perfilHtml,editorPerfil,leerPerfil} from './sabor-ui.js?v=20261105-sensory-1';
-import {createFlavorMedia} from './analisis-sabor-media.js?v=20261105-sensory-1';
-import {downloadFlavorResults} from './analisis-sabor-pdf.js?v=20261105-sensory-1';
+import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,fechaRecepcion,indexarComparaciones,compararContramuestra,saboresContramuestra} from './sabor-modelo.js?v=20261105-percent-1';
+import {perfilHtml,editorPerfil,leerPerfil} from './sabor-ui.js?v=20261105-percent-1';
+import {createFlavorMedia} from './analisis-sabor-media.js?v=20261105-percent-1';
+import {downloadFlavorResults} from './analisis-sabor-pdf.js?v=20261105-percent-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserSessionPersistence} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-functions.js';
@@ -13,7 +13,7 @@ const state={user:null,admin:false,canDelete:false,role:'',inspectors:[],session
 const api=async(action,data={})=>(await callable({action,...data})).data;
 const media=createFlavorMedia({api,getState:()=>state,notify});
 const count=s=>s.inspectorCount??s.inspectorUids?.length??0;
-const labels={draft:'Borrador',open:'En evaluación',closed:'Cerrada',conforme:'Conforme',no_conforme:'Registro anterior',discrepancia:'Discrepancia'};
+const labels={draft:'Borrador',open:'En evaluación',closed:'Cerrada',conforme:'Conforme',no_conforme:'Discrepancia',discrepancia:'Discrepancia'};
 const fields=[['lote','Lote'],['receivedDate','Fecha de recepción'],['receiptFlavors','Sabor de recepción de materia prima']];
 const fieldValue=(m,k)=>k==='receiptFlavors'?textoPerfil(perfilMateriaPrima(m)||[]):k==='receivedDate'?mostrarFechaRecepcion(m[k]):m[k];
 const sampleDetails=m=>`<div><dt>Lote</dt><dd><strong>${esc(m.lote)}</strong></dd></div><div><dt>Fecha de recepción</dt><dd>${esc(mostrarFechaRecepcion(m.receivedDate))}${state.admin?` <button type="button" class="quiet" data-action="edit-reception" data-id="${esc(m.id)}">Editar recepción</button>`:''}</dd></div><div><dt>Sabor de recepción de materia prima</dt><dd>${perfilHtml(perfilMateriaPrima(m))}</dd></div>`;
@@ -47,8 +47,9 @@ async function detailPage(sessionId,cursor=null,roster=true){
 }
 async function loadDetail(id,more=false){const generation=state.generation;const r=await detailPage(id,more?state.samplesCursor:null);if(generation!==state.generation)return;state.session=r.session;state.samples=more?[...state.samples,...r.samples]:r.samples;state.evaluations=more?[...state.evaluations,...r.evaluations]:r.evaluations;state.samplesCursor=r.cursor;renderDetail();}
 
-function sampleStats(id){const votes=state.evaluations.filter(e=>e.sampleId===id);const good=votes.filter(e=>e.result==='conforme').length,bad=votes.length-good;return {votes,good,bad};}
-function resultTag(stats){if(!stats.votes.length)return tag('draft','Sin resultados');if(stats.good&&stats.bad)return tag('mixed','Discrepancia');return stats.bad?tag('mixed','Discrepancia'):tag('good','Conforme');}
+function sampleStats(id){return (state.comparisonIndex||indexarComparaciones(state.samples,state.evaluations,state.session?.inspectors)).get(id);}
+function comparisonTag(sample,vote){const r=compararContramuestra(sample,vote);return tag(r.status==='conforme'?'good':r.status==='discrepancia'?'mixed':'draft',r.label);}
+function resultTag(stats){if(!stats?.total)return tag('draft','Sin resultados');return `<span class="result-comparison" title="Porcentajes sobre ${stats.total} evaluaciones recibidas">${stats.good?tag('good',`Conformidad ${stats.goodPercent}%`):''}${stats.bad?tag('mixed',`Discrepancia ${stats.badPercent}%`):''}${stats.review?tag('draft',`Por revisar ${stats.reviewPercent}%`):''}</span>`;}
 function analysisWorkbench(){
  const s=state.session;
  const sample=state.samples.find(m=>m.id===state.analysisSampleId)||state.samples[0];
@@ -65,10 +66,11 @@ function analysisWorkbench(){
    <label class="field">Muestra<select id="analysis-sample">${state.samples.map(m=>`<option value="${esc(m.id)}" ${m.id===sample.id?'selected':''}>Lote ${esc(m.lote)}</option>`).join('')}</select></label>
    <label class="field">Inspector que analiza<select id="analysis-inspector">${people.map(p=>`<option value="${esc(p.uid)}" ${p.uid===selected?.uid?'selected':''}>${esc(p.name||p.email)}${votes.some(v=>v.inspectorUid===p.uid)?' · Registrado':' · Pendiente'}</option>`).join('')}</select></label>
   </div><div class="analysis-summary"><dl class="details analysis-details">${sampleDetails(sample)}</dl><div id="inspector-photo-area" class="inspector-photo-area"><div class="portrait-empty">Cargando foto de perfil…</div></div></div><section class="sample-photo-section"><div class="actions"><h3>Fotos de la muestra</h3><button class="button" type="button" data-media-action="add-sample-photos">Subir desde galería</button><button class="button" type="button" data-media-action="sample-camera">Tomar foto</button></div><div class="flavor-photo-grid" id="sample-photo-preview"></div><div id="sample-photo-pending"></div></section>
-  ${vote?`<div class="saved-evaluation"><h3>Evaluación registrada</h3><p>${tag(vote.result==='conforme'?'good':'bad',labels[vote.result])}</p><p>${esc(vote.observations||'Sin observaciones.')} ${perfilHtml(vote.counterFlavors)}</p><p class="hint">${stamp(vote.createdAtMs)}${vote.entryMode==='laboratory'?' · Registrada en laboratorio por el administrador':''}</p></div>`:!selected?'<p class="hint">Agrega un inspector para analizar la muestra.</p>':s.status!=='open'?'<p class="hint">Abre la evaluación para comenzar a registrar resultados.</p>':`<form id="lab-evaluation-form"><label class="field">Sabor de contramuestra</label>${editorPerfil(analysisDrafts.get(`${s.id}/${sample.id}/${selected?.uid}`)?.rows)}<label class="field">Observaciones<textarea name="observations" maxlength="2000" placeholder="Observaciones del análisis">${esc(analysisDrafts.get(`${s.id}/${sample.id}/${selected?.uid}`)?.notes||'')}</textarea></label><p class="error" role="alert"></p><div class="actions"><button type="submit" class="button primary">Guardar evaluación del inspector</button><button class="button" type="button" data-media-action="open-camera">Tomar foto con cámara trasera</button></div></form>`}
+  ${vote?`<div class="saved-evaluation"><h3>Evaluación registrada</h3><p>${comparisonTag(sample,vote)}</p><p>${esc(vote.observations||'Sin observaciones.')} ${vote.counterFlavors?perfilHtml(vote.counterFlavors):''}</p><p class="hint">${stamp(vote.createdAtMs)}${vote.entryMode==='laboratory'?' · Registrada en laboratorio por el administrador':''}</p></div>`:!selected?'<p class="hint">Agrega un inspector para analizar la muestra.</p>':s.status!=='open'?'<p class="hint">Abre la evaluación para comenzar a registrar resultados.</p>':`<form id="lab-evaluation-form"><label class="field">Sabor de contramuestra</label>${editorPerfil(analysisDrafts.get(`${s.id}/${sample.id}/${selected?.uid}`)?.rows)}<label class="field">Observaciones<textarea name="observations" maxlength="2000" placeholder="Observaciones del análisis">${esc(analysisDrafts.get(`${s.id}/${sample.id}/${selected?.uid}`)?.notes||'')}</textarea></label><p class="error" role="alert"></p><div class="actions"><button type="submit" class="button primary">Guardar evaluación del inspector</button><button class="button" type="button" data-media-action="open-camera">Tomar foto con cámara trasera</button></div></form>`}
   <section class="evidence-section"><div class="actions"><h3>Evidencia del análisis</h3>${vote?'<button class="button" type="button" data-media-action="open-camera">Tomar foto con cámara trasera</button>':''}<button id="save-pending-evidence" class="button primary" type="button" data-media-action="save-evidence" hidden>Guardar evidencias</button></div><div id="analysis-evidence"></div></section></div></section>`;
 }
 function renderDetail(){
+ state.comparisonIndex=indexarComparaciones(state.samples,state.evaluations,state.session.inspectors);
  const s=state.session,admin=state.admin,filter=state.filter.toLocaleLowerCase('es');
  const mine=state.evaluations.filter(e=>e.inspectorUid===state.user.uid);
  const samples=state.samples.filter(m=>fields.some(([key])=>String(fieldValue(m,key)).toLocaleLowerCase('es').includes(filter)));
@@ -76,7 +78,7 @@ function renderDetail(){
  const rows=samples.map(m=>{
   const stats=sampleStats(m.id),my=mine.find(e=>e.sampleId===m.id),received=stats.votes.length,total=count(s);
   const action=admin?`${s.status==='open'?`<button class="button primary" data-action="begin-analysis" data-id="${esc(m.id)}">Analizar muestra</button>`:''}<button class="button" data-action="results" data-id="${esc(m.id)}">Ver resultados</button>`:`<button class="button" data-action="evaluate" data-id="${esc(m.id)}">${my?'Ver evaluación':s.status==='open'?'Evaluar':'Ver muestra'}</button>`;
-  return `<tr><td><strong>Lote ${esc(m.lote)}</strong></td><td>${esc(mostrarFechaRecepcion(m.receivedDate))}</td><td>${perfilHtml(perfilMateriaPrima(m))}</td><td>${admin?`${received} / ${total}<div class="progress"><span style="width:${total?Math.round(received/total*100):0}%"></span></div>`:my?tag(my.result==='conforme'?'good':'bad',labels[my.result]):tag('draft','Pendiente')}</td><td>${admin?resultTag(stats):''}</td><td><div class="actions">${action}</div></td></tr>`;
+  return `<tr><td><strong>Lote ${esc(m.lote)}</strong></td><td>${esc(mostrarFechaRecepcion(m.receivedDate))}</td><td>${perfilHtml(perfilMateriaPrima(m))}</td><td>${admin?`${received} / ${total}<div class="progress"><span style="width:${total?Math.round(received/total*100):0}%"></span></div>`:my?comparisonTag(m,my):tag('draft','Pendiente')}</td><td>${admin?resultTag(stats):''}</td><td><div class="actions">${action}</div></td></tr>`;
  }).join('');
  root.innerHTML=`<a class="back" href="#" data-action="back">← Todas las sesiones</a>
  <section class="session-banner"><div>${tag(s.status)}<h2>${esc(s.name)}</h2><p>${esc(s.date)} · ${count(s)} inspectores asignados</p></div><div class="actions">
@@ -112,7 +114,7 @@ async function addInspectorsDialog(){
 function newSample(){media.resetSampleDraft();modal('Agregar muestra',`<div class="form-grid"><label class="field">Lote<input name="lote" maxlength="120" required></label><label class="field">Fecha de recepción<input name="receivedDate" placeholder="05/11/2026" inputmode="numeric"></label><div class="full"><label class="field">Sabor de recepción de materia prima</label>${editorPerfil()}</div><label class="field full">Fotografías de la muestra<input id="new-sample-photos" type="file" accept="image/*" multiple></label><button type="button" class="button" data-media-action="draft-camera">Tomar foto de la muestra</button><div class="flavor-photo-grid full" id="new-sample-photo-preview"></div></div>`,'Guardar muestra','sample-form');}
 function editReception(id){const m=state.samples.find(x=>x.id===id);state.editSampleId=id;modal(`Recepción · Lote ${m.lote}`,`<label class="field">Fecha de recepción<input name="receivedDate" placeholder="05/11/2026" value="${esc(m.receivedDate?m.receivedDate.split('-').reverse().join('/'): '')}"></label><label class="field">Sabor de recepción de materia prima</label>${editorPerfil(perfilMateriaPrima(m)||[{sabor:'Normal',porcentaje:''}])}<button type="submit" class="button" data-date-only="true" formnovalidate>Guardar solo fecha</button><p class="hint">${perfilMateriaPrima(m)?'Los resultados ya registrados conservan su recepción original.':esc(m.sabor||'Completa la composición de recepción.')}</p>`,'Guardar recepción','reception-form');}
 function evaluate(id){const m=state.samples.find(m=>m.id===id);const vote=state.evaluations.find(e=>e.sampleId===id&&e.inspectorUid===state.user.uid);state.editSampleId=id;const canEvaluate=state.session.status==='open'&&!vote;
- modal(`Lote ${m.lote}`,`<dl class="details">${sampleDetails(m)}</dl>${vote?`<p>${tag(vote.result==='conforme'?'good':'bad',labels[vote.result])}</p><p>${esc(vote.observations||'Sin observaciones.')} ${perfilHtml(vote.counterFlavors)}</p><p class="hint">Registrada el ${stamp(vote.createdAtMs)}. La evaluación enviada no puede modificarse.</p>`:canEvaluate?`<label class="field">Sabor de contramuestra</label>${editorPerfil()}<label class="field">Observaciones<textarea name="observations" maxlength="2000"></textarea></label>`:'<p class="hint">La sesión no está abierta para evaluar.</p>'}`,canEvaluate?'Enviar evaluación':'',canEvaluate?'evaluation-form':'');
+ modal(`Lote ${m.lote}`,`<dl class="details">${sampleDetails(m)}</dl>${vote?`<p>${comparisonTag(m,vote)}</p><p>${esc(vote.observations||'Sin observaciones.')} ${vote.counterFlavors?perfilHtml(vote.counterFlavors):''}</p><p class="hint">Registrada el ${stamp(vote.createdAtMs)}. La evaluación enviada no puede modificarse.</p>`:canEvaluate?`<label class="field">Sabor de contramuestra</label>${editorPerfil()}<label class="field">Observaciones<textarea name="observations" maxlength="2000"></textarea></label>`:'<p class="hint">La sesión no está abierta para evaluar.</p>'}`,canEvaluate?'Enviar evaluación':'',canEvaluate?'evaluation-form':'');
 }
 function results(id){
  const m=state.samples.find(m=>m.id===id),stats=sampleStats(id);
@@ -120,8 +122,8 @@ function results(id){
   `<dl class="details">${sampleDetails(m)}</dl>
   <div class="report">${resultTag(stats)}<span class="hint">${stats.votes.length} de ${count(state.session)} evaluaciones</span></div>
   <div class="table-wrap"><table><thead><tr><th>Inspector</th><th>Resultado</th><th>Observaciones</th></tr></thead><tbody>${state.session.inspectors.map(p=>{
-   const v=stats.votes.find(v=>v.inspectorUid===p.uid);
-   return `<tr><td>${esc(p.name||p.email)}${p.removing?' · Eliminación pendiente':''}${state.canDelete?` <button type="button" class="quiet danger" data-action="remove-inspector" data-uid="${esc(p.uid)}">Eliminar</button>`:''}${v?`<small>${stamp(v.createdAtMs)}</small>`:''}</td><td>${v?tag(v.result==='conforme'?'good':'bad',labels[v.result]):tag('draft','Pendiente')}</td><td style="white-space:pre-wrap;min-width:150px">${v?.counterFlavors?perfilHtml(v.counterFlavors):''}${esc(v?.observations||'—')}</td></tr>`;
+   const v=stats.byInspector.get(p.uid)?.vote;
+   return `<tr><td>${esc(p.name||p.email)}${p.removing?' · Eliminación pendiente':''}${state.canDelete?` <button type="button" class="quiet danger" data-action="remove-inspector" data-uid="${esc(p.uid)}">Eliminar</button>`:''}${v?`<small>${stamp(v.createdAtMs)}</small>`:''}</td><td>${v?comparisonTag(m,v):tag('draft','Pendiente')}</td><td style="white-space:pre-wrap;min-width:150px">${v?.counterFlavors?perfilHtml(v.counterFlavors):''}${esc(v?.observations||'—')}</td></tr>`;
   }).join('')}</tbody></table></div>`,
   '','',`<button class="button primary" type="button" data-action="results-pdf" data-id="${esc(m.id)}" aria-label="Descargar PDF de resultados del lote ${esc(m.lote)}">↓ PDF</button>`);
 }
@@ -130,8 +132,9 @@ function csvCell(value){let text=String(value??'');if(/^[\s]*[=+@-]/.test(text))
 async function exportCsv(){
  const sessionId=state.session.id,session=state.session;let samples=[],evaluations=[],cursor=null;
  do{const r=await detailPage(sessionId,cursor,false);samples.push(...r.samples);evaluations.push(...r.evaluations);cursor=r.cursor;}while(cursor);
- const rows=[['Sesión','Fecha',...fields.map(f=>f[1]),'Inspector','Correo','Contramuestra','Resultado','Observaciones','Fecha de evaluación']];
- for(const m of samples)for(const inspector of session.inspectors){const v=evaluations.find(e=>e.sampleId===m.id&&e.inspectorUid===inspector.uid);rows.push([session.name,session.date,...fields.map(([k])=>fieldValue(m,k)),inspector.name,inspector.email,textoPerfil(v?.counterFlavors||[]),labels[v?.result]||'Pendiente',v?.observations||'',stamp(v?.createdAtMs)]);}
+ const comparisons=indexarComparaciones(samples,evaluations,session.inspectors);
+ const rows=[['Sesión','Fecha',...fields.map(f=>f[1]),'Inspector','Correo','Contramuestra','Resultado','Conformidad %','Discrepancia %','Por revisar %','Observaciones','Fecha de evaluación']];
+ for(const m of samples)for(const inspector of session.inspectors){const v=comparisons.get(m.id).byInspector.get(inspector.uid)?.vote;rows.push([session.name,session.date,...fields.map(([k])=>fieldValue(m,k)),inspector.name,inspector.email,v?.counterFlavors?textoPerfil(v.counterFlavors):(saboresContramuestra(v)||[]).join(' | '),compararContramuestra(m,v).label,comparisons.get(m.id).goodPercent,comparisons.get(m.id).badPercent,comparisons.get(m.id).reviewPercent,v?.observations||'',stamp(v?.createdAtMs)]);}
  const url=URL.createObjectURL(new Blob(['\ufeff'+rows.map(row=>row.map(csvCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download=`analisis-sabor-${session.date}-${session.id}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Exportación completa.');
 }
 document.addEventListener('click',async e=>{
