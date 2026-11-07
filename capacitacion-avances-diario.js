@@ -1,4 +1,4 @@
-import {esc as E,finite,percent} from './capacitacion-graficos.js?v=20261103-puntos-1';
+import {esc as E,finite,mean,percent} from './capacitacion-graficos.js?v=20261103-puntos-1';
 const dayLabel=i=>'D'+String(i+1).padStart(2,'0');
 const portrait=p=>typeof p==='string'&&(/^(data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+)$/.test(p)||p.startsWith('blob:'));
 export const dailyChartStyles="#progressGraphsRoot .daily-card{background:#fff;border:1px solid #d8e4e3;border-radius:16px;padding:22px;color:#10303f;min-width:0} .daily-card h2{font-size:1.15rem;margin:0 0 16px}.daily-card h3{font-size:1.1rem;margin:18px 0 12px}.daily-chart-scroll{overflow-x:auto;max-width:100%}.daily-chart-scroll svg{display:block;width:100%;min-width:640px;height:auto;font-family:inherit}.daily-days{display:flex;gap:7px;flex-wrap:wrap}.daily-days button{border:1px solid #d8e4e3;border-radius:10px;padding:10px 14px;background:#fff;color:#19354a;font:inherit;font-weight:700;cursor:pointer}.daily-days button[aria-pressed=true]{background:#498e91;border-color:#498e91;color:#fff}.daily-days button:focus-visible,.daily-day:focus-visible,.daily-profile:focus-visible{outline:3px solid #0f8b8d;outline-offset:3px}.daily-day{cursor:pointer}.daily-day:focus rect:first-child{stroke:#0f8b8d;stroke-width:2}.daily-profile{cursor:pointer}.daily-profile:focus rect{stroke:#0f8b8d;stroke-width:2}.daily-card .empty{padding:28px;border:1px dashed #d8e4e3;border-radius:10px;color:#617688;text-align:center}.daily-card .note{color:#617688;line-height:1.6}.daily-profile:hover .daily-row-bg{fill:#f1f7f7}@media(max-width:650px){#progressGraphsRoot .daily-card{padding:14px}.daily-days{gap:5px}.daily-days button{padding:9px 11px}.daily-chart-scroll svg{min-width:600px}}";
@@ -18,31 +18,34 @@ export function dailyOverview(series,selected=0){
  return svg;
 }
 export function dailyRows(series,day){
- return series.map((s,order)=>({...s,order,value:s.practice[day]})).filter(s=>finite(s.value)).sort((a,b)=>b.value-a.value||a.order-b.order);
+ return series.map((s,order)=>({...s,order,value:day==='average'?mean(s.practice):s.practice[day],evaluated:s.practice.filter(finite).length})).filter(s=>finite(s.value)).sort((a,b)=>b.value-a.value||a.order-b.order);
 }
 export function dailyDetail(series,day){
- const rows=dailyRows(series,day);
- if(!rows.length)return '<div class="empty">Esta jornada todavía no tiene evaluaciones prácticas completas.</div>';
+ const rows=dailyRows(series,day),average=day==='average';
+ if(!rows.length)return '<div class="empty">'+(average?'Todavía no hay evaluaciones prácticas completas para calcular los promedios.':'Esta jornada todavía no tiene evaluaciones prácticas completas.')+'</div>';
  const height=Math.max(390,rows.length*48+60),top=35,bottom=height-35,scale=v=>bottom-(bottom-top)*v/100;
- let svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 '+height+'" role="group" aria-label="Inspectores ordenados de mayor a menor nota en '+dayLabel(day)+'. Cada marca indica la nota real; las filas se separan para evitar superposiciones."><rect x="62" y="'+top+'" width="90" height="'+(bottom-top)+'" rx="12" fill="#e7eeee"/>';
+ let svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 '+height+'" role="group" aria-label="Inspectores ordenados de mayor a menor '+(average?'promedio de los días evaluados':'nota en '+dayLabel(day))+'."><rect x="62" y="'+top+'" width="90" height="'+(bottom-top)+'" rx="12" fill="#e7eeee"/>';
  [0,50,70,85,100].forEach(v=>{svg+='<text x="53" y="'+(scale(v)+5)+'" text-anchor="end" font-size="14" fill="#617688">'+v+'</text>';});
  rows.forEach((s,i)=>{
   const sy=scale(s.value),ry=top+20+i*48,name=String(s.person.name||'Inspector'),words=name.split(/\s+/),lines=[''];
   for(const word of words){if((lines.at(-1)+' '+word).trim().length>29&&lines.length<2)lines.push(word);else lines[lines.length-1]=(lines.at(-1)+' '+word).trim();}
   const subline=lines[1]||s.person.employeeCode||s.code;const second=subline.length>29?subline.slice(0,28)+'…':subline;
+  const label=average?'Promedio · '+s.evaluated+' '+(s.evaluated===1?'día evaluado':'días evaluados'):dayLabel(day);
   svg+='<path d="M62 '+sy+'H152" stroke="'+s.color+'" stroke-width="4"/><path d="M152 '+sy+'H215L275 '+ry+'H302" fill="none" stroke="'+s.color+'" stroke-width="1.7"/>';
-  svg+='<g class="daily-profile" tabindex="0" role="button" data-curve-person="'+E(s.id)+'" data-curve-mode="practice" data-curve-index="'+day+'" aria-label="Ver ficha de '+E(name)+' · '+dayLabel(day)+' · '+percent(s.value)+'"><title>'+E(name)+' · '+percent(s.value)+'</title><rect class="daily-row-bg" x="306" y="'+(ry-21)+'" width="490" height="43" rx="9" fill="#fff"/>';
+  svg+='<g '+(average?'role="img"':'class="daily-profile" tabindex="0" role="button" data-curve-person="'+E(s.id)+'" data-curve-mode="practice" data-curve-index="'+day+'"')+' aria-label="'+(average?'':'Ver ficha de ')+E(name)+' · '+label+' · '+percent(s.value)+'"><title>'+E(name)+' · '+label+' · '+percent(s.value)+'</title><rect class="daily-row-bg" x="306" y="'+(ry-21)+'" width="490" height="43" rx="9" fill="#fff"/>';
   svg+='<svg x="312" y="'+(ry-17)+'" width="34" height="34" viewBox="0 0 34 34"><defs><clipPath id="daily-avatar-'+i+'"><circle cx="17" cy="17" r="17"/></clipPath></defs><circle cx="17" cy="17" r="17" fill="#eaf1f4"/>';
   if(portrait(s.person.portrait))svg+='<image href="'+E(s.person.portrait)+'" width="34" height="34" preserveAspectRatio="xMidYMid slice" clip-path="url(#daily-avatar-'+i+')"/>';
   else svg+='<text x="17" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="'+s.color+'">'+E(name.split(/\s+/).slice(0,2).map(n=>n[0]).join(''))+'</text>';
-  svg+='</svg><text x="360" y="'+(ry-2)+'" font-size="15" fill="#19354a">'+E(lines[0])+'</text><text x="360" y="'+(ry+14)+'" font-size="11" fill="#617688">'+E(second)+'</text><text x="780" y="'+(ry+6)+'" text-anchor="end" font-size="19" font-weight="800" fill="'+s.color+'">'+s.value.toFixed(1)+'%</text></g>';
+  svg+='</svg><text x="360" y="'+(ry-2)+'" font-size="15" fill="#19354a">'+E(lines[0])+'</text><text x="360" y="'+(ry+14)+'" font-size="11" fill="#617688">'+E(average?second+' · '+s.evaluated+'/10 días':second)+'</text><text x="780" y="'+(ry+6)+'" text-anchor="end" font-size="19" font-weight="800" fill="'+s.color+'">'+s.value.toFixed(1)+'%</text></g>';
  });
  return svg+'</svg>';
 }
 export function dailyCards(series,selected,days){
+ const average=selected==='average';
  const day=days.find(d=>Number(d.day??d.id)===selected+1)||days[selected];
  const title=typeof day==='string'?day:(day?.title||day?.name||day?.topic||'Jornada '+(selected+1));
- return '<section class="daily-card"><h2>Todas las jornadas</h2><div class="daily-chart-scroll">'+dailyOverview(series,selected)+'</div></section><section class="daily-card"><div class="daily-days" role="group" aria-label="Seleccionar jornada">'+Array.from({length:10},(_,i)=>'<button type="button" data-progress-day="'+i+'" aria-pressed="'+(selected===i)+'" aria-controls="dailyDetailChart">'+dayLabel(i)+'</button>').join('')+'</div><h3>'+dayLabel(selected)+' · '+E(title)+'</h3><div class="daily-chart-scroll" id="dailyDetailChart">'+dailyDetail(series,selected)+'</div></section>';
+ const missing=average?series.filter(s=>!s.practice.some(finite)):[];
+ return '<section class="daily-card"><h2>Todas las jornadas</h2><div class="daily-chart-scroll">'+dailyOverview(series,selected)+'</div></section><section class="daily-card"><div class="daily-days" role="group" aria-label="Seleccionar jornada">'+Array.from({length:10},(_,i)=>'<button type="button" data-progress-day="'+i+'" aria-pressed="'+(selected===i)+'" aria-controls="dailyDetailChart">'+dayLabel(i)+'</button>').join('')+'<button type="button" data-progress-day="average" aria-pressed="'+average+'" aria-controls="dailyDetailChart">Promedio</button></div><h3>'+(average?'Promedio de los días evaluados':dayLabel(selected)+' · '+E(title))+'</h3>'+(average?'<p class="note">Promedio por inspector de las jornadas completas. Los días pendientes no se incluyen.</p>':'')+'<div class="daily-chart-scroll" id="dailyDetailChart">'+dailyDetail(series,selected)+'</div>'+(missing.length?'<p class="note"><strong>Sin días evaluados:</strong> '+missing.map(s=>E(s.person.name)).join(', ')+'.</p>':'')+'</section>';
 }
 
 
