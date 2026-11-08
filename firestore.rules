@@ -80,13 +80,15 @@ service cloud.firestore {
         getAfter(cityPath).data.nombre == d.ciudad;
     }
     function validCalidadClient(d) {
-      return d.keys().hasOnly(['ciudadId','pais','ciudad','nombre','tipo']) &&
+      return d.keys().hasOnly(['ciudadId','pais','ciudad','nombre','tipo','puerto','continente']) &&
         d.keys().hasAll(['ciudadId','pais','ciudad','nombre','tipo']) &&
         d.ciudadId is string && d.ciudadId.size() > 0 && d.ciudadId.size() <= 180 &&
         d.pais is string && d.pais.matches('^[A-Z]{2}$') &&
         d.ciudad is string && d.ciudad.size() > 0 && d.ciudad.size() <= 100 &&
         d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 120 &&
         d.tipo in ['cliente','importador'] &&
+        (!('puerto' in d) || (d.puerto is string && d.puerto.size() <= 120)) &&
+        (!('continente' in d) || (d.continente is string && d.continente.size() <= 30)) &&
         calidadClientCityMatches(d);
     }
     function photoDoc(uid) { return /databases/$(database)/documents/expalsa_calidad_fotos_perfil/$(uid); }
