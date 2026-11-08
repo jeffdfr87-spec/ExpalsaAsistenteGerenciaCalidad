@@ -70,9 +70,6 @@ service cloud.firestore {
     function calidadDestinationPath(id) {
       return /databases/$(database)/documents/destinos/$(id);
     }
-    function calidadClientPath(id) {
-      return /databases/$(database)/documents/clientes_calidad/$(id);
-    }
     function calidadClientCityMatches(d) {
       return !('ciudadId' in d) || (
         existsAfter(calidadDestinationPath(d.ciudadId)) &&
@@ -126,62 +123,6 @@ service cloud.firestore {
         (!('puerto' in d) || (d.puerto is string && d.puerto.size() <= 120)) &&
         (!('grados' in d) || validCalidadClientGrades(d.grados)) && calidadClientCityMatches(d);
     }
-    function validFichaCriterio(c) {
-      return c is map && c.keys().hasOnly(['nombre','valor']) && c.keys().hasAll(['nombre','valor']) &&
-        c.nombre is string && c.nombre.size() > 0 && c.nombre.size() <= 120 &&
-        ((c.valor is string && c.valor.size() <= 1000) ||
-         (c.valor is number && c.valor >= -1000000 && c.valor <= 1000000));
-    }
-    function validFichaCriterios(a) {
-      return a is list && a.size() <= 25 &&
-        (a.size() < 1 || validFichaCriterio(a[0])) &&
-        (a.size() < 2 || validFichaCriterio(a[1])) &&
-        (a.size() < 3 || validFichaCriterio(a[2])) &&
-        (a.size() < 4 || validFichaCriterio(a[3])) &&
-        (a.size() < 5 || validFichaCriterio(a[4])) &&
-        (a.size() < 6 || validFichaCriterio(a[5])) &&
-        (a.size() < 7 || validFichaCriterio(a[6])) &&
-        (a.size() < 8 || validFichaCriterio(a[7])) &&
-        (a.size() < 9 || validFichaCriterio(a[8])) &&
-        (a.size() < 10 || validFichaCriterio(a[9])) &&
-        (a.size() < 11 || validFichaCriterio(a[10])) &&
-        (a.size() < 12 || validFichaCriterio(a[11])) &&
-        (a.size() < 13 || validFichaCriterio(a[12])) &&
-        (a.size() < 14 || validFichaCriterio(a[13])) &&
-        (a.size() < 15 || validFichaCriterio(a[14])) &&
-        (a.size() < 16 || validFichaCriterio(a[15])) &&
-        (a.size() < 17 || validFichaCriterio(a[16])) &&
-        (a.size() < 18 || validFichaCriterio(a[17])) &&
-        (a.size() < 19 || validFichaCriterio(a[18])) &&
-        (a.size() < 20 || validFichaCriterio(a[19])) &&
-        (a.size() < 21 || validFichaCriterio(a[20])) &&
-        (a.size() < 22 || validFichaCriterio(a[21])) &&
-        (a.size() < 23 || validFichaCriterio(a[22])) &&
-        (a.size() < 24 || validFichaCriterio(a[23])) &&
-        (a.size() < 25 || validFichaCriterio(a[24]));
-    }
-    function validFichaMetadata(m) {
-      return m is map && m.keys().hasOnly(['fecha','fuente','version','notas']) &&
-        m.keys().hasAll(['fecha','fuente','version','notas']) &&
-        m.fecha is string && m.fecha.size() <= 30 &&
-        m.fuente is string && m.fuente.size() <= 120 &&
-        m.version is string && m.version.size() <= 40 &&
-        m.notas is string && m.notas.size() <= 1000;
-    }
-    function validFichaUbicacion(d) {
-      return (!('pais' in d) || (d.pais is string && d.pais.matches('^[A-Z]{2}$'))) &&
-        (!('continente' in d) || (d.continente is string && d.continente.size() > 0 && d.continente.size() <= 30)) &&
-        (!('puerto' in d) || (d.puerto is string && d.puerto.size() <= 120)) &&
-        (('ciudadId' in d) == ('ciudad' in d)) &&
-        (!('ciudadId' in d) ||
-          (d.ciudadId is string && d.ciudadId.size() > 0 && d.ciudadId.size() <= 180 &&
-           d.ciudad is string && d.ciudad.size() > 0 && d.ciudad.size() <= 100 &&
-           d.pais is string && calidadClientCityMatches(d)));
-    }
-    function fichaClienteMatches(d) {
-      return existsAfter(calidadClientPath(d.clienteId)) &&
-        getAfter(calidadClientPath(d.clienteId)).data.tipo == d.tipoCliente;
-    }
     function validFichaTecnica(d, id) {
       return id is string && id.size() > 0 && id.size() <= 180 &&
         d.keys().hasOnly(['clienteId','clienteNombre','tipoCliente','producto','codigoProducto','categoria','criterios','materiaExtrana','sabor','pais','continente','ciudadId','ciudad','puerto','textoExtraido','pdfNombre','metadata']) &&
@@ -192,12 +133,17 @@ service cloud.firestore {
         d.producto is string && d.producto.size() > 0 && d.producto.size() <= 200 &&
         (!('codigoProducto' in d) || (d.codigoProducto is string && d.codigoProducto.size() <= 120)) &&
         (!('categoria' in d) || (d.categoria is string && d.categoria.size() <= 120)) &&
-        validFichaCriterios(d.criterios) &&
+        d.criterios is list && d.criterios.size() <= 25 &&
         (!('materiaExtrana' in d) || (d.materiaExtrana is string && d.materiaExtrana.size() <= 1000)) &&
         (!('sabor' in d) || (d.sabor is string && d.sabor.size() <= 1000)) &&
         d.textoExtraido is string && d.textoExtraido.size() <= 50000 &&
         d.pdfNombre is string && d.pdfNombre.size() > 0 && d.pdfNombre.size() <= 200 &&
-        validFichaMetadata(d.metadata) && validFichaUbicacion(d) && fichaClienteMatches(d);
+        d.metadata is map && d.metadata.size() <= 4 &&
+        (!('pais' in d) || (d.pais is string && d.pais.matches('^[A-Z]{2}$'))) &&
+        (!('continente' in d) || (d.continente is string && d.continente.size() > 0 && d.continente.size() <= 30)) &&
+        (!('ciudadId' in d) || (d.ciudadId is string && d.ciudadId.size() > 0 && d.ciudadId.size() <= 180)) &&
+        (!('ciudad' in d) || (d.ciudad is string && d.ciudad.size() > 0 && d.ciudad.size() <= 100)) &&
+        (!('puerto' in d) || (d.puerto is string && d.puerto.size() <= 120));
     }
     function photoDoc(uid) { return /databases/$(database)/documents/expalsa_calidad_fotos_perfil/$(uid); }
     function photoPresent(uid) {
