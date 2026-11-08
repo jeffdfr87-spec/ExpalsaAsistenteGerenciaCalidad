@@ -209,6 +209,7 @@ try{DN=new Intl.DisplayNames(["es"],{type:"region"})}catch(e){}
 function name(i){if(NM[i])return NM[i];try{var n=DN&&DN.of(i);if(n&&n!==i)return n}catch(e){}return byId[i]?byId[i].properties.name:i}
 function mg(r){return Object.assign({},GR[r.g],r.o||{})}
 function ents(i){return(D[i]&&D[i].length&&D[i])||(primary[i]&&CD[primary[i]]&&CD[primary[i]].length&&CD[primary[i]])||null}
+function destinationEntriesForClient(entries,country,client){if(country!=="GR"||client&&norm(client.nombre).indexOf("vasilis")===0)return entries;return entries&&entries.filter(function(r){return!r.x})}
 function gOf(i){var e=ents(i);return e?mg(e[0]):null}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function slug(n){return n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"")}
@@ -272,6 +273,7 @@ else if(city&&city.grados&&city.grados.length)e=city.grados;
 else if(dest)e=ents(dest);
 else e=CD[st.c];
 if(!e&&dest)e=CD[primary[dest]||st.c];
+e=destinationEntriesForClient(e,dest,selectedClient);
 if(e&&!(selectedClient&&selectedClient.grados&&selectedClient.grados.length)&&!((city&&city.grados&&city.grados.length))){src=D[dest]&&D[dest].length?"Matriz del destino · "+name(dest):"Matriz heredada · "+CN[st.c]}
 var countryName=dest?name(dest):"",countryFlag=dest?flagEmoji(dest):"",continentName=CN[selectedClient&&selectedClient.continente||primary[dest]||st.c]||"";
 var clientLocation=selectedClient?[selectedClient.ciudad||city&&city.nombre||"",countryName,continentName].filter(Boolean).join(" · "):"";
