@@ -1,6 +1,6 @@
 import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,normalizarObservaciones,compararContramuestra} from './sabor-modelo.js?v=20261107-partial-1';
-import {resumenSesion} from './sabor-informe-sesion.js?v=20261107-compact-pdf-1';
-import {loadFlavorPdfResources} from './analisis-sabor-pdf.js?v=20261107-compact-pdf-1';
+import {resumenSesion} from './sabor-informe-sesion.js?v=20261107-onepage-summary-1';
+import {loadFlavorPdfResources} from './analisis-sabor-pdf.js?v=20261107-onepage-summary-1';
 
 const C={navy:[8,40,61],ink:[25,53,74],teal:[8,125,137],muted:[104,126,139],line:[220,229,234],soft:[243,248,250],good:[19,127,99],partial:[52,95,147],bad:[172,60,80]};
 const clean=v=>String(v??'').replace(/[\u2010-\u2015]/g,'-').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -18,11 +18,11 @@ export function createFlavorSessionReport({jsPDF,autoTable,logoData,session,samp
  const lines=(text,width,size=8)=>{pdf.setFont('helvetica','normal');pdf.setFontSize(size);return pdf.splitTextToSize(clean(text),width);};
  const addPage=()=>{pdf.addPage();y=43;};
  const ensure=height=>{if(y+height>272)addPage();};
- const paragraph=(text,size=8,color=C.ink)=>{const wrapped=lines(text,182,size),height=wrapped.length*4;ensure(height+3);write(wrapped,14,y,size,'normal',color);y+=height+3;};
+ const paragraph=(text,size=8,color=C.ink)=>{const wrapped=lines(text,182,size),height=wrapped.length*3.3;ensure(height+2);write(wrapped,14,y,size,'normal',color);y+=height+2;};
  const heading=(text,subtitle='')=>{const wrapped=lines(text,182,12);ensure(wrapped.length*5.5+11);write(wrapped,14,y,12,'bold',C.navy);y+=wrapped.length*5.5+.5;if(subtitle)paragraph(subtitle,8,C.muted);else y+=2;};
  const table=options=>{
-  const {afterGap=7,...settings}=options;
-  autoTable(pdf,{startY:y,margin:{left:14,right:14,top:43,bottom:23},tableWidth:182,theme:'grid',styles:{font:'helvetica',fontSize:7.5,cellPadding:2.5,textColor:C.ink,lineColor:C.line,lineWidth:.15,overflow:'linebreak'},headStyles:{fillColor:C.navy,textColor:[255,255,255],fontStyle:'bold',fontSize:7},alternateRowStyles:{fillColor:[248,251,252]},rowPageBreak:'avoid',showHead:'everyPage',...settings});
+  const {afterGap=4,...settings}=options;
+  autoTable(pdf,{startY:y,margin:{left:14,right:14,top:43,bottom:23},tableWidth:182,theme:'grid',styles:{font:'helvetica',fontSize:7.2,cellPadding:1.5,textColor:C.ink,lineColor:C.line,lineWidth:.15,overflow:'linebreak'},headStyles:{fillColor:C.navy,textColor:[255,255,255],fontStyle:'bold',fontSize:7},alternateRowStyles:{fillColor:[248,251,252]},rowPageBreak:'avoid',showHead:'everyPage',...settings});
   y=pdf.lastAutoTable.finalY+afterGap;
  };
  const placeImage=(photo,x,at,width,height,alias)=>{
@@ -34,13 +34,19 @@ export function createFlavorSessionReport({jsPDF,autoTable,logoData,session,samp
  heading('Informe gerencial de análisis de sabor',session.name);
  paragraph(`Fecha de sesión: ${session.date}  |  Estado: ${{draft:'Borrador',open:'En evaluación',closed:'Cerrada'}[session.status]||session.status}  |  Alcance: todas las muestras de esta sesión.`,8,C.muted);
  const kpis=[['MUESTRAS',samples.length],['INSPECTORES',people.length],['EVALUACIONES',`${summary.totals.total} / ${samples.length*people.length}`],['CONFORMIDAD',`${summary.goodPercent}%`]];
- ensure(22);kpis.forEach(([label,value],i)=>{const x=14+i*46.5;pdf.setFillColor(...C.soft);pdf.roundedRect(x,y,42.5,20,2,2,'F');write(label,x+3,y+6,6.5,'bold',C.muted);write(value,x+3,y+15,15,'bold',C.navy);});y+=28;
+ ensure(19);kpis.forEach(([label,value],i)=>{const x=14+i*46.5;pdf.setFillColor(...C.soft);pdf.roundedRect(x,y,42.5,17,2,2,'F');write(label,x+3,y+6,6.5,'bold',C.muted);write(value,x+3,y+13,14,'bold',C.navy);});y+=22;
  paragraph(`Conformes: ${summary.totals.good} (${summary.goodPercent}%)  |  Parciales: ${summary.totals.partial} (${summary.partialPercent}%)  |  Discrepancias: ${summary.totals.bad} (${summary.badPercent}%)  |  Por revisar: ${summary.totals.review}  |  Pendientes: ${summary.totals.pending}.`);
  const samplePhotoCount=photos.reduce((n,p)=>n+(p.samplePhotos||[]).length,0),evidenceCount=photos.reduce((n,p)=>n+(p.inspectorPhotos||[]).reduce((m,i)=>m+(i.evidence||[]).length,0),0);
  paragraph(`Registro incluido: ${samplePhotoCount} fotos de muestras y ${evidenceCount} evidencias, además de los perfiles disponibles de los inspectores.`,7.5,C.muted);
  heading('Consolidado de muestras');
  table({head:[['MUESTRA / LOTE','RECEPCIÓN DE MATERIA PRIMA','EVAL.','CONF.','PARC.','DISCR.']],body:samples.map(sample=>{const s=summary.index.get(sample.id);return [clean(`${sample.blindLetter||'-'} / ${sample.lote}`),clean(textoPerfil(perfilMateriaPrima(sample)||[])||'Por completar'),`${s.total}/${people.length}${s.review?`\n${s.review} por revisar`:''}`,String(s.good),String(s.partial),String(s.bad)];}),columnStyles:{0:{cellWidth:27,fontStyle:'bold'},1:{cellWidth:77},2:{cellWidth:24},3:{cellWidth:18,halign:'center'},4:{cellWidth:18,halign:'center'},5:{cellWidth:18,halign:'center'}}});
  paragraph('Criterio: en mezclas con otros sabores se excluye Normal. Mismos sabores e intensidades: Conforme; mismos sabores y distinta intensidad: Conformidad parcial; otros sabores: Discrepancia. Recepción Normal 100% exige contramuestra Normal 100%. Los porcentajes de composición no modifican la comparación de otros sabores.',7.5,C.muted);
+
+ section='Comparativo de inspectores';
+ heading('Discrepancias y conformidades por inspector');
+ paragraph('Orden de mayor a menor número de conformidades. Desempate: menos discrepancias, más conformidades parciales, menos casos por revisar y nombre. Los pendientes no se incluyen en el porcentaje de conformidad.',7.5,C.muted);
+ table({head:[['N.','INSPECTOR','CONF.','PARC.','DISCR.','REVISAR','PEND.','CONF. %']],body:summary.ranking.map((p,i)=>[String(i+1),clean(`${p.name||p.email||p.uid}\n${p.email||''}\n${p.total} de ${samples.length} muestras evaluadas`),String(p.good),String(p.partial),String(p.bad),String(p.review),String(p.pending),`${p.goodPercent}%`]),columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:65},2:{cellWidth:16,halign:'center',fontStyle:'bold',textColor:C.good},3:{cellWidth:18,halign:'center',textColor:C.partial},4:{cellWidth:18,halign:'center',textColor:C.bad},5:{cellWidth:18,halign:'center'},6:{cellWidth:18,halign:'center'},7:{cellWidth:20,halign:'center',fontStyle:'bold'}}});
+ paragraph(`Base de comparación: ${samples.length} muestras, ${people.length} inspectores y ${summary.totals.total} evaluaciones recibidas. Conformidad por inspector = conformidades / evaluaciones recibidas del inspector x 100. Los resultados parciales y por revisar se contabilizan por separado.`,7.5,C.muted);
 
  addPage();const detailCounts=new Map();
  for(const [sampleNumber,sample] of samples.entries()){
@@ -86,13 +92,6 @@ export function createFlavorSessionReport({jsPDF,autoTable,logoData,session,samp
   for(let page=sampleStartPage+1;page<=pdf.getCurrentPageInfo().pageNumber;page++)detailCounts.set(page,(detailCounts.get(page)||0)+1);
  }
 
- section='Comparativo de inspectores';addPage();const rankingStart=pdf.getNumberOfPages();
- heading('Discrepancias y conformidades por inspector');
- paragraph('Orden de mayor a menor número de conformidades. Desempate: menos discrepancias, más conformidades parciales, menos casos por revisar y nombre. Los pendientes no se incluyen en el porcentaje de conformidad.',7.5,C.muted);
- table({head:[['N.','INSPECTOR','CONF.','PARC.','DISCR.','REVISAR','PEND.','CONF. %']],body:summary.ranking.map((p,i)=>[String(i+1),clean(`${p.name||p.email||p.uid}\n${p.email||''}\n${p.total} de ${samples.length} muestras evaluadas`),String(p.good),String(p.partial),String(p.bad),String(p.review),String(p.pending),`${p.goodPercent}%`]),columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:65},2:{cellWidth:16,halign:'center',fontStyle:'bold',textColor:C.good},3:{cellWidth:18,halign:'center',textColor:C.partial},4:{cellWidth:18,halign:'center',textColor:C.bad},5:{cellWidth:18,halign:'center'},6:{cellWidth:18,halign:'center'},7:{cellWidth:20,halign:'center',fontStyle:'bold'}}});
- paragraph(`Base de comparación: ${samples.length} muestras, ${people.length} inspectores y ${summary.totals.total} evaluaciones recibidas. Conformidad por inspector = conformidades / evaluaciones recibidas del inspector x 100. Los resultados parciales y por revisar se contabilizan por separado.`,7.5,C.muted);
- const rankingPages=pdf.getNumberOfPages()-rankingStart+1;
- for(let i=0;i<rankingPages;i++)pdf.movePage(rankingStart+i,2+i);
  const pages=pdf.getNumberOfPages(),logo=pdf.getImageProperties(logoData),logoScale=Math.min(39/logo.width,14/logo.height);
  for(let p=1;p<=pages;p++){
   pdf.setPage(p);pdf.addImage(logoData,'PNG',14,11,logo.width*logoScale,logo.height*logoScale,'session-expalsa-logo','FAST');
