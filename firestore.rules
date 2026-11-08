@@ -130,7 +130,7 @@ service cloud.firestore {
     }
     function validFichaTecnica(d, id) {
       return id is string && id.size() > 0 && id.size() <= 180 &&
-        d.keys().hasOnly(['clienteId','clienteNombre','tipoCliente','producto','codigoProducto','categoria','criterios','materiaExtrana','sabor','pais','continente','ciudadId','ciudad','puerto','textoExtraido','pdfNombre','metadata']) &&
+        d.keys().hasOnly(['clienteId','clienteNombre','tipoCliente','producto','codigoProducto','categoria','criterios','materiaExtrana','sabor','pais','continente','ciudadId','ciudad','puerto','textoExtraido','pdfNombre','metadata','estado']) &&
         d.keys().hasAll(['clienteId','clienteNombre','tipoCliente','producto','criterios','textoExtraido','pdfNombre','metadata']) &&
         d.clienteId is string && d.clienteId.size() > 0 && d.clienteId.size() <= 180 &&
         d.clienteNombre is string && d.clienteNombre.size() > 0 && d.clienteNombre.size() <= 120 &&
@@ -138,6 +138,7 @@ service cloud.firestore {
         d.producto is string && d.producto.size() > 0 && d.producto.size() <= 200 &&
         (!('codigoProducto' in d) || (d.codigoProducto is string && d.codigoProducto.size() <= 120)) &&
         (!('categoria' in d) || (d.categoria is string && d.categoria.size() <= 120)) &&
+        (!('estado' in d) || d.estado in ['activa','inactiva']) &&
         d.criterios is list && d.criterios.size() <= 25 &&
         (!('materiaExtrana' in d) || (d.materiaExtrana is string && d.materiaExtrana.size() <= 1000)) &&
         (!('sabor' in d) || (d.sabor is string && d.sabor.size() <= 1000)) &&
