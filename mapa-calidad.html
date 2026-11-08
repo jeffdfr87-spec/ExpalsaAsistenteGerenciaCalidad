@@ -209,7 +209,7 @@ try{DN=new Intl.DisplayNames(["es"],{type:"region"})}catch(e){}
 function name(i){if(NM[i])return NM[i];try{var n=DN&&DN.of(i);if(n&&n!==i)return n}catch(e){}return byId[i]?byId[i].properties.name:i}
 function mg(r){return Object.assign({},GR[r.g],r.o||{})}
 function ents(i){return(D[i]&&D[i].length&&D[i])||(primary[i]&&CD[primary[i]]&&CD[primary[i]].length&&CD[primary[i]])||null}
-function destinationEntriesForClient(entries,country,client){if(country!=="GR")return entries;var market=D[country]&&D[country].length?D[country]:entries;if(!market)return market;var onlyException=client&&norm(client.nombre).indexOf("vasilis")===0;return market.filter(function(r){return onlyException?!!r.x:!r.x})}
+function destinationEntriesForClient(entries,country,client){if(country!=="GR")return entries;var onlyException=client&&norm(client.nombre).indexOf("vasilis")===0,market=D[country]&&D[country].length?D[country]:entries;if(!market)market=[];var applicable=market.filter(function(r){return onlyException?!!r.x:!r.x});if(!applicable.length&&SD[country])applicable=SD[country].filter(function(r){return onlyException?!!r.x:!r.x});return applicable}
 function gOf(i){var e=ents(i);return e?mg(e[0]):null}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function slug(n){return n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"")}
