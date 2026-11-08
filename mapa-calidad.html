@@ -287,6 +287,7 @@ $("back").onclick=back;
 document.addEventListener("keydown",function(e){if(e.key==="Escape")back()});
 $("crumbs").onclick=function(e){var g=e.target.dataset.go;if(g==="world")toWorld();if(g==="cont")toCont(st.c);if(g==="ctry"){st.city=null;upd();zoom(st.id)}};
 $("side").onclick=function(e){var b=e.target.closest(".chip");if(b)toCountry(b.dataset.id);else if(e.target.dataset.act==="editreg")openEd("continente",st.c)};
+$("clientResults").onclick=function(e){var t=e.target.closest("[data-client-pick]");if(t)return selectClient(t.dataset.clientPick);if(e.target.closest("[data-client-register]"))return openClientEditor(null,$("clientFilter").value.trim())};
 $("card").onclick=function(e){var t=e.target,a=t.dataset.act;if(t.dataset.city){st.city=t.dataset.city;st.client=null;upd();zoomCity(st.city);return}if(t.dataset.client){st.client=t.dataset.client;upd();return}if(t.dataset.clientEdit){openClientEditor(t.dataset.clientEdit);return}if("clientAdd" in t.dataset){openClientEditor(null);return}
 if(a==="close"){if(st.city){st.city=null;upd();zoom(st.id)}else back()}
 else if(a==="edit")st.city?openEd("ciudad",st.city):openEd("pais",st.id);
