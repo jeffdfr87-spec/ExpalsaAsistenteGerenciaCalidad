@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calidad y sabor por destino · EXPALSA</title>
+<style>
+:root{--ocean:#cfe2f1;--bar:#0f2a43;--panel:#fff;--text:#13263a;--muted:#5b6b7b;--line:#d3dde7;--out:#dde2e7;--stroke:#fff;
+--eu:#8fb4d9;--as:#e0bd8b;--af:#e6cb78;--na:#a4cf94;--sa:#dba0a0;--oc:#b7a3d9;--ce:#7fcfc4;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ocean:#0d1b2a;--bar:#09131f;--panel:#16283b;--text:#e8eef5;--muted:#9fb0c1;--line:#2a4058;--out:#26323e;--stroke:#0d1b2a;--eu:#3f6286;--as:#8a6a45;--af:#8e7a38;--na:#4c7a40;--sa:#8a4f4f;--oc:#66528a}}
+:root[data-theme="dark"]{--ocean:#0d1b2a;--bar:#09131f;--panel:#16283b;--text:#e8eef5;--muted:#9fb0c1;--line:#2a4058;--out:#26323e;--stroke:#0d1b2a;--eu:#3f6286;--as:#8a6a45;--af:#8e7a38;--na:#4c7a40;--sa:#8a4f4f;--oc:#66528a}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px);background:var(--ocean)}
+body{margin:0;height:100%;font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);background:var(--ocean);overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bar);z-index:10}
+#app{height:100%;display:flex;flex-direction:column}
+#app{display:none}
+#authgate{min-height:100%;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:var(--ocean)}
+#authgate .gatebox{width:min(420px,100%);padding:24px;box-sizing:border-box;border-radius:16px;background:var(--panel);color:var(--text);box-shadow:0 12px 40px #0002}
+#authgate h1{font-size:22px;margin:0 0 8px}#authgate p{color:var(--muted)}
+#authgate label{display:block;margin:10px 0 4px;font-size:13px;color:var(--muted)}
+#authgate input{font:inherit;width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
+#authgate button{margin-top:14px;background:#1b6fb5;color:white;border:0;border-radius:8px;padding:9px 14px}
+#gateMessage{min-height:22px;font-size:13px}
+#bar{background:var(--bar);color:#fff;display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:48px;flex:none;z-index:5}
+#bar b{font-size:13px;letter-spacing:.04em;opacity:.8;white-space:nowrap}
+button{font:inherit;cursor:pointer}
+#back{background:#ffffff22;color:#fff;border:0;border-radius:8px;padding:6px 12px}
+#back:disabled{opacity:.35;cursor:default}
+#crumbs{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#crumbs button{background:none;border:0;color:#9cc8f0;padding:4px 6px;border-radius:6px;text-decoration:underline}
+#crumbs span{padding:4px 6px;font-weight:600}
+#crumbs i{opacity:.5;font-style:normal}
+#stage{position:relative;flex:1;min-height:0}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+#map{transition:transform 1.1s cubic-bezier(.65,0,.25,1),opacity .2s;transform-origin:0 0}
+#map.fade{opacity:0}
+path.ct{stroke:var(--stroke);stroke-width:.6;vector-effect:non-scaling-stroke;transition:filter .25s,opacity .6s}
+path.w{cursor:pointer}path.w.hl{filter:brightness(1.12) saturate(1.3);stroke-width:1.2}
+.c-europe{fill:var(--eu)}.c-asia{fill:var(--as)}.c-africa{fill:var(--af)}.c-north{fill:var(--na)}.c-south{fill:var(--sa)}.c-oceania{fill:var(--oc)}.c-central{fill:var(--ce)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ce:#2f7a72}}:root[data-theme="dark"]{--ce:#2f7a72}
+path.out{fill:var(--out);pointer-events:none;opacity:.7}
+path.m{cursor:pointer}path.nodata{fill:#b9c3cd}
+path.m:hover{filter:brightness(1.12);stroke:var(--text);stroke-width:1.4}
+path.sel{stroke:#fff;stroke-width:3;filter:brightness(1.3) saturate(1.3) drop-shadow(0 0 8px var(--glow,#ffd54a));animation:gl 1.6s ease-in-out infinite alternate}
+@keyframes gl{from{filter:brightness(1.2) saturate(1.2) drop-shadow(0 0 4px var(--glow,#ffd54a))}to{filter:brightness(1.45) saturate(1.5) drop-shadow(0 0 16px var(--glow,#ffd54a)) drop-shadow(0 0 28px var(--glow,#ffd54a))}}
+#map.focus path.m:not(.sel){opacity:.5}#map.focus path.out{opacity:.25}
+circle.dot{stroke:var(--text);stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer}
+circle.ping{fill:none;stroke:var(--text);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;animation:pg 1.4s infinite}
+@keyframes pg{0%{opacity:1}100%{opacity:.15}}
+#tip{position:absolute;pointer-events:none;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:13px;box-shadow:0 4px 14px #0003;display:none;z-index:6;white-space:nowrap}
+#hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:6px 14px;border-radius:99px;font-size:13px;color:var(--muted);transition:opacity .3s;pointer-events:none}
+.pan{position:absolute;background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 28px #0003;border-radius:14px;z-index:4;overflow:auto;display:none}
+#side{left:12px;top:12px;width:268px;max-height:calc(100% - 24px);padding:12px}
+#side h3{margin:0 0 8px;font-size:14px}
+.chip{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;color:var(--text);text-align:left;padding:5px 6px;border-radius:8px}
+.chip:hover{background:var(--line)}
+.chip em{margin-left:auto;font-style:normal;font-size:12px;color:var(--muted)}
+.sw{width:12px;height:12px;border-radius:4px;flex:none;border:1px solid #0003}
+#leg{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+#leg div{display:flex;gap:8px;align-items:center;padding:2px 6px}
+#card{right:12px;top:12px;width:372px;max-height:calc(100% - 24px)}
+.ch{display:flex;align-items:flex-start;gap:8px;padding:14px 16px 6px}
+.ch h2{margin:0;font-size:20px;line-height:1.2}.ch p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.ch button{margin-left:auto;background:none;border:0;color:var(--muted);font-size:20px}
+.en{margin:8px 14px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.top{display:flex;align-items:center;gap:12px}
+.gr{color:#fff;font-weight:800;font-size:22px;min-width:58px;text-align:center;padding:8px 6px;border-radius:10px}
+.mx{font-size:20px;font-weight:700}.sb{font-size:12px;color:var(--muted)}
+.bar{height:8px;background:var(--line);border-radius:9px;margin:10px 0;position:relative;overflow:hidden}.bar i{position:absolute;top:0;bottom:0;border-radius:9px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:14px}dt{color:var(--muted)}dd{margin:0;font-weight:600;text-align:right}
+.tag{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12px;font-weight:700;color:#fff}
+.ok{background:#1b7f4b}.no{background:#b3402f}.mid{background:#c47f12}.flex{background:#b3402f}
+.exc{display:inline-block;margin-left:6px;font-size:11px;background:#7a4cc2;color:#fff;border-radius:6px;padding:1px 6px;vertical-align:middle}
+.ft{padding:6px 16px 14px;font-size:12px;color:var(--muted)}
+#loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);z-index:7;background:var(--ocean)}
+@media (max-width:760px){
+#bar b{display:none}
+#side{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:36%}
+#card{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:52%}
+}
+.ab{background:#ffffff22;color:#fff;border:0;border-radius:8px;padding:6px 12px}
+text.lb{fill:var(--text);paint-order:stroke;stroke:var(--stroke);stroke-linejoin:round;text-anchor:middle;font-weight:600;pointer-events:none}
+text.cl{font-weight:800;letter-spacing:.08em}text.cn{text-anchor:start}
+circle.city{fill:#fff;stroke:var(--text);stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:pointer}
+#mod{position:fixed;inset:0;background:#0008;z-index:20;display:none;place-items:center}
+#mod .box{background:var(--panel);color:var(--text);border-radius:14px;padding:18px;width:min(520px,94vw);max-height:90vh;overflow:auto}
+#mod input,#mod select{font:inherit;width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid var(--line);border-radius:10px;padding:8px;margin:8px 0}
+.btn{background:#1b6fb5;color:#fff;border:0;border-radius:8px;padding:7px 14px;margin:2px}.btn.sec{background:var(--line);color:var(--text)}.btn.red{background:#b3402f}
+#mod label{font-size:12px;color:var(--muted)}
+.ab2{margin:6px 14px;display:flex;gap:4px;flex-wrap:wrap}.inh{font-size:12px;color:var(--muted);margin:2px 16px}
+</style>
+</head>
+<body>
+<section id="authgate"><div class="gatebox"><h1>Acceso a calidad y sabor</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. El administrador debe autorizar este dispositivo.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
+<div id="app">
+<header id="bar"><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><b style="margin-left:auto">EXPALSA · CALIDAD Y SABOR</b><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
+<main id="stage">
+<svg id="svg"><g id="map"></g></svg>
+<aside id="side" class="pan"></aside>
+<section id="card" class="pan"></section>
+<div id="hint">Toca un continente para explorarlo</div>
+<div id="tip"></div>
+<div id="loading">Cargando mapamundi…</div>
+</main>
+</div>
+<script>
+function load(urls){return new Promise(function(ok,ko){var i=0;(function n(){if(i>=urls.length)return ko();var s=document.createElement("script");s.src=urls[i++];s.onload=ok;s.onerror=function(){s.remove();n()};document.head.appendChild(s)})()})}
+var GR={
+AAA:{l:"AAA",r:"0–30 %",lo:0,hi:30,q:"Buena calidad",t:"ok",s:"Sin sabor",m:"Cero tolerancia",c:"#1b7f4b"},
+AA:{l:"AA",r:"0–35 %",lo:0,hi:35,q:"Buena calidad",t:"ok",s:"Máximo leve",m:"Cero tolerancia",c:"#3aa56d"},
+A40:{l:"A",r:"0–40 %",lo:0,hi:40,q:"Buena calidad",t:"ok",s:"Sin sabor",m:"Cero tolerancia",c:"#86c97a"},
+A50:{l:"A",r:"45–55 %",lo:45,hi:55,q:"Calidad media",t:"mid",s:"Máximo leve (máx. 50 %)",m:"Cero tolerancia",c:"#e3c84a"},
+A60:{l:"A",r:"55–65 %",lo:55,hi:65,q:"Calidad media",t:"mid",s:"Máximo medio",m:"Cero tolerancia",c:"#f0a53a"},
+Am:{l:"A-",r:"66–75 %",lo:66,hi:75,q:"Calidad media",t:"mid",s:"Máximo fuerte",m:"Cero tolerancia",c:"#e8743b"},
+Alt:{l:"A<",r:"76–80 %",lo:76,hi:80,q:"Calidad flexible",t:"flex",s:"Máximo fuerte",m:"Tolerancia media",c:"#d1453b"}};
+var D={};function add(g,ids,x){ids.split(" ").forEach(function(i){(D[i]=D[i]||[]).push({g:g,x:x})})}
+add("AAA","ES FR GB PT ME RS BG PL AL DE RO BE LV EE AM JP NZ SV NL AR");
+add("AA","GR CY GE GT NI DO");add("AAA","GR",1);
+add("A40","IT CA NL AR");
+add("A60","MA ZA LB SG TT TH HK CI JO");add("A50","MA",1);
+add("A50","US KR RU MY TW");add("Am","EG OM AE BH QA KW");add("Alt","CN VN");
+var NM={GB:"Reino Unido (Inglaterra)",NL:"Países Bajos (Holanda)",GE:"Georgia (Puerto de Poti)",VN:"Vietnam (Haiphong – Hochiminh)",HK:"Hong Kong",TW:"Taiwán",KR:"Corea del Sur",CI:"Costa de Marfil",XK:"Kosovo",RU:"Rusia",CZ:"Chequia",MK:"Macedonia del Norte",MM:"Myanmar",PS:"Palestina"};
+var CN={europe:"Europa",asia:"Asia",africa:"África",north:"América del Norte",central:"Centroamérica y Caribe",south:"América del Sur",oceania:"Oceanía"};
+var P={europe:"AL AD AT BY BE BA BG HR CY CZ DK EE FO FI FR DE GI GR HU IS IE IT XK LV LI LT LU MT MD MC ME NL MK NO PL PT RO RU SM RS SK SI ES SE CH UA GB VA AX GG JE IM SJ",
+asia:"AF BH BD BT BN KH CN HK MO IN ID IR IQ IL JP JO KZ KW KG LA LB MY MV MN MM NP KP OM PK PS PH QA SA SG KR LK SY TW TJ TH TL TM AE UZ VN YE TR GE AM AZ",
+africa:"DZ AO BJ BW BF BI CM CV CF TD KM CG CD CI DJ EG GQ ER SZ ET GA GM GH GN GW KE LS LR LY MG MW ML MR MU MA MZ NA NE NG RW ST SN SC SL SO ZA SS SD TZ TG TN UG ZM ZW EH RE YT SH",
+north:"CA MX US GL",
+central:"BZ CR SV GT HN NI PA CU DO HT JM BS BB TT AG DM GD KN LC VC PR BM KY AW CW SX TC VG VI AI MS BQ GP MQ BL MF PM",
+south:"AR BO BR CL CO EC GY PY PE SR UY VE FK GF",
+oceania:"AU FJ KI MH FM NR NZ PW PG WS SB TO TV VU NC PF CK NU AS GU MP WF PN TK"};
+var S={europe:"TR GE AM AZ",asia:"RU CY"};
+var primary={},mem={};
+for(var k in P){mem[k]=new Set(P[k].split(" "));P[k].split(" ").forEach(function(i){primary[i]=k})}
+for(var k2 in S)S[k2].split(" ").forEach(function(i){mem[k2].add(i)});
+var FB={ME:[19.37,42.71],SG:[103.82,1.35],BH:[50.55,26.07],HK:[114.17,22.32],TT:[-61.2,10.7],QA:[51.18,25.35]};
+var V={world:{p:function(){return d3.geoNaturalEarth1()},b:[-180,-58,180,84]},
+europe:{p:function(){return d3.geoConicConformal().parallels([35,65]).rotate([-15,0])},b:[-24,33,52,72]},
+asia:{p:function(){return d3.geoNaturalEarth1().rotate([-92,0])},b:[25,-12,190,78]},
+africa:{p:function(){return d3.geoNaturalEarth1().rotate([-20,0])},b:[-26,-36,58,38]},
+north:{p:function(){return d3.geoConicEqualArea().parallels([15,60]).rotate([100,0])},b:[-170,6,-50,74]},
+central:{p:function(){return d3.geoNaturalEarth1().rotate([75,0])},b:[-93,6,-58,28]},
+south:{p:function(){return d3.geoNaturalEarth1().rotate([60,0])},b:[-82,-56,-34,13]},
+oceania:{p:function(){return d3.geoNaturalEarth1().rotate([-150,0])},b:[110,-48,192,4]}};
+var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null},rendered=null,proj,pathG,DN=null;
+try{DN=new Intl.DisplayNames(["es"],{type:"region"})}catch(e){}
+function name(i){if(NM[i])return NM[i];try{var n=DN&&DN.of(i);if(n&&n!==i)return n}catch(e){}return byId[i]?byId[i].properties.name:i}
+function mg(r){return Object.assign({},GR[r.g],r.o||{})}
+function ents(i){return(D[i]&&D[i].length&&D[i])||(primary[i]&&CD[primary[i]]&&CD[primary[i]].length&&CD[primary[i]])||null}
+function gOf(i){var e=ents(i);return e?mg(e[0]):null}
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function slug(n){return n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"")}
+function size(){var r=svg.getBoundingClientRect();return[r.width,r.height]}
+function mk(view,W,H){var v=V[view],p=v.p().scale(1).translate([0,0]),b=v.b,pts=[],N=30,t,i;
+for(i=0;i<=N;i++){t=i/N;pts.push([b[0]+(b[2]-b[0])*t,b[1]],[b[0]+(b[2]-b[0])*t,b[3]],[b[0],b[1]+(b[3]-b[1])*t],[b[2],b[1]+(b[3]-b[1])*t])}
+var q=pts.map(p).filter(Boolean),x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+q.forEach(function(a){x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])});
+var k=Math.min(W*.94/(x1-x0),H*.94/(y1-y0));
+return p.scale(k).translate([W/2-k*(x0+x1)/2,H/2-k*(y0+y1)/2]).clipExtent([[0,0],[W,H]])}
+function render(view){var s=size(),W=s[0],H=s[1],h="",dots="";svg.setAttribute("viewBox","0 0 "+W+" "+H);
+proj=mk(view,W,H);pathG=d3.geoPath(proj);mapG.classList.remove("focus");mapG.style.transition="none";mapG.style.transform="none";void mapG.offsetWidth;mapG.style.transition="";
+F.forEach(function(f){var d=pathG(f);if(!d)return;var i=f.id,c;
+if(view==="world"){c=primary[i]?"w c-"+primary[i]:"out"}
+else if(mem[view].has(i)){var g=gOf(i);c="m "+(g?"":"nodata")}else c="out";
+h+='<path class="ct '+c+'" data-id="'+i+'" d="'+d+'"'+(view!=="world"&&gOf(i)?' style="fill:'+gOf(i).c+'"':"")+'/>'});
+if(view!=="world"){mem[view].forEach(function(i){var f=byId[i],pt=null,tiny=false;
+if(f){var b=pathG.bounds(f._m);tiny=isFinite(b[0][0])&&(b[1][0]-b[0][0]<7&&b[1][1]-b[0][1]<7);if(tiny)pt=pathG.centroid(f._m)}
+else if(FB[i]){pt=proj(FB[i])}
+if(pt&&D[i]&&gOf(i)&&isFinite(pt[0]))dots+='<circle class="dot" data-id="'+i+'" r="5" cx="'+pt[0]+'" cy="'+pt[1]+'" style="fill:'+gOf(i).c+'"/>'})}
+mapG.innerHTML=h+dots+lab(view);rendered=view;cities();lbl(1)}
+function fixRing(f){var g=f.geometry;if(!g)return;var fx=function(p){return d3.geoArea({type:"Polygon",coordinates:p})>2*Math.PI?p.map(function(r){return r.slice().reverse()}):p};
+if(g.type==="Polygon")g.coordinates=fx(g.coordinates);else g.coordinates=g.coordinates.map(fx);
+var best=null,ba=-1;(g.type==="Polygon"?[g.coordinates]:g.coordinates).forEach(function(p){var a=d3.geoArea({type:"Polygon",coordinates:p});if(a>ba){ba=a;best=p}});
+f._m={type:"Polygon",coordinates:best}}
+function fade(fn){mapG.classList.add("fade");setTimeout(function(){fn();mapG.classList.remove("fade")},200)}
+function crumbs(){var h='<button data-go="world">Mapamundi</button>';
+if(st.c){h+=' <i>›</i> '+(st.id?'<button data-go="cont">'+CN[st.c]+'</button>':'<span>'+CN[st.c]+'</span>')}
+if(st.id)h+=' <i>›</i> '+(st.city?'<button data-go="ctry">'+esc(name(st.id))+'</button>':'<span>'+esc(name(st.id))+'</span>');
+if(st.city&&CITY[st.city])h+=' <i>›</i> <span>'+esc(CITY[st.city].nombre)+'</span>';
+$("crumbs").innerHTML=h;$("back").disabled=st.v==="world"}
+function side(){var c=st.c,p=$("side");if(st.v!=="continent"){p.style.display="none";return}
+var ids=[];mem[c].forEach(function(i){if(D[i]&&D[i].length)ids.push(i)});ids.sort(function(a,b){return name(a).localeCompare(name(b),"es")});
+var re=CD[c],h="<h3>Destinos en la matriz · "+CN[c]+'</h3><div class="inh" style="margin:0 0 6px">Parámetros de la región: '+(re&&re.length?re.map(function(r){var g=mg(r);return g.l+" · máx. "+g.hi+" %"}).join(", "):"sin datos")+"</div>"+(ADMIN?'<button class="btn sec" data-act="editreg">Editar región</button>':"");
+ids.forEach(function(i){var g=gOf(i);h+='<button class="chip" data-id="'+i+'"><span class="sw" style="background:'+g.c+'"></span>'+esc(name(i))+"<em>"+g.l+" · "+g.r+"</em></button>"});
+h+='<div id="leg">';Object.keys(GR).forEach(function(k){h+='<div><span class="sw" style="background:'+GR[k].c+'"></span>'+GR[k].l+" · "+GR[k].r+" · "+GR[k].q+"</div>"});
+h+='<div><span class="sw" style="background:#b9c3cd"></span>Sin dato en la matriz</div><div style="margin-top:4px">Clase C (80–100 %, por descabezar): según destino.</div></div>';
+p.innerHTML=h;p.style.display="block"}
+function eh(r){var g=mg(r),sab=g.s!=="Sin sabor";return '<section class="en"><div class="top"><div class="gr" style="background:'+g.c+'">'+g.l+'</div><div><div class="mx">Máximo '+g.hi+' %'+(r.x?'<span class="exc">EXCEPCIÓN</span>':"")+'</div><div class="sb">Defectos totales: '+g.r+'</div></div></div><div class="bar"><i style="left:'+g.lo+'%;width:'+(g.hi-g.lo)+'%;background:'+g.c+'"></i></div><dl><dt>Calidad</dt><dd><span class="tag '+g.t+'">'+g.q+'</span></dd><dt>¿Acepta sabor?</dt><dd><span class="tag '+(sab?"mid":"ok")+'">'+(sab?"Sí":"No")+'</span></dd><dt>Sabor permitido</dt><dd>'+esc(g.s)+'</dd><dt>Materia extraña</dt><dd>'+esc(g.m)+'</dd></dl>'+(r.n?'<p class="sb" style="margin:8px 0 0">'+esc(r.n)+'</p>':"")+'</section>'}
+function card(){var p=$("card");if(st.v!=="country"){p.style.display="none";return}
+var i=st.id,city=st.city?CITY[st.city]:null,e,src="";
+if(city){e=city.grados&&city.grados.length?city.grados:null;if(!e){e=ents(i);if(e)src="Heredado "+(D[i]&&D[i].length?"de "+name(i):"de "+CN[st.c])}}
+else{e=ents(i);if(e&&!(D[i]&&D[i].length))src="Heredado de "+CN[primary[i]]}
+var h='<div class="ch"><div><h2>'+esc(city?city.nombre:name(i))+"</h2><p>"+(city?esc(name(i))+" · ":"")+CN[st.c]+'</p></div><button data-act="close" aria-label="Cerrar">×</button></div>';
+if(src)h+='<div class="inh">'+src+"</div>";
+if(!e)h+='<div class="en"><b>Sin datos en la matriz.</b><p class="sb" style="font-size:13px;margin:6px 0 0">'+(ADMIN?"Puedes ingresarlos con el botón de abajo.":"Un administrador puede ingresarlos.")+" La Clase C (80–100 %, por descabezar) se aplica según el destino.</p></div>";
+else e.forEach(function(r){h+=eh(r)});
+var cl=Object.keys(CITY).filter(function(k){return CITY[k].pais===i});
+if(cl.length&&!city)h+='<div class="inh" style="margin-top:8px">Ciudades</div><div class="ab2">'+cl.map(function(k){return'<button class="btn sec" data-city="'+k+'">'+esc(CITY[k].nombre)+"</button>"}).join("")+"</div>";
+if(ADMIN)h+='<div class="ab2"><button class="btn" data-act="edit">'+(e?"Editar parámetros":"Ingresar datos")+"</button>"+(city?'<button class="btn red" data-act="delcity">Eliminar ciudad</button>':'<button class="btn sec" data-act="addcity">+ Ciudad</button>')+"</div>";
+h+='<div class="ft">Los defectos se evalúan a partir de los mayores (cabezas anaranjadas, cabezas estropeadas y camarón mudado) y dependen del color del camarón. Matriz vigente al 29/10/2026.</div>';
+p.innerHTML=h;p.style.display="block"}
+function zoom(id,inst){cities();var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[id],k=1,cx,cy,pt;
+mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")});
+mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});
+var el=mapG.querySelector('path[data-id="'+id+'"]');
+if(f){var b=pathG.bounds(f._m);if(isFinite(b[0][0])){var bw=Math.max(b[1][0]-b[0][0],1),bh=Math.max(b[1][1]-b[0][1],1);cx=(b[0][0]+b[1][0])/2;cy=(b[0][1]+b[1][1])/2;k=Math.max(1,Math.min(aw*.7/bw,ah*.7/bh,12))}}
+if((!f||k>=9)&&FB[id]){pt=proj(FB[id]);cx=pt[0];cy=pt[1];k=Math.max(k,6)}
+if(el){var g0=gOf(id);el.style.setProperty("--glow",g0?g0.c:"#ffd54a");el.classList.add("sel");mapG.appendChild(el)}
+mapG.classList.add("focus");
+if(cx===undefined){mapG.style.transform="none";dots(1);return}
+if(inst)mapG.style.transition="none";mapG.style.transform="translate("+(aw/2-k*cx)+"px,"+(ah/2-k*cy)+"px) scale("+k+")";dots(k);if(inst){void mapG.offsetWidth;mapG.style.transition=""}
+if(f&&k>=9||!f){var c=document.createElementNS("http://www.w3.org/2000/svg","circle");c.setAttribute("class","ping");c.setAttribute("cx",cx);c.setAttribute("cy",cy);c.setAttribute("r",14/k);mapG.appendChild(c)}}
+function dots(k){mapG.querySelectorAll("circle.dot").forEach(function(c){c.setAttribute("r",5/k)});lbl(k)}
+var zt;function camT(c){var s=size(),W=s[0],H=s[1],b=V[c].b,hi=Math.min(b[2],179.5),pts=[],t,i,x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+for(i=0;i<=30;i++){t=i/30;pts.push([b[0]+(hi-b[0])*t,b[1]],[b[0]+(hi-b[0])*t,b[3]],[b[0],b[1]+(b[3]-b[1])*t],[hi,b[1]+(b[3]-b[1])*t])}
+pts.map(proj).filter(Boolean).forEach(function(a){x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])});
+var k=Math.min(W*.88/(x1-x0),H*.88/(y1-y0));return "translate("+(W/2-k*(x0+x1)/2)+"px,"+(H/2-k*(y0+y1)/2)+"px) scale("+k+")"}
+function zin(c){clearTimeout(zt);mapG.style.transform=camT(c);zt=setTimeout(function(){if(st.v==="continent"&&st.c===c)fade(function(){render(c)})},1150)}
+function toWorld(){var c=st.c;st={v:"world",c:null,id:null};clearTimeout(zt);
+if(c&&rendered==="world"){mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}
+else if(c){mapG.classList.remove("focus");render("world");var T=camT(c);mapG.style.transition="none";mapG.style.transform=T;void mapG.offsetWidth;mapG.style.transition="";mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}
+else fade(function(){render("world");$("hint").style.opacity=1});upd()}
+function toCont(c){var same=rendered===c;st={v:"continent",c:c,id:null};$("hint").style.opacity=0;
+if(same){mapG.classList.remove("focus");mapG.style.transform="none";mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});setTimeout(function(){if(st.v!=="country")mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")})},700);cities();dots(1)}else if(rendered==="world"){zin(c)}else fade(function(){render(c)});upd()}
+function toCountry(i,c){c=c||st.c;if(!c||!mem[c].has(i))c=primary[i];if(!c)return;st={v:"country",c:c,id:i};$("hint").style.opacity=0;
+if(rendered!==c){fade(function(){render(c);zoom(i)})}else zoom(i);upd()}
+function upd(){crumbs();side();card()}
+function back(){if(st.city){st.city=null;upd()}else if(st.v==="country")toCont(st.c);else if(st.v==="continent")toWorld()}
+$("back").onclick=back;
+document.addEventListener("keydown",function(e){if(e.key==="Escape")back()});
+$("crumbs").onclick=function(e){var g=e.target.dataset.go;if(g==="world")toWorld();if(g==="cont")toCont(st.c);if(g==="ctry"){st.city=null;upd()}};
+$("side").onclick=function(e){var b=e.target.closest(".chip");if(b)toCountry(b.dataset.id);else if(e.target.dataset.act==="editreg")openEd("continente",st.c)};
+$("card").onclick=function(e){var t=e.target,a=t.dataset.act;if(t.dataset.city){st.city=t.dataset.city;upd();return}
+if(a==="close"){if(st.city){st.city=null;upd()}else back()}
+else if(a==="edit")st.city?openEd("ciudad",st.city):openEd("pais",st.id);
+else if(a==="addcity"){placing=true;var h=$("hint");h.textContent="Haz clic en el mapa donde está la ciudad";h.style.opacity=1}
+else if(a==="delcity"&&confirm("¿Eliminar esta ciudad?")){FS.remove("destinos",st.city);st.city=null}};
+svg.onclick=function(e){if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;upd();return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
+if(st.v==="world"){if(primary[i])toCont(primary[i])}else if(mem[st.c].has(i))toCountry(i)};
+svg.onmousemove=function(e){var n=e.target.closest&&e.target.closest("[data-id]"),i=n&&n.dataset.id,r=$("stage").getBoundingClientRect();
+mapG.querySelectorAll(".hl").forEach(function(x){x.classList.remove("hl")});
+if(!i||n.classList.contains("out")){tip.style.display="none";return}
+var t;if(st.v==="world"){t=CN[primary[i]];mapG.querySelectorAll(".c-"+primary[i]).forEach(function(x){x.classList.add("hl")})}
+else{var g=gOf(i);t=name(i)+(g?" · "+g.l+" (máx. "+g.hi+" %)":" · sin dato")}
+tip.textContent=t;tip.style.display="block";tip.style.left=Math.min(e.clientX-r.left+14,r.width-tip.offsetWidth-8)+"px";tip.style.top=(e.clientY-r.top+14)+"px"};
+svg.onmouseleave=function(){tip.style.display="none";mapG.querySelectorAll(".hl").forEach(function(x){x.classList.remove("hl")})};
+var fbReady=new Promise(function(r){window._fbRes=r});
+var CD={},CITY={},SC={},FS=null,USR=null,ADMIN=false,placing=false,ED=null,SD=JSON.parse(JSON.stringify(D)),SG=JSON.parse(JSON.stringify(GR));
+"ES|Madrid|-3.70|40.42;FR|París|2.35|48.86;GB|Londres|-0.13|51.51;PT|Lisboa|-9.14|38.72;ME|Podgorica|19.26|42.44;RS|Belgrado|20.46|44.79;BG|Sofía|23.32|42.70;PL|Varsovia|21.01|52.23;AL|Tirana|19.82|41.33;DE|Berlín|13.40|52.52;RO|Bucarest|26.10|44.43;BE|Bruselas|4.35|50.85;LV|Riga|24.11|56.95;EE|Tallin|24.75|59.44;AM|Ereván|44.51|40.18;JP|Tokio|139.69|35.69;NZ|Wellington|174.78|-41.29;SV|San Salvador|-89.22|13.69;NL|Ámsterdam|4.90|52.37;AR|Buenos Aires|-58.38|-34.60;GR|Atenas|23.73|37.98;CY|Nicosia|33.38|35.19;GE|Tiflis|44.79|41.72;GE|Poti|41.67|42.15;GT|Ciudad de Guatemala|-90.51|14.63;NI|Managua|-86.25|12.13;DO|Santo Domingo|-69.93|18.49;IT|Roma|12.50|41.90;CA|Ottawa|-75.70|45.42;MA|Rabat|-6.84|34.02;ZA|Pretoria|28.19|-25.75;LB|Beirut|35.50|33.89;SG|Singapur|103.82|1.35;TT|Puerto España|-61.52|10.66;TH|Bangkok|100.50|13.76;HK|Hong Kong|114.17|22.32;CI|Yamusukro|-5.28|6.83;JO|Amán|35.93|31.95;US|Washington D. C.|-77.04|38.91;KR|Seúl|126.98|37.57;RU|Moscú|37.62|55.76;MY|Kuala Lumpur|101.69|3.14;TW|Taipéi|121.56|25.03;EG|El Cairo|31.24|30.04;OM|Mascate|58.41|23.59;AE|Abu Dabi|54.37|24.45;BH|Manama|50.58|26.23;QA|Doha|51.53|25.29;KW|Kuwait|47.98|29.38;CN|Pekín|116.41|39.90;VN|Hanói|105.85|21.03;VN|Haiphong|106.68|20.86;VN|Ho Chi Minh|106.63|10.82".split(";").forEach(function(t){var a=t.split("|"),id="ciudad_"+a[0]+"_"+slug(a[1]);SC[id]={tipo:"ciudad",pais:a[0],nombre:a[1],lon:+a[2],lat:+a[3],grados:[]};CITY[id]=SC[id]});
+var LB={europe:[20,53],asia:[88,46],africa:[20,4],north:[-100,50],central:[-84,17],south:[-60,-14],oceania:[134,-26]};
+function lab(view){var h="",p;
+if(view==="world"){for(var k in LB){p=proj(LB[k]);if(p)h+='<text class="lb cl" data-s="'+(k==="central"?9:15)+'" x="'+p[0]+'" y="'+p[1]+'">'+CN[k].toUpperCase()+"</text>"}}
+else mem[view].forEach(function(i){var f=byId[i],w=0;p=null;if(f){var b=pathG.bounds(f._m);w=Math.max(b[1][0]-b[0][0],0);p=pathG.centroid(f._m);if(w<7)w=14}else if(FB[i]){p=proj(FB[i]);w=14}
+var n=name(i);if(p&&isFinite(p[0]))h+='<text class="lb" data-s="11" data-w="'+w+'" data-n="'+n.length+'" x="'+p[0]+'" y="'+p[1]+'">'+esc(n)+"</text>"});
+return h}
+function lbl(k){mapG.querySelectorAll("text.lb").forEach(function(t){t.style.fontSize=(+t.dataset.s/k)+"px";t.style.strokeWidth=(3/k)+"px";if(t.dataset.w!==undefined)t.style.display=(+t.dataset.w*k>=+t.dataset.n*5.6)?"":"none"});
+mapG.querySelectorAll("circle.city").forEach(function(c){c.setAttribute("r",4/k)});mapG.querySelectorAll("text.cn").forEach(function(t){t.setAttribute("dx",6/k)})}
+function cities(){mapG.querySelectorAll(".city,.cn").forEach(function(n){n.remove()});if(st.v!=="country"||!proj)return;var h="";
+Object.keys(CITY).forEach(function(id){var c=CITY[id];if(c.pais!==st.id)return;var p=proj([c.lon,c.lat]);if(!p||!isFinite(p[0]))return;h+='<circle class="city" data-city="'+id+'" cx="'+p[0]+'" cy="'+p[1]+'" r="4"/><text class="lb cn" data-s="12" dy=".35em" x="'+p[0]+'" y="'+p[1]+'">'+esc(c.nombre)+"</text>"});
+mapG.insertAdjacentHTML("beforeend",h)}
+function refresh(){if(!F.length||!rendered)return;if(st.city&&!CITY[st.city])st.city=null;render(rendered);if(st.v==="country")zoom(st.id,1);upd()}
+function placeCity(e){placing=false;var h=$("hint");h.textContent="Toca un continente para explorarlo";h.style.opacity=0;var pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var q=pt.matrixTransform(mapG.getScreenCTM().inverse()),ll=proj.invert([q.x,q.y]),nm=prompt("Nombre de la ciudad:");
+if(!nm||!ll)return;FS.save("destinos","ciudad_"+st.id+"_"+slug(nm),{tipo:"ciudad",pais:st.id,nombre:nm.trim(),lat:+ll[1].toFixed(4),lon:+ll[0].toFixed(4),grados:[]})}
+function initFB(api){if(!api)return;FS=api;
+api.watch("grados",function(L){L.forEach(function(d){var id=d.id;delete d.id;GR[id]=Object.assign(GR[id]||{},d)});refresh()});
+api.watch("destinos",function(L){var nd={},nc={},nt={};L.forEach(function(d){if(d.tipo==="pais")nd[d.codigo]=d.grados||[];else if(d.tipo==="continente")nc[d.codigo]=d.grados||[];else if(d.tipo==="ciudad")nt[d.id]=d});
+if(Object.keys(nd).length)D=nd;if(Object.keys(nt).length)CITY=nt;CD=nc;refresh()});
+api.onAuth(function(u,ok){USR=u;ADMIN=!!ok;upd()})}
+function box(h){$("mod").innerHTML='<div class="box">'+h+"</div>";$("mod").style.display="grid"}
+function closeMod(){$("mod").style.display="none"}
+$("adm").onclick=function(){
+if(!FS)box('<h3>Administración</h3><p>Firebase no está configurado. Pega tu configuración en <code>FIREBASE_CONFIG</code> (ver LEEME.txt). Mientras tanto se muestra la matriz incorporada, en modo solo lectura.</p><button class="btn sec" data-x>Cerrar</button>');
+else if(ADMIN)box('<h3>Administración</h3><p>Sesión de administrador activa.</p><button class="btn" data-seed>Cargar matriz base</button> <button class="btn sec" data-devices>Autorizar dispositivos</button> <button class="btn sec" data-out>Cerrar sesión</button> <button class="btn sec" data-x>Cerrar</button><p class="sb">La carga inicial guarda los grados, países y ciudades base.</p>');
+else box('<h3>Acceso restringido</h3><p class="sb">Solo el administrador puede modificar la matriz. Inicia sesión desde la pantalla de acceso.</p><button class="btn sec" data-x>Cerrar</button>')};
+function showDevices(){FS.listDevices().then(function(r){var a=r.devices||[],h='<h3>Dispositivos de Calidad y Sabor</h3><p class="sb">Autoriza únicamente los dispositivos que reconoces.</p>';if(!a.length)h+='<p class="sb">No hay dispositivos pendientes ni autorizados.</p>';a.forEach(function(d){h+='<div class="row"><div style="grid-column:1/3"><b>'+esc(d.label)+'</b><div class="sb">'+esc(d.email)+' · '+esc(d.uid)+'</div><div class="sb">Estado: '+esc(d.status)+'</div><button class="btn '+(d.status==='active'?'red':'')+'" data-device-status="'+(d.status==='active'?'revoked':'active')+'" data-device-uid="'+esc(d.uid)+'" data-device-id="'+esc(d.deviceId)+'">'+(d.status==='active'?'Revocar':'Autorizar')+'</button></div></div>'});h+='<button class="btn sec" data-devices>Actualizar</button> <button class="btn sec" data-x>Cerrar</button>';box(h)}).catch(function(e){box('<h3>Dispositivos</h3><p class="sb">No se pudo cargar la lista: '+esc(e.message)+'</p><button class="btn sec" data-x>Cerrar</button>')})}
+function seed(){var ops=[];Object.keys(SG).forEach(function(k){ops.push(["grados",k,SG[k]])});Object.keys(SD).forEach(function(i){ops.push(["destinos","pais_"+i,{tipo:"pais",codigo:i,nombre:name(i),continente:primary[i]||"",grados:SD[i]}])});Object.keys(SC).forEach(function(k){ops.push(["destinos",k,SC[k]])});
+FS.batch(ops).then(function(){alert("Matriz cargada en Firestore.");closeMod()}).catch(function(e){alert("No se pudo cargar: "+e.message)})}
+function openEd(kind,id){var key=kind==="ciudad"?id:kind+"_"+id,src=kind==="pais"?D[id]:kind==="continente"?CD[id]:CITY[id].grados,rows=JSON.parse(JSON.stringify(src||[])),ttl=kind==="pais"?name(id):kind==="continente"?CN[id]:CITY[id].nombre;
+function collect(){var out=[];document.querySelectorAll("#mod .row").forEach(function(r){var q=function(c){return r.querySelector(c).value.trim()},g=q(".rg"),e={g:g},o={},hi=q(".rh"),lo=q(".rl");
+if(q(".rx"))e.x=1;if(hi||lo){var H=hi?+hi:GR[g].hi,L=lo?+lo:GR[g].lo;o.hi=H;o.lo=L;o.r=L+"–"+H+" %"}
+if(q(".rs"))o.s=q(".rs");if(q(".rm"))o.m=q(".rm");if(Object.keys(o).length)e.o=o;if(q(".rn"))e.n=q(".rn");out.push(e)});return out}
+function draw(){var h='<h3>Parámetros · '+esc(ttl)+'</h3><p class="sb">Elige el grado de la matriz y, si hace falta, sobrescribe valores propios.</p>';
+rows.forEach(function(r,n){var o=r.o||{};h+='<div class="row"><div><label>Grado</label><select class="rg">'+Object.keys(GR).map(function(k){return'<option value="'+k+'"'+(k===r.g?" selected":"")+">"+GR[k].l+" · "+GR[k].r+"</option>"}).join("")+'</select></div><div><label>¿Excepción?</label><select class="rx"><option value="">No</option><option value="1"'+(r.x?" selected":"")+'>Sí</option></select></div><div><label>Máx. defectos % (opcional)</label><input class="rh" type="number" value="'+(o.hi!==undefined?o.hi:"")+'"></div><div><label>Mín. % (opcional)</label><input class="rl" type="number" value="'+(o.lo!==undefined?o.lo:"")+'"></div><div><label>Sabor permitido (opcional)</label><input class="rs" value="'+esc(o.s||"")+'"></div><div><label>Materia extraña (opcional)</label><input class="rm" value="'+esc(o.m||"")+'"></div><div style="grid-column:1/3"><label>Nota</label><input class="rn" value="'+esc(r.n||"")+'"></div><div style="grid-column:1/3"><button class="btn red" data-del="'+n+'">Quitar</button></div></div>'});
+h+='<button class="btn sec" data-add>+ Agregar grado</button><p style="margin-top:12px"><button class="btn" data-save>Guardar en Firestore</button> <button class="btn sec" data-x>Cancelar</button></p>';box(h)}
+ED={key:key,kind:kind,id:id,collect:collect,set:function(r){rows=r;draw()}};draw()}
+$("mod").onclick=function(e){var t=e.target,d=t.dataset,r;if(t===$("mod")||"x" in d)return closeMod();
+if("devices" in d)showDevices();
+else if(d.deviceStatus)FS.setDeviceStatus(d.deviceUid,d.deviceId,d.deviceStatus).then(showDevices).catch(function(x){alert("No se pudo actualizar el dispositivo: "+x.message)});
+else if("out" in d){FS.logout();closeMod()}else if("seed" in d)seed();
+else if("add" in d){r=ED.collect();r.push({g:"AAA"});ED.set(r)}
+else if(d.del!==undefined){r=ED.collect();r.splice(+d.del,1);ED.set(r)}
+else if("save" in d){r=ED.collect();var k=ED.kind,i=ED.id;
+if(k==="ciudad")FS.save("destinos",ED.key,{grados:r});else if(!r.length)FS.remove("destinos",ED.key);
+else FS.save("destinos",ED.key,k==="pais"?{tipo:"pais",codigo:i,nombre:name(i),continente:primary[i]||"",grados:r}:{tipo:"continente",codigo:i,nombre:CN[i],grados:r});closeMod()}};
+var rt;window.addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(function(){if(!F.length)return;render(rendered);if(st.v==="country")zoom(st.id)},150)});
+Promise.resolve().then(function(){return load(["https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js","https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"])})
+.then(function(){return load(["https://cdnjs.cloudflare.com/ajax/libs/amcharts5/5.21.2/geodata/worldLow.js","https://cdnjs.cloudflare.com/ajax/libs/amcharts5/5.10.0/geodata/worldLow.js"])})
+.then(function(){F=window.am5geodata_worldLow.features.filter(function(f){return f.id&&f.id!=="AQ"&&f.geometry});
+F.forEach(function(f){fixRing(f);byId[f.id]=f});$("loading").style.display="none";render("world");upd();return fbReady}).then(initFB)
+.catch(function(){$("loading").textContent="No se pudo cargar el mapa. Revisa tu conexión e intenta de nuevo."});
+</script>
+<script type="module">
+/* Usa el mismo proyecto Firebase de Evaluaciones EXPALSA. */
+const FIREBASE_CONFIG={apiKey:"AIzaSyAb3bOkqLugI-MK6WOf4OjX4KhxSwGnJhM",authDomain:"oceantreasure-app.firebaseapp.com",projectId:"oceantreasure-app",storageBucket:"oceantreasure-app.firebasestorage.app",messagingSenderId:"553014659258",appId:"1:553014659258:web:4568ce401c97f726b79a83",measurementId:"G-DXVJ0MP4XY"};
+try{
+if(FIREBASE_CONFIG.apiKey&&!FIREBASE_CONFIG.apiKey.startsWith("PEGA")){
+const B="https://www.gstatic.com/firebasejs/10.14.1/";
+const [A,F,U,Fn]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-firestore.js"),import(B+"firebase-auth.js"),import(B+"firebase-functions.js")]);
+const app=A.initializeApp(FIREBASE_CONFIG,"expalsa-mapa-calidad"),db=F.getFirestore(app),au=U.getAuth(app),functions=Fn.getFunctions(app,"us-central1");
+const call=(name,data={})=>Fn.httpsCallable(functions,name)(data).then(r=>r.data),gateRoot=document.getElementById("authgate"),appRoot=document.getElementById("app"),msg=document.getElementById("gateMessage"),form=document.getElementById("gateForm"),logout=document.getElementById("gateLogout");
+let booting=false,readyDevice="",authCallback=null,adminMode=false,firestoreApi=null,published=false;
+function showGate(text,hasUser){gateRoot.style.display="grid";appRoot.style.display="none";msg.textContent=text;logout.style.display=hasUser?"inline-block":"none"}
+function openPage(user){gateRoot.style.display="none";appRoot.style.display="flex";if(!published&&firestoreApi){published=true;window._fbRes(firestoreApi)}if(authCallback)authCallback(user,adminMode)}
+function idb(){return new Promise((resolve,reject)=>{const q=indexedDB.open("expalsa-calidad-device-v1",1);q.onupgradeneeded=()=>q.result.createObjectStore("keys");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
+async function keyGet(id){const d=await idb();return new Promise((resolve,reject)=>{const q=d.transaction("keys").objectStore("keys").get(id);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
+async function keyPut(id,key){const d=await idb();return new Promise((resolve,reject)=>{const tx=d.transaction("keys","readwrite");tx.objectStore("keys").put(key,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function deviceKey(){let id=localStorage.getItem("expalsa-calidad-device-id"),stored=id&&await keyGet(id);if(id&&stored&&stored.privateKey&&stored.publicKey)return{id,privateKey:stored.privateKey,publicKey:stored.publicKey};id=crypto.randomUUID();const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},false,["sign","verify"]),publicKey=await crypto.subtle.exportKey("jwk",pair.publicKey);await keyPut(id,{privateKey:pair.privateKey,publicKey});localStorage.setItem("expalsa-calidad-device-id",id);return{id,privateKey:pair.privateKey,publicKey}}
+async function authorize(user){if(booting)return;booting=true;try{
+ const device=await deviceKey(),claims=(await U.getIdTokenResult(user,true)).claims;
+ const publicKey=device.publicKey;
+ if(claims.calidadDeviceId!==device.id){const started=await call("beginCalidadDevice",{deviceId:device.id,publicKey,label:(navigator.userAgent||"Navegador").slice(0,60)});if(started.status!=="active"){showGate("El dispositivo quedó pendiente de autorización del administrador. Puedes cerrar la sesión mientras esperas.",true);return}}
+ const challenge=await call("challengeCalidadDevice",{deviceId:device.id});const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.privateKey,new TextEncoder().encode(challenge.challenge));
+ const tokenResult=await call("exchangeCalidadDevice",{deviceId:device.id,signature:btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")});
+ const session=await U.signInWithCustomToken(au,tokenResult.token),fresh=(await U.getIdTokenResult(session.user,true)).claims;if(fresh.calidadDeviceId!==device.id)throw Error("No se pudo comprobar el dispositivo autorizado.");
+ readyDevice=device.id;adminMode=String(session.user.email||"").toLowerCase()==="jefferson@expalsaevaluations.com";if(adminMode){try{await call("listCalidadDevices")}catch(_){adminMode=false}}
+ openPage(session.user);
+ }catch(e){await U.signOut(au).catch(()=>{});showGate(e.message||"No se pudo verificar el acceso.",false)}finally{booting=false}}
+await U.setPersistence(au,U.browserLocalPersistence);
+form.addEventListener("submit",async e=>{e.preventDefault();msg.textContent="Validando cuenta…";try{await U.signInWithEmailAndPassword(au,document.getElementById("gateEmail").value.trim(),document.getElementById("gatePassword").value);document.getElementById("gatePassword").value=""}catch(x){showGate("No se pudo ingresar. Revisa el correo y la contraseña.",false)}});
+logout.addEventListener("click",()=>U.signOut(au));
+U.onAuthStateChanged(au,async u=>{if(!u){readyDevice="";adminMode=false;showGate("Ingresa con tu cuenta de Evaluaciones EXPALSA.",false);return}if(readyDevice&&String((await U.getIdTokenResult(u)).claims.calidadDeviceId||"")===readyDevice){openPage(u);return}showGate("Comprobando el registro de la cuenta y este dispositivo…",true);await authorize(u)});
+firestoreApi={
+watch:(c,cb)=>F.onSnapshot(F.collection(db,c),s=>cb(s.docs.map(d=>({id:d.id,...d.data()})))),
+save:(c,id,data)=>F.setDoc(F.doc(db,c,id),data,{merge:true}),remove:(c,id)=>F.deleteDoc(F.doc(db,c,id)),
+batch:ops=>{const b=F.writeBatch(db);ops.forEach(o=>b.set(F.doc(db,o[0],o[1]),o[2]));return b.commit()},
+login:()=>Promise.reject(Error("Inicia sesión desde la pantalla de acceso.")),logout:()=>U.signOut(au),
+onAuth:cb=>{authCallback=cb;if(au.currentUser&&readyDevice)cb(au.currentUser,adminMode)},
+listDevices:()=>call("listCalidadDevices"),setDeviceStatus:(uid,deviceId,status)=>call("setCalidadDeviceStatus",{uid,deviceId,status})
+};
+}else{document.getElementById("gateMessage").textContent="Falta la configuración Firebase de Evaluaciones EXPALSA.";window._fbRes(null)}
+}catch(e){console.error(e);document.getElementById("gateMessage").textContent="No se pudo conectar con Firebase. Revisa la configuración y las funciones.";window._fbRes(null)}
+</script>
+</body>
+</html>
+
