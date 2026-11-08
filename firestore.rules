@@ -79,8 +79,36 @@ service cloud.firestore {
         getAfter(cityPath).data.pais == d.pais &&
         getAfter(cityPath).data.nombre == d.ciudad;
     }
+    function validCalidadClientGradeOverride(o) {
+      return o is map && o.keys().hasOnly(['hi','lo','r','q','m']) &&
+        o.keys().hasAll(['hi','lo','r','q','m']) &&
+        o.lo is number && o.lo >= 0 && o.lo <= 100 &&
+        o.hi is number && o.hi >= o.lo && o.hi <= 100 &&
+        o.r is string && o.r.size() <= 40 &&
+        o.q is string && o.q.size() <= 50 &&
+        o.m is string && o.m.size() <= 120;
+    }
+    function validCalidadClientGrade(item) {
+      return item is map && item.keys().hasOnly(['g','o']) &&
+        item.keys().hasAll(['g']) &&
+        item.g in ['AAA','AA','A40','A50','A60','Am','Alt'] &&
+        (!('o' in item) || validCalidadClientGradeOverride(item.o));
+    }
+    function validCalidadClientGrades(grades) {
+      return grades is list && grades.size() <= 10 &&
+        (grades.size() < 1 || validCalidadClientGrade(grades[0])) &&
+        (grades.size() < 2 || validCalidadClientGrade(grades[1])) &&
+        (grades.size() < 3 || validCalidadClientGrade(grades[2])) &&
+        (grades.size() < 4 || validCalidadClientGrade(grades[3])) &&
+        (grades.size() < 5 || validCalidadClientGrade(grades[4])) &&
+        (grades.size() < 6 || validCalidadClientGrade(grades[5])) &&
+        (grades.size() < 7 || validCalidadClientGrade(grades[6])) &&
+        (grades.size() < 8 || validCalidadClientGrade(grades[7])) &&
+        (grades.size() < 9 || validCalidadClientGrade(grades[8])) &&
+        (grades.size() < 10 || validCalidadClientGrade(grades[9]));
+    }
     function validCalidadClient(d) {
-      return d.keys().hasOnly(['ciudadId','pais','ciudad','nombre','tipo','puerto','continente']) &&
+      return d.keys().hasOnly(['ciudadId','pais','ciudad','nombre','tipo','puerto','continente','grados']) &&
         d.keys().hasAll(['ciudadId','pais','ciudad','nombre','tipo']) &&
         d.ciudadId is string && d.ciudadId.size() > 0 && d.ciudadId.size() <= 180 &&
         d.pais is string && d.pais.matches('^[A-Z]{2}$') &&
@@ -89,6 +117,7 @@ service cloud.firestore {
         d.tipo in ['cliente','importador'] &&
         (!('puerto' in d) || (d.puerto is string && d.puerto.size() <= 120)) &&
         (!('continente' in d) || (d.continente is string && d.continente.size() <= 30)) &&
+        (!('grados' in d) || validCalidadClientGrades(d.grados)) &&
         calidadClientCityMatches(d);
     }
     function photoDoc(uid) { return /databases/$(database)/documents/expalsa_calidad_fotos_perfil/$(uid); }
