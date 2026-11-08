@@ -136,3 +136,4 @@ export async function downloadFlavorResults(data){
  await pdf.save(filename,{returnPromise:true});
  return filename;
 }
+export async function loadFlavorPdfResources(){const [deps,logoData]=await Promise.all([libraries(),logo()]);return {...deps,logoData};}
