@@ -44,6 +44,12 @@ button{font:inherit;cursor:pointer}
 #crumbs i{opacity:.5;font-style:normal}
 #stage{position:relative;flex:1;min-height:0}
 svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+svg.globe-mode{touch-action:none;cursor:grab}
+svg.globe-mode:active{cursor:grabbing}
+.globe-sphere{fill:url(#globeOcean);stroke:#ffffffc9;stroke-width:1.4;filter:drop-shadow(0 12px 20px #18334d40);pointer-events:none}
+.globe-graticule{fill:none;stroke:#ffffff72;stroke-width:.65;vector-effect:non-scaling-stroke;pointer-events:none}
+text.globe-label{font-size:11px;font-weight:800;letter-spacing:.025em;paint-order:stroke fill;stroke:var(--ocean);stroke-width:3px}
+text.globe-label.water-label{font-size:9px;opacity:.8}
 #map{transition:transform .62s cubic-bezier(.2,.8,.2,1),opacity .14s ease-out;transform-origin:0 0;will-change:transform,opacity}
 #map.fade{opacity:0}
 path.ct{stroke:var(--stroke);stroke-width:.6;vector-effect:non-scaling-stroke;transition:filter .16s ease-out,opacity .28s ease-out}
@@ -103,7 +109,19 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:1
 .filters input{width:100%;padding:6px 7px;font-size:12px}
 #back{padding:6px 8px;white-space:nowrap}
 #side{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:36%}
-#card{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:52%}
+#card{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:46%}
+#hint{bottom:10px;max-width:calc(100% - 32px);text-align:center;font-size:12px}
+}
+@media (max-width:480px){
+#bar{gap:5px;padding:6px 8px}
+#crumbs{font-size:13px}
+#back{font-size:12px}
+.filters{gap:4px}
+.filters input{padding:6px 5px;font-size:11px}
+#card{max-height:43%;border-radius:12px}
+#card .ch{padding:10px 12px 4px}
+#card .ch h2{font-size:18px}
+#card .en{margin:6px 10px;padding:9px}
 }
 .ab{background:#ffffff22;color:#fff;border:0;border-radius:8px;padding:6px 12px}
 text.lb{fill:var(--text);paint-order:stroke;stroke:var(--stroke);stroke-linejoin:round;text-anchor:middle;font-weight:600;pointer-events:none}
@@ -168,7 +186,9 @@ north:{p:function(){return d3.geoConicEqualArea().parallels([15,60]).rotate([100
 central:{p:function(){return d3.geoNaturalEarth1().rotate([75,0])},b:[-93,6,-58,28]},
 south:{p:function(){return d3.geoNaturalEarth1().rotate([60,0])},b:[-82,-56,-34,13]},
 oceania:{p:function(){return d3.geoNaturalEarth1().rotate([-150,0])},b:[110,-48,192,4]}};
-var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null,city:null,client:null},rendered=null,proj,pathG,DN=null,REGIONS=[],PLACES=[],PLACE_BY_ID={},WATER=[],mapDataPromise=null,waterPromise=null,mapScale=1;
+var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null,city:null,client:null},rendered=null,proj,pathG,DN=null,REGIONS=[],PLACES=[],PLACE_BY_ID={},WATER=[],mapDataPromise=null,waterPromise=null,mapScale=1,globeRotation=[-20,-8,0],globePointer=null,globeMoved=false,globeSuppressClick=false,globeRaf=false;
+function globeMode(){return!!(window.matchMedia&&window.matchMedia("(max-width:760px)").matches)}
+function globeCenter(){return[-globeRotation[0],-globeRotation[1]]}
 try{DN=new Intl.DisplayNames(["es"],{type:"region"})}catch(e){}
 function name(i){if(NM[i])return NM[i];try{var n=DN&&DN.of(i);if(n&&n!==i)return n}catch(e){}return byId[i]?byId[i].properties.name:i}
 function mg(r){return Object.assign({},GR[r.g],r.o||{})}
@@ -183,14 +203,16 @@ function loadWaterData(){if(waterPromise)return waterPromise;waterPromise=fetchG
 function loadMapData(){if(mapDataPromise)return mapDataPromise;mapDataPromise=Promise.all([fetchGzipJson("mapa-calidad-regiones.json.gz"),fetchGzipJson("mapa-calidad-ciudades.json.gz")]).then(function(d){REGIONS=d[0].features||[];REGIONS.forEach(fixRing);PLACES=(d[1]||[]).map(function(p){var c={pais:p.country,nombre:p.name,provincia:p.province||"",poblacion:p.population||0,capital:p.capital||0,lon:p.coordinates[0],lat:p.coordinates[1]};c.id="ciudad_"+c.pais+"_"+slug(c.nombre);PLACE_BY_ID[c.id]=c;return c});return true}).catch(function(e){mapDataPromise=null;throw e});return mapDataPromise}
 function regionLayer(){if(st.v!=="country"||!REGIONS.length)return"";var aliases={GF:["FR-GF"],GP:["FR-GP"],MQ:["FR-MQ"],RE:["FR-RE"],YT:["FR-YT"],SJ:["NO-21"],BQ:["NL-BQ1","NL-BQ2","NL-BQ3"]},extra=aliases[st.id]||[],list=REGIONS.filter(function(f){var p=f.properties||{},country=String(p.country||"").toUpperCase(),code=String(p.code||"").toUpperCase();return country===String(st.id||"").toUpperCase()||extra.indexOf(code)>=0}),h="",drawn=0;if(!list.length)return"";h='<g class="province-layer" data-country="'+esc(st.id)+'">';
 list.forEach(function(f,i){var d=pathG(f);if(!d)return;drawn++;var p=pathG.centroid(f),b=pathG.bounds(f),nm=f.properties.name,w=Math.max(0,b[1][0]-b[0][0]);h+='<path class="province" d="'+d+'" style="fill:'+REGION_COLORS[i%REGION_COLORS.length]+'"><title>'+esc(nm)+'</title></path>';if(p&&isFinite(p[0]))h+='<text class="lb province-label" data-s="10" data-w="'+w+'" data-n="'+nm.length+'" x="'+p[0]+'" y="'+p[1]+'">'+esc(nm)+'</text>'});return drawn?h+'</g>':""}
-function mk(view,W,H){var v=V[view],p=v.p().scale(1).translate([0,0]),b=v.b,pts=[],N=30,t,i;
+function globeRadius(W,H){return Math.max(90,Math.min(W*.46,H*.4))}
+function mk(view,W,H){if(view==="world"&&globeMode())return d3.geoOrthographic().clipAngle(90).precision(.35).rotate(globeRotation).scale(globeRadius(W,H)).translate([W/2,H*.47]).clipExtent([[0,0],[W,H]]);var v=V[view],p=v.p().scale(1).translate([0,0]),b=v.b,pts=[],N=30,t,i;
 for(i=0;i<=N;i++){t=i/N;pts.push([b[0]+(b[2]-b[0])*t,b[1]],[b[0]+(b[2]-b[0])*t,b[3]],[b[0],b[1]+(b[3]-b[1])*t],[b[2],b[1]+(b[3]-b[1])*t])}
 var q=pts.map(p).filter(Boolean),x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
 q.forEach(function(a){x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])});
 var k=Math.min(W*.94/(x1-x0),H*.94/(y1-y0));
 return p.scale(k).translate([W/2-k*(x0+x1)/2,H/2-k*(y0+y1)/2]).clipExtent([[0,0],[W,H]])}
-function render(view){var s=size(),W=s[0],H=s[1],h="",dots="";svg.setAttribute("viewBox","0 0 "+W+" "+H);
+function render(view){var s=size(),W=s[0],H=s[1],h="",dots="",globe=view==="world"&&globeMode(),sphere="",grid="";svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.classList.toggle("globe-mode",globe);
 proj=mk(view,W,H);pathG=d3.geoPath(proj);mapG.classList.remove("focus");mapG.style.transition="none";mapG.style.transform="none";void mapG.offsetWidth;mapG.style.transition="";
+if(globe){var gr=globeRadius(W,H),gy=H*.47;sphere='<defs><radialGradient id="globeOcean" cx="38%" cy="35%" r="70%"><stop offset="0%" stop-color="var(--ocean)"/><stop offset="72%" stop-color="#a9cadb"/><stop offset="100%" stop-color="#648da8"/></radialGradient></defs><circle class="globe-sphere" cx="'+(W/2)+'" cy="'+gy+'" r="'+gr+'"/>';grid='<path class="globe-graticule" d="'+pathG(d3.geoGraticule().step([30,30])())+'"/>';$("hint").textContent="Desliza el globo y toca un país para abrir su continente"}else if(view==="world")$("hint").textContent="Toca un continente para explorarlo";
 F.forEach(function(f){var d=pathG(f);if(!d)return;var i=f.id,c;
 if(view==="world"){c=primary[i]?"w c-"+primary[i]:"out"}
 else if(mem[view].has(i)){var g=gOf(i);c="m "+(g?"":"nodata")}else c="out";
@@ -199,8 +221,8 @@ if(view!=="world"&&st.v!=="country"){mem[view].forEach(function(i){var f=byId[i]
 if(f){var b=pathG.bounds(f._m);tiny=isFinite(b[0][0])&&(b[1][0]-b[0][0]<7&&b[1][1]-b[0][1]<7);if(tiny)pt=pathG.centroid(f._m)}
 else if(FB[i]){pt=proj(FB[i])}
 if(pt&&D[i]&&gOf(i)&&isFinite(pt[0]))dots+='<circle class="dot" data-id="'+i+'" r="5" cx="'+pt[0]+'" cy="'+pt[1]+'" style="fill:'+gOf(i).c+'"/>'})}
-mapG.innerHTML=h+regionLayer()+dots+lab(view)+waterLabels();rendered=view;cities();lbl(1)}
-function waterLabels(){if(!proj||!WATER.length)return"";var h="",country=st.v==="country"&&byId[st.id],limit=st.v==="world"?0:st.v==="continent"?1:4;WATER.forEach(function(w){if(w.r>limit)return;if(st.v==="world"&&w.t!=="o")return;if(st.v==="continent"&&w.t==="r")return;if(country&&w.t!=="o"&&!d3.geoContains(country._m||country,[+w.lon,+w.lat]))return;if(st.v==="continent"&&w.t==="l"&&w.r>0)return;var p=proj([+w.lon,+w.lat]);if(!p||!isFinite(p[0])||!isFinite(p[1]))return;var cls=w.t==="o"?"ocean-label":w.t==="m"?"marine-label":w.t==="r"?"river-label":"lake-label";h+='<text class="lb water-label '+cls+'" data-s="'+(w.t==="o"?14:w.t==="m"?11:10)+'" x="'+p[0]+'" y="'+p[1]+'">'+esc(w.n)+'</text>'});return h}
+mapG.innerHTML=sphere+h+regionLayer()+grid+dots+lab(view)+waterLabels();rendered=view;cities();lbl(1)}
+function waterLabels(){if(!proj||!WATER.length)return"";var h="",country=st.v==="country"&&byId[st.id],globe=st.v==="world"&&globeMode(),center=globe?globeCenter():null,limit=st.v==="world"?0:st.v==="continent"?1:4;WATER.forEach(function(w){if(w.r>limit)return;if(st.v==="world"&&w.t!=="o")return;if(globe&&(w.t!=="o"||d3.geoDistance([+w.lon,+w.lat],center)>1.4))return;if(st.v==="continent"&&w.t==="r")return;if(country&&w.t!=="o"&&!d3.geoContains(country._m||country,[+w.lon,+w.lat]))return;if(st.v==="continent"&&w.t==="l"&&w.r>0)return;var p=proj([+w.lon,+w.lat]);if(!p||!isFinite(p[0])||!isFinite(p[1]))return;var cls=w.t==="o"?"ocean-label":w.t==="m"?"marine-label":w.t==="r"?"river-label":"lake-label";h+='<text class="lb water-label '+cls+(globe?' globe-label':'')+'" data-s="'+(w.t==="o"?14:w.t==="m"?11:10)+'" x="'+p[0]+'" y="'+p[1]+'">'+esc(w.n)+'</text>'});return h}
 function fixRing(f){var g=f.geometry;if(!g)return;var fx=function(p){return d3.geoArea({type:"Polygon",coordinates:p})>2*Math.PI?p.map(function(r){return r.slice().reverse()}):p};
 if(g.type==="Polygon")g.coordinates=fx(g.coordinates);else g.coordinates=g.coordinates.map(fx);
 var best=null,ba=-1;(g.type==="Polygon"?[g.coordinates]:g.coordinates).forEach(function(p){var a=d3.geoArea({type:"Polygon",coordinates:p});if(a>ba){ba=a;best=p}});
@@ -260,10 +282,10 @@ var k=Math.min(W*.88/(x1-x0),H*.88/(y1-y0));return "translate("+(W/2-k*(x0+x1)/2
 function zin(c){clearTimeout(zt);mapG.style.transform=camT(c);zt=setTimeout(function(){if(st.v==="continent"&&st.c===c)fade(function(){render(c)})},1150)}
 function toWorld(){var c=st.c;st={v:"world",c:null,id:null,city:null,client:null};clearTimeout(zt);
 if(c&&rendered==="world"){mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}
-else if(c){mapG.classList.remove("focus");render("world");var T=camT(c);mapG.style.transition="none";mapG.style.transform=T;void mapG.offsetWidth;mapG.style.transition="";mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}
+else if(c){mapG.classList.remove("focus");render("world");if(globeMode()){mapG.style.transform="none";$("hint").style.opacity=1}else{var T=camT(c);mapG.style.transition="none";mapG.style.transform=T;void mapG.offsetWidth;mapG.style.transition="";mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}}
 else fade(function(){render("world");$("hint").style.opacity=1});upd()}
 function toCont(c){var same=rendered===c,hasRegions=!!mapG.querySelector(".province-layer");st={v:"continent",c:c,id:null,city:null,client:null};$("hint").style.opacity=0;
-if(same&&hasRegions){fade(function(){render(c)})}else if(same){mapG.classList.remove("focus");mapG.style.transform="none";mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});setTimeout(function(){if(st.v!=="country")mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")})},700);cities();dots(1)}else if(rendered==="world"){zin(c)}else fade(function(){render(c)});upd()}
+if(same&&hasRegions){fade(function(){render(c)})}else if(same){mapG.classList.remove("focus");mapG.style.transform="none";mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});setTimeout(function(){if(st.v!=="country")mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")})},700);cities();dots(1)}else if(rendered==="world"){if(globeMode())fade(function(){render(c)});else zin(c)}else fade(function(){render(c)});upd()}
 function toCountry(i,c){c=c||st.c;if(!c||!mem[c].has(i))c=primary[i];if(!c)return;st={v:"country",c:c,id:i,city:null,client:null};$("hint").style.opacity=0;var regions=mapG.querySelector(".province-layer"),needsRender=rendered!==c||!regions||regions.dataset.country!==i;
 if(needsRender){fade(function(){render(c);zoom(i);if(st.city)zoomCity(st.city)})}else zoom(i);upd();if(!REGIONS.length){$("hint").textContent="Cargando divisiones y ciudades…";$("hint").style.opacity=1;loadMapData().then(function(){if(st.v==="country"){$("hint").textContent="Toca un continente para explorarlo";$("hint").style.opacity=0;render(rendered);zoom(st.id,1);if(st.city)zoomCity(st.city);upd()}}).catch(function() {if(st.v==="country"){$("hint").textContent="No se pudo cargar el mapa detallado.";$("hint").style.opacity=1}})}}
 function upd(){crumbs();side();card();syncFilters()}
@@ -296,8 +318,12 @@ if(a==="close"){if(st.city){st.city=null;upd();zoom(st.id)}else back()}
 else if(a==="edit")st.city?openEd("ciudad",st.city):openEd("pais",st.id);
 else if(a==="addcity"){placing=true;var h=$("hint");h.textContent="Haz clic en el mapa donde está la ciudad";h.style.opacity=1}
 else if(a==="delcity"&&confirm("¿Eliminar esta ciudad?")){FS.remove("destinos",st.city);st.city=null}};
-svg.onclick=function(e){if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;st.client=null;upd();zoomCity(st.city);return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
+svg.onclick=function(e){if(globeSuppressClick){globeSuppressClick=false;return}if(globeMode()&&st.v==="world")return;if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;st.client=null;upd();zoomCity(st.city);return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
 if(st.v==="world"){if(primary[i])toCont(primary[i])}else if(mem[st.c].has(i))toCountry(i)};
+svg.onpointerdown=function(e){if(!globeMode()||st.v!=="world")return;globePointer={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY};globeMoved=false;globeSuppressClick=false;try{svg.setPointerCapture(e.pointerId)}catch(_){} };
+svg.onpointermove=function(e){if(!globePointer||e.pointerId!==globePointer.id)return;var dx=e.clientX-globePointer.lastX,dy=e.clientY-globePointer.lastY;if(Math.abs(e.clientX-globePointer.x)+Math.abs(e.clientY-globePointer.y)>4)globeMoved=true;globePointer.lastX=e.clientX;globePointer.lastY=e.clientY;if(!globeMoved)return;globeRotation[0]+=dx*.42;globeRotation[1]=Math.max(-78,Math.min(78,globeRotation[1]-dy*.42));if(!globeRaf){globeRaf=true;requestAnimationFrame(function(){globeRaf=false;if(globeMode()&&st.v==="world")render("world")})}};
+svg.onpointerup=function(e){if(!globePointer||e.pointerId!==globePointer.id)return;var moved=globeMoved;globePointer=null;globeSuppressClick=true;try{svg.releasePointerCapture(e.pointerId)}catch(_){}if(moved)return;var vb=svg.viewBox.baseVal,W=vb.width,H=vb.height,r=svg.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height,dx=x-W/2,dy=y-H*.47;if(Math.hypot(dx,dy)>globeRadius(W,H))return;var ll=proj&&proj.invert([x,y]);if(!ll)return;var f=F.find(function(g){return primary[g.id]&&d3.geoContains(g,ll)});if(f)toCont(primary[f.id])};
+svg.onpointercancel=function(e){if(globePointer&&e.pointerId===globePointer.id)globePointer=null};
 svg.onkeydown=function(e){var n=e.target.closest&&e.target.closest("text[data-city]");if(n&&(e.key==="Enter"||e.key===" ")){e.preventDefault();st.city=n.dataset.city;st.client=null;upd();zoomCity(st.city)}};
 svg.onmousemove=function(e){var n=e.target.closest&&e.target.closest("[data-id]"),i=n&&n.dataset.id,r=$("stage").getBoundingClientRect();
 mapG.querySelectorAll(".hl").forEach(function(x){x.classList.remove("hl")});
@@ -311,7 +337,7 @@ var CD={},CITY={},CLIENTS={},SC={},FS=null,USR=null,ADMIN=false,placing=false,ED
 "ES|Madrid|-3.70|40.42;FR|París|2.35|48.86;GB|Londres|-0.13|51.51;PT|Lisboa|-9.14|38.72;ME|Podgorica|19.26|42.44;RS|Belgrado|20.46|44.79;BG|Sofía|23.32|42.70;PL|Varsovia|21.01|52.23;AL|Tirana|19.82|41.33;DE|Berlín|13.40|52.52;RO|Bucarest|26.10|44.43;BE|Bruselas|4.35|50.85;LV|Riga|24.11|56.95;EE|Tallin|24.75|59.44;AM|Ereván|44.51|40.18;JP|Tokio|139.69|35.69;NZ|Wellington|174.78|-41.29;SV|San Salvador|-89.22|13.69;NL|Ámsterdam|4.90|52.37;AR|Buenos Aires|-58.38|-34.60;GR|Atenas|23.73|37.98;CY|Nicosia|33.38|35.19;GE|Tiflis|44.79|41.72;GE|Poti|41.67|42.15;GT|Ciudad de Guatemala|-90.51|14.63;NI|Managua|-86.25|12.13;DO|Santo Domingo|-69.93|18.49;IT|Roma|12.50|41.90;CA|Ottawa|-75.70|45.42;MA|Rabat|-6.84|34.02;ZA|Pretoria|28.19|-25.75;LB|Beirut|35.50|33.89;SG|Singapur|103.82|1.35;TT|Puerto España|-61.52|10.66;TH|Bangkok|100.50|13.76;HK|Hong Kong|114.17|22.32;CI|Yamusukro|-5.28|6.83;JO|Amán|35.93|31.95;US|Washington D. C.|-77.04|38.91;KR|Seúl|126.98|37.57;RU|Moscú|37.62|55.76;MY|Kuala Lumpur|101.69|3.14;TW|Taipéi|121.56|25.03;EG|El Cairo|31.24|30.04;OM|Mascate|58.41|23.59;AE|Abu Dabi|54.37|24.45;BH|Manama|50.58|26.23;QA|Doha|51.53|25.29;KW|Kuwait|47.98|29.38;CN|Pekín|116.41|39.90;BQ|Kralendijk|-68.266|12.144;VN|Hanói|105.85|21.03;VN|Haiphong|106.68|20.86;VN|Ho Chi Minh|106.63|10.82".split(";").forEach(function(t){var a=t.split("|"),id="ciudad_"+a[0]+"_"+slug(a[1]);SC[id]={tipo:"ciudad",pais:a[0],nombre:a[1],lon:+a[2],lat:+a[3],grados:[]};CITY[id]=SC[id]});
 var LB={europe:[20,53],asia:[88,46],africa:[20,4],north:[-100,50],central:[-84,17],south:[-60,-14],oceania:[134,-26]};
 function lab(view){var h="",p;
-if(view==="world"){for(var k in LB){p=proj(LB[k]);if(p)h+='<text class="lb cl" data-s="'+(k==="central"?9:15)+'" x="'+p[0]+'" y="'+p[1]+'">'+CN[k].toUpperCase()+"</text>"}}
+if(view==="world"){var globe=globeMode(),center=globe?globeCenter():null;for(var k in LB){if(globe&&d3.geoDistance(LB[k],center)>1.35)continue;p=proj(LB[k]);if(p)h+='<text class="lb cl'+(globe?' globe-label':'')+'" data-s="'+(globe?10:k==="central"?9:15)+'" x="'+p[0]+'" y="'+p[1]+'">'+CN[k].toUpperCase()+"</text>"}}
 else mem[view].forEach(function(i){var f=byId[i],w=0;p=null;if(f){var b=pathG.bounds(f._m);w=Math.max(b[1][0]-b[0][0],0);p=pathG.centroid(f._m);if(w<7)w=14}else if(FB[i]){p=proj(FB[i]);w=14}
 var n=name(i);if(p&&isFinite(p[0]))h+='<text class="lb" data-s="11" data-w="'+w+'" data-n="'+n.length+'" x="'+p[0]+'" y="'+p[1]+'">'+esc(n)+"</text>"});
 return h}
