@@ -22,3 +22,5 @@ tr.sample-finished>td{background:#e3f3eb!important;border-bottom-color:#b9dbca}t
 .receipt-date{font-size:24px;line-height:1.4;white-space:normal;min-width:240px}
 
 .sample-photo-editor{margin-top:28px;border-top:1px solid var(--line);padding-top:24px}.sample-photo-editor h4{font-size:13px;margin:20px 0 12px}.sample-photo-editor small{display:block;line-height:1.6;margin-bottom:6px}
+
+.tag.partial{background:#e8f0fb;color:#345f93}

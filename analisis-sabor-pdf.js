@@ -1,4 +1,4 @@
-import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra} from './sabor-modelo.js?v=20261106-selectors-1';
+import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,ordenarSabores,indexarComparaciones,compararContramuestra,normalizarObservaciones} from './sabor-modelo.js?v=20261107-partial-1';
 // EXPALSA - Resultados de una muestra, con jsPDF y jsPDF-AutoTable.
 const COLORS={ink:[25,53,74],navy:[8,40,61],teal:[8,125,137],muted:[104,126,139],line:[220,229,234],soft:[243,248,250]};
 const clean=value=>String(value??'').replace(/[\u2010-\u2015]/g,'-').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -17,10 +17,10 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   const vote=votes.get(person.uid);
   const name=person.name||person.email||'Inspector';
   const identity=[name,person.email&&person.email!==name?person.email:'',vote?.createdAtMs?dateTime(vote.createdAtMs):''].filter(Boolean).join('\n');
-  return [clean(identity),compararContramuestra(sample,vote).label,clean([vote?.counterFlavors?textoPerfil(vote.counterFlavors):'',vote?.observations||''].filter(Boolean).join('\n'))];
+  return [clean(identity),compararContramuestra(sample,vote).label,clean([vote?.counterFlavors?textoPerfil(vote.counterFlavors):'',normalizarObservaciones(vote?.observations)].filter(Boolean).join('\n'))];
  });
- const received=stats.total,good=stats.good,bad=stats.bad,pending=stats.pending;
- const result=!received?'Sin resultados':[good?`Conformidad ${stats.goodPercent}%`:'',bad?`Discrepancia ${stats.badPercent}%`:'',stats.review?`Por revisar ${stats.reviewPercent}%`:''].filter(Boolean).join(' | ');
+ const received=stats.total,good=stats.good,partial=stats.partial,bad=stats.bad,pending=stats.pending;
+ const result=!received?'Sin resultados':[good?`Conformidad ${stats.goodPercent}%`:'',partial?`Conformidad parcial ${stats.partialPercent}%`:'',bad?`Discrepancia ${stats.badPercent}%`:'',stats.review?`Por revisar ${stats.reviewPercent}%`:''].filter(Boolean).join(' | ');
  const write=(value,x,y,size=9,style='normal',color=COLORS.ink,options={})=>{
   pdf.setFont('helvetica',style);pdf.setFontSize(size);pdf.setTextColor(...color);pdf.text(Array.isArray(value)?value.map(clean):clean(value),x,y,options);
  };
@@ -40,7 +40,7 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   columnStyles:{0:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},1:{cellWidth:64},2:{cellWidth:27,fontStyle:'bold',fillColor:COLORS.soft,fontSize:8},3:{cellWidth:64}}
  });
  let y=pdf.lastAutoTable.finalY+9;
- const summary=`Evaluaciones: ${received} de ${inspectors.length}  |  Conformes: ${good}  |  Discrepancias: ${bad}  |  Por revisar: ${stats.review}  |  Pendientes: ${pending}`;
+ const summary=`Evaluaciones: ${received} de ${inspectors.length}  |  Conformes: ${good}  |  Conformidades parciales: ${partial}  |  Discrepancias: ${bad}  |  Por revisar: ${stats.review}  |  Pendientes: ${pending}`;
  pdf.setFont('helvetica','normal');pdf.setFontSize(9);
  const summaryLines=pdf.splitTextToSize(summary,182);
  if(y+summaryLines.length*5+18>277){pdf.addPage();y=top;}
@@ -56,7 +56,7 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   columnStyles:{0:{cellWidth:62},1:{cellWidth:28},2:{cellWidth:92}},
   rowPageBreak:'avoid',showHead:'everyPage',
   didParseCell:cell=>{
-   if(cell.section==='body'&&cell.column.index===1){const value=cell.cell.raw;cell.cell.styles.fontStyle='bold';cell.cell.styles.textColor=value==='Conforme'?[19,127,99]:value==='Discrepancia'?[172,60,80]:COLORS.muted;}
+   if(cell.section==='body'&&cell.column.index===1){const value=cell.cell.raw;cell.cell.styles.fontStyle='bold';cell.cell.styles.textColor=value==='Conforme'?[19,127,99]:value==='Conformidad parcial'?[52,95,147]:value==='Discrepancia'?[172,60,80]:COLORS.muted;}
    if(cell.section==='body'&&cell.column.index===2&&portraits.has(inspectors[cell.row.index]?.uid)){
     cell.cell.styles.cellPadding={top:3,right:portraitSize+portraitPadding*2,bottom:3,left:3};
     cell.cell.styles.minCellHeight=portraitSize+portraitPadding*2;

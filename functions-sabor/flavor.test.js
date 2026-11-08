@@ -14,6 +14,15 @@ test('resultado compara sabores e intensidades e ignora porcentajes',()=>{
  assert.equal(resultData({counterFlavors:normal,observations:'',result:'conforme'},baseline).result,'discrepancia');
  assert.equal(resultData({counterFlavors:[{sabor:'Normal',porcentaje:99}],observations:''},baseline).counterFlavors[0].porcentaje,100);
 });
+
+test('resultados nuevos guardan parcial por intensidad e ignoran Normal en recepciones con otro sabor',()=>{
+ const baseline=[{sabor:'Combustible Leve',porcentaje:60},{sabor:'Normal',porcentaje:40}];
+ assert.equal(resultData({counterFlavors:[{sabor:'Combustible Leve',porcentaje:100}],observations:''},baseline).result,'conforme');
+ assert.equal(resultData({counterFlavors:[{sabor:'Combustible Medio',porcentaje:100}],observations:''},baseline).result,'parcial');
+ assert.equal(resultData({counterFlavors:[{sabor:'Tierra Leve',porcentaje:10}],observations:''},baseline).result,'discrepancia');
+ assert.equal(resultData({counterFlavors:[{sabor:'Le dio normal',porcentaje:100}],observations:'Le dio normal'},normal).observations,'Normal');
+ assert.equal(resultData({counterFlavors:[{sabor:'Normal',porcentaje:90},{sabor:'Tierra Leve',porcentaje:10}],observations:''},normal).result,'discrepancia');
+});
 test('códigos equivalentes producen una única muestra',()=>{
  assert.equal(sampleKey(' MP-01 '),sampleKey('mp-01'));
  assert.equal(sampleKey('ＭＰ-01'),sampleKey('MP-01'));
@@ -75,6 +84,15 @@ test('un inspector no puede crear sesiones o agregar muestras',async()=>{
 });
 function adminRequest(data={}){return {auth:{uid:'admin',token:{email:'jefferson@expalsaevaluations.com'}},data:{action:'recordEvaluation',sessionId:'s1',sampleId:'m1',inspectorUid:'i1',result:'conforme',counterFlavors:normal,observations:'',...data}};}
 function labSeed(){const initial=seed();initial['expalsa_calidad_config/administrador']={uid:'admin',email:'jefferson@expalsaevaluations.com'};initial['expalsa_sabor_sesiones/s1'].inspectors=[{uid:'i1',email:inspector.email,name:'Inspector uno'}];return initial;}
+
+test('lectura de votos antiguos muestra Normal sin alterar observaciones históricas ni fechas',async()=>{
+ const initial=labSeed(),path='expalsa_sabor_sesiones/s1/samples/m1/votes/i1';
+ initial[path]={sampleId:'m1',inspectorUid:'i1',result:'discrepancia',observations:'Le dio normal',createdAtMs:123, counterFlavors:[{sabor:'Le dio normal',porcentaje:100}]};
+ const db=database(initial),response=await handler(db)(adminRequest({action:'detail'}));
+ assert.equal(response.evaluations[0].observations,'Normal');assert.equal(response.evaluations[0].counterFlavors[0].sabor,'Normal');assert.equal(response.evaluations[0].createdAtMs,123);assert.equal(response.evaluations[0].result,'conforme');
+ const own=await handler(db)(request({action:'detail'}));assert.equal(own.evaluations[0].result,'conforme');assert.equal(own.evaluations[0].receiptSnapshot,undefined);
+ assert.equal(db.records.get(path).observations,'Le dio normal');assert.equal(db.writes.length,0);
+});
 
 test('editar muestra cerrada guarda datos y resultados sin reabrir la sesión ni duplicar contadores',async()=>{
  const initial=labSeed(),base='expalsa_sabor_sesiones/s1';

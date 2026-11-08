@@ -5,7 +5,7 @@ const {createHash}=require('node:crypto');
 const {photoAction,imageData}=require('./photos');
 const {sampleEdit}=require('./sample-edit');
 const {workflowAction,progressAction,finished,revision}=require('./workflow');
-const {completarNormal,normalizarPerfil,perfilMateriaPrima,coincidenPerfiles,fechaRecepcion}=require('./sensory');
+const {completarNormal,normalizarPerfil,perfilMateriaPrima,clasificarPerfiles,compararContramuestra,normalizarObservaciones,normalizarSabor,fechaRecepcion}=require('./sensory');
 const SERVICE_VERSION='20261106-reception-1';
 const VIEWERS=new Set(['fabio@expalsaevaluations.com','karina@expalsaevaluations.com']);
 const canManage=user=>user.admin===true;
@@ -21,7 +21,7 @@ function id(value){if(typeof value!=='string'||!value||value.length>128||!/^[A-Z
 function letter(value){if(value===undefined||value==='')return '';if(typeof value!=='string'||! /^[A-Z]$/.test(value))fail('invalid-argument','Selecciona una letra entre A y Z.');return value;}
 async function uniqueLetter(tx,ref,value,except=''){if(!value)return;const samples=await tx.get(ref.collection('samples'));if(samples.docs.some(d=>d.id!==except&&!d.data().deleted&&d.data().blindLetter===value))fail('already-exists','Esta letra ya identifica otra muestra de la sesión.');}
 function sampleData(value){try{return {lote:text(value?.lote,'lote'),receivedDate:fechaRecepcion(value.receivedDate||''),receiptFlavors:completarNormal(value.receiptFlavors),receptionAnalyst:typeof value.receptionAnalyst==='string'?value.receptionAnalyst.trim().slice(0,120):'',blindLetter:letter(value.blindLetter)};}catch(e){fail('invalid-argument',e.message);}}
-function resultData(data,baseline){try{const counterFlavors=completarNormal(data.counterFlavors);if(!baseline)fail('failed-precondition','Completa el sabor de recepción de materia prima antes de evaluar.');if(typeof data.observations!=='string'||data.observations.length>2000)fail('invalid-argument','Revisa las observaciones.');return {counterFlavors,receiptSnapshot:baseline,result:coincidenPerfiles(baseline,counterFlavors)?'conforme':'discrepancia',observations:data.observations.trim()};}catch(e){if(e.code)throw e;fail('invalid-argument',e.message);}}
+function resultData(data,baseline){try{const counterFlavors=completarNormal(data.counterFlavors);if(!baseline)fail('failed-precondition','Completa el sabor de recepción de materia prima antes de evaluar.');if(typeof data.observations!=='string'||data.observations.length>2000)fail('invalid-argument','Revisa las observaciones.');return {counterFlavors,receiptSnapshot:baseline,result:clasificarPerfiles(baseline,counterFlavors),observations:normalizarObservaciones(data.observations.trim())};}catch(e){if(e.code)throw e;fail('invalid-argument',e.message);}}
 function date(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(Date.parse(value))||new Date(value).toISOString().slice(0,10)!==value)fail('invalid-argument','Fecha no válida.');return value;}
 function sampleKey(code){return createHash('sha256').update(code.normalize('NFKC').trim().toLocaleLowerCase('es')).digest('hex');}
 function participant(session,user){if(!canManage(user)&&!session.inspectorUids.includes(user.uid))fail('permission-denied','No estás asignado a esta sesión.');}
@@ -29,7 +29,7 @@ function requireManager(user){if(!canManage(user))fail('permission-denied','Acci
 function requireAdmin(user){if(user.admin!==true)fail('permission-denied','Acción exclusiva del administrador.');}
 const inspectorCount=session=>session.membershipVersion===2?session.inspectorCount:(session.inspectorUids||[]).length;
 function canTransition(session,target){if(target==='open'){if(session.status!=='draft'||session.sampleCount<1||inspectorCount(session)<1)fail('failed-precondition','Solo puedes abrir un borrador con al menos una muestra y un inspector.');}else if(target==='closed'){if((session.finishedSampleCount||0)!==session.sampleCount||session.activeSampleId)fail('failed-precondition','Finaliza el análisis de todas las muestras antes de terminar la sesión.');if(session.sampleCount<1||inspectorCount(session)<1)fail('failed-precondition','Agrega al menos una muestra y un inspector.');if(session.status!=='open')fail('failed-precondition','La sesión no está abierta.');if(session.evaluationCount!==session.sampleCount*inspectorCount(session))fail('failed-precondition','Faltan evaluaciones por registrar.');}else fail('invalid-argument','Estado no válido.');}
-function publicDoc(doc){const d=doc.data();return {id:doc.id,...Object.fromEntries(Object.entries(d).map(([k,v])=>[k,v&&typeof v.toMillis==='function'?v.toMillis():v]))};}
+function publicDoc(doc,sample=null){const d={...doc.data()};if(typeof d.observations==='string')d.observations=normalizarObservaciones(d.observations);if(typeof d.sabor==='string')d.sabor=normalizarSabor(d.sabor);for(const key of ['counterFlavors','receiptFlavors'])if(d[key]){try{d[key]=normalizarPerfil(d[key]);}catch{}}if(sample&&d.inspectorUid){const comparison=compararContramuestra(sample,d);d.result=comparison.status;}return {id:doc.id,...Object.fromEntries(Object.entries(d).map(([k,v])=>[k,v&&typeof v.toMillis==='function'?v.toMillis():v]))};}
 function publicSession(doc,user){const d=publicDoc(doc);d.inspectorCount=inspectorCount(d);d.inspectors=canReadAll(user)?(d.inspectors||[]):(d.inspectors||[]).filter(p=>p.uid===user.uid);d.inspectorUids=canReadAll(user)?(d.inspectorUids||[]):(d.inspectorUids||[]).filter(uid=>uid===user.uid);return d;}
 function inspectorIds(value){if(!Array.isArray(value)||!value.length||value.length>INSPECTOR_BATCH_SIZE||new Set(value).size!==value.length)fail('invalid-argument','Selecciona inspectores sin repetir.');return value.map(id);}
 const assignment=(db,uid,sessionId)=>db.doc(`expalsa_sabor_inspectores/${uid}/sesiones/${sessionId}`);
@@ -56,7 +56,7 @@ async function membersPage(ref,session,user,cursor){
  const snap=await query.limit(MEMBER_PAGE_SIZE+1).get(),docs=snap.docs.slice(0,MEMBER_PAGE_SIZE);
  return {inspectors:docs.map(d=>d.data()),cursor:snap.size>MEMBER_PAGE_SIZE?docs.at(-1).id:null};
 }
-async function votesPage(sampleRef,cursor){let query=sampleRef.collection('votes').orderBy(FieldPath.documentId());if(cursor)query=query.startAfter(id(cursor));const snap=await query.limit(MEMBER_PAGE_SIZE+1).get(),docs=snap.docs.slice(0,MEMBER_PAGE_SIZE);return {evaluations:docs.map(publicDoc),cursor:snap.size>MEMBER_PAGE_SIZE?docs.at(-1).id:null};}
+async function votesPage(sampleRef,cursor,sample){let query=sampleRef.collection('votes').orderBy(FieldPath.documentId());if(cursor)query=query.startAfter(id(cursor));const snap=await query.limit(MEMBER_PAGE_SIZE+1).get(),docs=snap.docs.slice(0,MEMBER_PAGE_SIZE);return {evaluations:docs.map(d=>publicDoc(d,sample)),cursor:snap.size>MEMBER_PAGE_SIZE?docs.at(-1).id:null};}
 async function identity(db,request){
  if(!request.auth)fail('unauthenticated','Inicia sesión para continuar.');
  const uid=id(request.auth.uid),email=String(request.auth.token.email||'').trim().toLowerCase();
@@ -72,7 +72,7 @@ async function inspector(db,uid){
 }
 function handler(db){return async request=>{
  const data=request.data||{},action=data.action;
- if(action==='serviceInfo')return {version:SERVICE_VERSION,sampleEditing:true,photoEditing:true};
+ if(action==='serviceInfo')return {version:SERVICE_VERSION,sampleEditing:true,photoEditing:true,partialConformity:true};
  const user=await identity(db,request);
  if(user.viewer&&!['bootstrap','listSessions','detail','listMembers','listVotes','inspectorPhoto','listPhotos','authorizeComparisonReport'].includes(action))fail('permission-denied','Tu cuenta solo permite consultar y descargar PDF.');
  if(action==='bootstrap')return {admin:user.admin,manager:canManage(user),viewer:user.viewer===true,canReadResults:canReadAll(user),canDelete:user.admin===true,canViewComparisons:true,version:SERVICE_VERSION};
@@ -117,10 +117,10 @@ function handler(db){return async request=>{
  if(['detail','listMembers','listVotes'].includes(action)){
   const session=await sessionRef.get();if(!session.exists)fail('not-found','La sesión no existe.');live(session.data());await checkParticipant(sessionRef,session.data(),user);
   if(action==='listMembers')return membersPage(sessionRef,session.data(),user,data.cursor);
-  if(action==='listVotes'){requireReader(user);const ref=sessionRef.collection('samples').doc(id(data.sampleId)),snap=await ref.get();if(!snap.exists||snap.data().deleted)fail('not-found','La muestra no existe.');return votesPage(ref,data.cursor);}
+  if(action==='listVotes'){requireReader(user);const ref=sessionRef.collection('samples').doc(id(data.sampleId)),snap=await ref.get();if(!snap.exists||snap.data().deleted)fail('not-found','La muestra no existe.');return votesPage(ref,data.cursor,snap.data());}
   let query=sessionRef.collection('samples').orderBy(FieldPath.documentId());if(data.cursor)query=query.startAfter(id(data.cursor));
   const page=await query.limit(PAGE_SIZE+1).get(),docs=page.docs.slice(0,PAGE_SIZE),evaluations=[],evaluationCursors={};
-  for(const sample of docs){if(sample.data().deleted)continue;const votes=sample.ref.collection('votes');if(canReadAll(user)){const all=await votesPage(sample.ref);evaluations.push(...all.evaluations);if(all.cursor)evaluationCursors[sample.id]=all.cursor;}else{const own=await votes.doc(user.uid).get();if(own.exists){const value=publicDoc(own);delete value.receiptSnapshot;evaluations.push(value);}}}
+  for(const sample of docs){if(sample.data().deleted)continue;const votes=sample.ref.collection('votes');if(canReadAll(user)){const all=await votesPage(sample.ref,null,sample.data());evaluations.push(...all.evaluations);if(all.cursor)evaluationCursors[sample.id]=all.cursor;}else{const own=await votes.doc(user.uid).get();if(own.exists){const value=publicDoc(own,sample.data());delete value.receiptSnapshot;evaluations.push(value);}}}
   const roster=await membersPage(sessionRef,session.data(),user);
   return {session:{...publicSession(session,user),inspectors:roster.inspectors,inspectorUids:roster.inspectors.map(p=>p.uid)},membersCursor:roster.cursor,samples:docs.filter(d=>!d.data().deleted).map(d=>canReadAll(user)?publicDoc(d):{id:d.id,blindLetter:d.data().blindLetter||'',createdAtMs:d.data().createdAtMs||0,sequence:d.data().sequence||0}),evaluations,evaluationCursors,cursor:page.size>PAGE_SIZE?docs.at(-1).id:null};
  }
