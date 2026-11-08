@@ -218,7 +218,7 @@ if(cl.length&&!city)h+='<div class="inh" style="margin-top:8px">Ciudades</div><d
 if(ADMIN)h+='<div class="ab2"><button class="btn" data-act="edit">'+(e?"Editar parámetros":"Ingresar datos")+"</button>"+(city?(CITY[st.city]?'<button class="btn red" data-act="delcity">Eliminar ciudad</button>':""):'<button class="btn sec" data-act="addcity">+ Ciudad</button>')+"</div>";
 h+='<div class="ft">Los defectos se evalúan a partir de los mayores (cabezas anaranjadas, cabezas estropeadas y camarón mudado) y dependen del color del camarón. Matriz vigente al 29/10/2026.</div>';
 p.innerHTML=h;p.style.display="block"}
-function zoom(id,inst){cities();var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[id],k=1,cx,cy,pt;
+function zoom(id,inst){cities();if(st.v==="country")mapG.querySelectorAll("circle.dot").forEach(function(c){c.remove()});var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[id],k=1,cx,cy,pt;
 mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")});
 mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});
 var el=mapG.querySelector('path[data-id="'+id+'"]');
