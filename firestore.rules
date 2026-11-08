@@ -33,8 +33,12 @@ service cloud.firestore {
     function calidadDevicePath(uid) {
       return /databases/$(database)/documents/expalsa_calidad_dispositivos/$(uid)/equipos/$(request.auth.token.calidadDeviceId);
     }
+    function calidadPageAdmin() {
+      return expalsaAdmin() || (signedIn() && request.auth.token.email is string &&
+        request.auth.token.email in ['fabio@expalsaevaluations.com','karina@expalsaevaluations.com']);
+    }
     function calidadPageUser() {
-      return expalsaAdmin() ||
+      return calidadPageAdmin() ||
         (signedIn() && request.auth.token.calidadDeviceId is string &&
          exists(calidadDevicePath(request.auth.uid)) &&
          get(calidadDevicePath(request.auth.uid)).data.status == 'active' &&
@@ -1403,13 +1407,13 @@ match /empaque_ejercicio_reportes/{reporteId} {
     // Mapa de calidad y sabor: isolated from every other repository collection.
     match /grados/{id} {
       allow get, list: if calidadPageUser();
-      allow create, update: if calidadPageUser() && expalsaAdmin() && validCalidadGrade(request.resource.data);
-      allow delete: if calidadPageUser() && expalsaAdmin();
+      allow create, update: if calidadPageUser() && calidadPageAdmin() && validCalidadGrade(request.resource.data);
+      allow delete: if calidadPageUser() && calidadPageAdmin();
     }
     match /destinos/{id} {
       allow get, list: if calidadPageUser();
-      allow create, update: if calidadPageUser() && expalsaAdmin() && validCalidadDestination(request.resource.data);
-      allow delete: if calidadPageUser() && expalsaAdmin();
+      allow create, update: if calidadPageUser() && calidadPageAdmin() && validCalidadDestination(request.resource.data);
+      allow delete: if calidadPageUser() && calidadPageAdmin();
     }
 
   }
