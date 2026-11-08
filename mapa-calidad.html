@@ -93,7 +93,7 @@ circle.city{fill:#fff;stroke:var(--text);stroke-width:1.5;vector-effect:non-scal
 </style>
 </head>
 <body>
-<section id="authgate"><div class="gatebox"><h1>Acceso a calidad y sabor</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. El administrador debe autorizar este dispositivo.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
+<section id="authgate"><div class="gatebox"><h1>Acceso a calidad y sabor</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. Los usuarios registrados necesitan autorización para cada dispositivo; la cuenta administradora entra directamente.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
 <div id="app">
 <header id="bar"><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><b style="margin-left:auto">EXPALSA · CALIDAD Y SABOR</b><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
 <main id="stage">
@@ -317,6 +317,11 @@ async function keyGet(id){const d=await idb();return new Promise((resolve,reject
 async function keyPut(id,key){const d=await idb();return new Promise((resolve,reject)=>{const tx=d.transaction("keys","readwrite");tx.objectStore("keys").put(key,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 async function deviceKey(){let id=localStorage.getItem("expalsa-calidad-device-id"),stored=id&&await keyGet(id);if(id&&stored&&stored.privateKey&&stored.publicKey)return{id,privateKey:stored.privateKey,publicKey:stored.publicKey};id=crypto.randomUUID();const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},false,["sign","verify"]),publicKey=await crypto.subtle.exportKey("jwk",pair.publicKey);await keyPut(id,{privateKey:pair.privateKey,publicKey});localStorage.setItem("expalsa-calidad-device-id",id);return{id,privateKey:pair.privateKey,publicKey}}
 async function authorize(user){if(booting)return;booting=true;try{
+ const email=String(user.email||"").trim().toLowerCase();
+ if(email==="jefferson@expalsaevaluations.com"){
+  const admin=await F.getDoc(F.doc(db,"expalsa_calidad_config","administrador"));
+  if(admin.exists()&&admin.data().uid===user.uid&&admin.data().email===email){adminMode=true;readyDevice="";openPage(user);return}
+ }
  const device=await deviceKey(),claims=(await U.getIdTokenResult(user,true)).claims;
  const publicKey=device.publicKey;
  if(claims.calidadDeviceId!==device.id){const started=await call("beginCalidadDevice",{deviceId:device.id,publicKey,label:(navigator.userAgent||"Navegador").slice(0,60)});if(started.status!=="active"){showGate("El dispositivo quedó pendiente de autorización del administrador. Puedes cerrar la sesión mientras esperas.",true);return}}
@@ -325,17 +330,17 @@ async function authorize(user){if(booting)return;booting=true;try{
  const session=await U.signInWithCustomToken(au,tokenResult.token),fresh=(await U.getIdTokenResult(session.user,true)).claims;if(fresh.calidadDeviceId!==device.id)throw Error("No se pudo comprobar el dispositivo autorizado.");
  readyDevice=device.id;adminMode=String(session.user.email||"").toLowerCase()==="jefferson@expalsaevaluations.com";if(adminMode){try{await call("listCalidadDevices")}catch(_){adminMode=false}}
  openPage(session.user);
- }catch(e){await U.signOut(au).catch(()=>{});showGate(e.message||"No se pudo verificar el acceso.",false)}finally{booting=false}}
+ }catch(e){await U.signOut(au).catch(()=>{});const code=String(e.code||"");const message=(code==="functions/internal"||e.message==="INTERNAL")?"No se pudo validar el acceso. Revisa la configuración del administrador o las funciones de Firebase.":(e.message||"No se pudo verificar el acceso.");showGate(message,false)}finally{booting=false}}
 await U.setPersistence(au,U.browserLocalPersistence);
 form.addEventListener("submit",async e=>{e.preventDefault();msg.textContent="Validando cuenta…";try{await U.signInWithEmailAndPassword(au,document.getElementById("gateEmail").value.trim(),document.getElementById("gatePassword").value);document.getElementById("gatePassword").value=""}catch(x){showGate("No se pudo ingresar. Revisa el correo y la contraseña.",false)}});
 logout.addEventListener("click",()=>U.signOut(au));
-U.onAuthStateChanged(au,async u=>{if(!u){readyDevice="";adminMode=false;showGate("Ingresa con tu cuenta de Evaluaciones EXPALSA.",false);return}if(readyDevice&&String((await U.getIdTokenResult(u)).claims.calidadDeviceId||"")===readyDevice){openPage(u);return}showGate("Comprobando el registro de la cuenta y este dispositivo…",true);await authorize(u)});
+U.onAuthStateChanged(au,async u=>{if(!u){readyDevice="";adminMode=false;showGate("Ingresa con tu cuenta de Evaluaciones EXPALSA.",false);return}if(adminMode&&String(u.email||"").toLowerCase()==="jefferson@expalsaevaluations.com"){openPage(u);return}if(readyDevice&&String((await U.getIdTokenResult(u)).claims.calidadDeviceId||"")===readyDevice){openPage(u);return}showGate("Comprobando el registro de la cuenta y este dispositivo…",true);await authorize(u)});
 firestoreApi={
 watch:(c,cb)=>F.onSnapshot(F.collection(db,c),s=>cb(s.docs.map(d=>({id:d.id,...d.data()})))),
 save:(c,id,data)=>F.setDoc(F.doc(db,c,id),data,{merge:true}),remove:(c,id)=>F.deleteDoc(F.doc(db,c,id)),
 batch:ops=>{const b=F.writeBatch(db);ops.forEach(o=>b.set(F.doc(db,o[0],o[1]),o[2]));return b.commit()},
 login:()=>Promise.reject(Error("Inicia sesión desde la pantalla de acceso.")),logout:()=>U.signOut(au),
-onAuth:cb=>{authCallback=cb;if(au.currentUser&&readyDevice)cb(au.currentUser,adminMode)},
+onAuth:cb=>{authCallback=cb;if(au.currentUser&&(readyDevice||adminMode))cb(au.currentUser,adminMode)},
 listDevices:()=>call("listCalidadDevices"),setDeviceStatus:(uid,deviceId,status)=>call("setCalidadDeviceStatus",{uid,deviceId,status})
 };
 }else{document.getElementById("gateMessage").textContent="Falta la configuración Firebase de Evaluaciones EXPALSA.";window._fbRes(null)}
