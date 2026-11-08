@@ -45,7 +45,7 @@ export function createFlavorMedia({api,getState,notify}){
   photoEditorItems=[];
   host.innerHTML=groups.filter(g=>g.kind==='sample'||g.photos.length).map(g=>'<h4>'+esc(g.title)+'</h4><div class="flavor-photo-grid">'+(g.photos.length?g.photos.map(p=>{
    const index=photoEditorItems.push(withPhotoVersion({sessionId:c.sessionId,sampleId:c.sampleId,kind:g.kind,inspectorUid:g.inspectorUid},p))-1;
-   return '<figure class="flavor-photo"><img src="'+esc(p.dataUrl)+'" alt="'+esc(g.title)+'" loading="lazy"><figcaption><small>Carga original: '+esc(originalDate(p))+'</small><div class="actions"><button class="quiet" type="button" data-media-action="edit-photo-gallery" data-photo-index="'+index+'">Reemplazar foto</button><button class="quiet" type="button" data-media-action="edit-photo-camera" data-photo-index="'+index+'">Volver a tomar</button></div></figcaption></figure>';
+   return '<figure class="flavor-photo"><img src="'+esc(p.dataUrl)+'" alt="'+esc(g.title)+'" loading="lazy"><figcaption><small>Carga original: '+esc(originalDate(p))+'</small><div class="actions"><button class="quiet" type="button" data-media-action="edit-photo-gallery" data-photo-index="'+index+'">Reemplazar foto</button><button class="quiet" type="button" data-media-action="edit-photo-camera" data-photo-index="'+index+'">Volver a tomar</button><button class="quiet danger" type="button" data-media-action="edit-photo-delete" data-photo-index="'+index+'">Eliminar foto</button></div></figcaption></figure>';
   }).join(''):'<p class="hint">Sin fotos de la muestra.</p>')+'</div>').join('');
  }
  async function savePhotoEdit(c,photo){
@@ -125,7 +125,7 @@ export function createFlavorMedia({api,getState,notify}){
  document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-media-action]');if(!button)return;event.preventDefault();const action=button.dataset.mediaAction;
   if(action==='close-camera'){closeCamera();return;}
-  if(['replace-gallery','retake-sample','edit-photo-gallery','edit-photo-camera','delete-photo'].includes(action)&&!getState().admin){notify('Solo el administrador puede editar fotografías.');return;}
+  if(['replace-gallery','retake-sample','edit-photo-gallery','edit-photo-camera','edit-photo-delete','delete-photo'].includes(action)&&!getState().admin){notify('Solo el administrador puede editar fotografías.');return;}
   if(processing||getState().busy){notify('Espera a que termine la operación actual.');return;}
   if(action==='replace-draft'){samplePicker.multiple=false;samplePicker.photoContext={draft:true,index:Number(button.dataset.index)};samplePicker.click();return;}
   if(action==='replace-gallery'){try{const c=context();samplePicker.multiple=false;samplePicker.photoContext=withPhotoVersion({...c,kind:'sample'},(sampleCache.get(key({...c,inspectorUid:''}))||[]).find(p=>p.id===button.dataset.id));samplePicker.click();}catch(error){notify(error.message);}return;}
@@ -139,6 +139,12 @@ export function createFlavorMedia({api,getState,notify}){
    else if(action==='sample-camera')await openCamera({kind:'sample'});
    else if(action==='retake-sample'){const c=context();await openCamera(withPhotoVersion({...c,kind:'sample'},(sampleCache.get(key({...c,inspectorUid:''}))||[]).find(p=>p.id===button.dataset.id)));}
    else if(action==='edit-photo-camera'){const c=photoEditorItems[Number(button.dataset.photoIndex)];if(c)await openCamera(c);}
+   else if(action==='edit-photo-delete'){
+    const c=photoEditorItems[Number(button.dataset.photoIndex)];if(!c)throw Error('La foto ya no está disponible. Actualiza la muestra.');
+    await api('deletePhoto',{sessionId:c.sessionId,sampleId:c.sampleId,inspectorUid:c.inspectorUid,kind:c.kind,photoId:c.editPhotoId});
+    notify('Fotografía eliminada.');
+    try{await refreshPhotoEditor();await hydrate();}catch{notify('Fotografía eliminada. Vuelve a abrir la muestra para actualizar la galería.');}
+   }
    else if(action==='delete-photo'){await api('deletePhoto',{...context(),kind:button.dataset.kind,photoId:button.dataset.id});await hydrate();notify('Fotografía eliminada.');}
    else if(action==='capture')await capture();
    else if(action==='remove-evidence'){const c=context(),list=pendingEvidence.get(key(c))||[];list.splice(Number(button.dataset.index),1);showPending();}
