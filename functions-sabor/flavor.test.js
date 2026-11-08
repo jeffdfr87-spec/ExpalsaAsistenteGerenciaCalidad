@@ -75,6 +75,52 @@ test('un inspector no puede crear sesiones o agregar muestras',async()=>{
 });
 function adminRequest(data={}){return {auth:{uid:'admin',token:{email:'jefferson@expalsaevaluations.com'}},data:{action:'recordEvaluation',sessionId:'s1',sampleId:'m1',inspectorUid:'i1',result:'conforme',counterFlavors:normal,observations:'',...data}};}
 function labSeed(){const initial=seed();initial['expalsa_calidad_config/administrador']={uid:'admin',email:'jefferson@expalsaevaluations.com'};initial['expalsa_sabor_sesiones/s1'].inspectors=[{uid:'i1',email:inspector.email,name:'Inspector uno'}];return initial;}
+
+test('editar muestra cerrada guarda datos y resultados sin reabrir la sesión ni duplicar contadores',async()=>{
+ const initial=labSeed(),base='expalsa_sabor_sesiones/s1';
+ Object.assign(initial[base],{status:'closed',activeSampleId:'',workflowVersion:1,membershipRevision:0,finishedSampleCount:1,evaluationCount:1});
+ initial[base+'/samples/m1'].finishedRevision=0;
+ const previous={sampleId:'m1',inspectorUid:'i1',counterFlavors:normal,observations:'Original',result:'conforme',createdAtMs:100,recordedBy:'i1'};
+ initial[base+'/samples/m1/votes/i1']=previous;
+ initial[base+'/samples/m1/votes/i1/photos/evidence']={jpeg:'conservada'};
+ const db=database(initial),call=handler(db),draft=await call(adminRequest({action:'prepareSampleEdit'}));
+ await call(adminRequest({action:'saveSampleEdit',version:draft.version,sample:{...sample,lote:'Corregido'},evaluations:[{inspectorUid:'i1',counterFlavors:[{sabor:'Tierra Medio',porcentaje:100}],observations:'Corrección'}]}));
+ assert.equal(db.records.get(base+'/samples/m1').lote,'Corregido');
+ assert.equal(db.records.get(base+'/samples/m1').finishedRevision,0);
+ assert.equal(db.records.get(base).status,'closed');assert.equal(db.records.get(base).evaluationCount,1);assert.equal(db.records.get(base).finishedSampleCount,1);
+ const vote=db.records.get(base+'/samples/m1/votes/i1');
+ assert.equal(vote.result,'discrepancia');assert.equal(vote.observations,'Corrección');assert.equal(vote.recordedBy,'i1');assert.equal(vote.createdAtMs,100);assert.equal(vote.editedBy,'admin');
+ assert.equal(db.records.get(base+'/samples/m1/votes/i1/photos/evidence').jpeg,'conservada');
+ assert.deepEqual(db.records.get(base+'/samples/m1/edits/new-id').previousEvaluations[0],{id:'i1',...previous});
+ await assert.rejects(call(adminRequest({action:'saveSampleEdit',version:draft.version,sample,evaluations:[]})),{code:'aborted'});
+});
+
+test('edición administrativa rechaza lectores e inspectores en ambas acciones',async()=>{
+ for(const action of ['prepareSampleEdit','saveSampleEdit']){
+  const db=database(labSeed());await assert.rejects(handler(db)(request({action})),{code:'permission-denied'});assert.equal(db.writes.length,0);
+  const initial=labSeed();initial['expalsa_calidad_accesos/viewer']={active:true,email:'fabio@expalsaevaluations.com'};
+  const viewer=database(initial);await assert.rejects(handler(viewer)({auth:{uid:'viewer',token:{email:'fabio@expalsaevaluations.com'}},data:{action,sessionId:'s1',sampleId:'m1'}}),{code:'permission-denied'});assert.equal(viewer.writes.length,0);
+ }
+});
+
+test('edición valida todo antes de escribir y conserva votos históricos no seleccionados',async()=>{
+ const initial=labSeed(),base='expalsa_sabor_sesiones/s1';initial[base+'/samples/m1/votes/i1']={inspectorUid:'i1',result:'conforme',observations:'Dato histórico'};
+ initial[base].evaluationCount=1;
+ const db=database(initial),call=handler(db),draft=await call(adminRequest({action:'prepareSampleEdit'}));
+ await assert.rejects(call(adminRequest({action:'saveSampleEdit',version:draft.version,sample,evaluations:[{inspectorUid:'otro',counterFlavors:normal,observations:''}]})),{code:'invalid-argument'});assert.equal(db.writes.length,0);
+ await assert.rejects(call(adminRequest({action:'saveSampleEdit',version:draft.version,sample,evaluations:[{inspectorUid:'i1',counterFlavors:[{sabor:'Normal',porcentaje:120}],observations:''}]})),{code:'invalid-argument'});assert.equal(db.writes.length,0);
+ await call(adminRequest({action:'saveSampleEdit',version:draft.version,sample:{...sample,receptionAnalyst:'Analista corregida'},evaluations:[]}));
+ assert.deepEqual(db.records.get(base+'/samples/m1/votes/i1'),initial[base+'/samples/m1/votes/i1']);assert.equal(db.records.get(base).activeSampleId,'m1');
+});
+
+test('editar registra un pendiente una sola vez y detecta cambios concurrentes',async()=>{
+ const db=database(labSeed()),call=handler(db),draft=await call(adminRequest({action:'prepareSampleEdit'}));
+ await call(adminRequest());
+ await assert.rejects(call(adminRequest({action:'saveSampleEdit',version:draft.version,sample,evaluations:[]})),{code:'aborted'});
+ const empty=database(labSeed()),save=handler(empty),current=await save(adminRequest({action:'prepareSampleEdit'}));
+ await save(adminRequest({action:'saveSampleEdit',version:current.version,sample,evaluations:[{inspectorUid:'i1',counterFlavors:normal,observations:'Pendiente completado'}]}));
+ assert.equal(empty.records.get('expalsa_sabor_sesiones/s1').evaluationCount,1);
+});
 test('el administrador registra para un inspector asignado y conserva la autoría real',async()=>{
  const db=database(labSeed()),call=handler(db);await call(adminRequest());
  const created=db.writes.find(w=>w[0]==='create');assert.equal(created[1],'expalsa_sabor_sesiones/s1/samples/m1/votes/i1');

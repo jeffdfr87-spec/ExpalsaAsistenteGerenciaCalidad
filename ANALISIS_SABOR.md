@@ -1,5 +1,11 @@
 # Análisis de sabor EXPALSA
 
+## Edición administrativa de muestras
+
+El modal de resultados incluye **Editar muestra** junto al PDF, exclusivamente para el administrador. Abre una tabla para corregir lote, recepción, letra y los resultados y observaciones de los inspectores. Se marca **Editar resultado** únicamente en las filas que se desean corregir; las demás conservan sus datos históricos. También se puede registrar un resultado pendiente.
+
+La edición está disponible aunque la muestra o sesión esté cerrada. **Guardar y cerrar** confirma todos los cambios en una transacción y vuelve al modal de resultados actualizado. La reapertura es del editor; la sesión conserva su estado y las muestras terminadas siguen terminadas. Cancelar no modifica datos. Se conservan fotos, autoría y fechas originales, se auditan los valores anteriores y se rechaza el guardado si hubo cambios concurrentes. Los permisos se verifican también en el servidor mediante `prepareSampleEdit` y `saveSampleEdit`.
+
 Aplicación `analisis-sabor.html`, publicada por GitHub Pages. Usa la autenticación existente y la función callable `manageFlavorAnalysis`, codebase `analisis-sabor`, proyecto `oceantreasure-app`, Firestore Standard.
 
 ## Operación

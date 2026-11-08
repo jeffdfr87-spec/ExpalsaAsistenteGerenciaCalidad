@@ -138,7 +138,23 @@ function results(id){
    const v=stats.byInspector.get(p.uid)?.vote;
    return `<tr><td>${esc(p.name||p.email)}${p.removing?' · Eliminación pendiente':''}${state.canDelete?` <button type="button" class="quiet danger" data-action="remove-inspector" data-uid="${esc(p.uid)}">Eliminar</button>`:''}${v?`<small>${stamp(v.createdAtMs)}</small>`:''}</td><td>${v?comparisonTag(m,v):tag('draft','Pendiente')}</td><td style="white-space:pre-wrap;min-width:150px">${v?.counterFlavors?perfilHtml(v.counterFlavors):''}${esc(v?.observations||'—')}</td></tr>`;
   }).join('')}</tbody></table></div>`,
-  '','',state.canReadResults?`<button class="button primary" type="button" data-action="results-pdf" data-id="${esc(m.id)}" aria-label="Descargar PDF de resultados del lote ${esc(m.lote)}">↓ PDF</button>`:'');
+  '','',state.canReadResults?`${state.admin?`<button class="button" type="button" data-action="edit-sample" data-id="${esc(m.id)}">Editar muestra</button>`:''}<button class="button primary" type="button" data-action="results-pdf" data-id="${esc(m.id)}" aria-label="Descargar PDF de resultados del lote ${esc(m.lote)}">↓ PDF</button>`:'');
+}
+
+
+async function editSample(id){
+ if(!state.admin)throw Error('Acción exclusiva del administrador.');
+ media.assertReady();
+ const draft=await api('prepareSampleEdit',{sessionId:state.session.id,sampleId:id});
+ state.sampleEdit={...draft,sessionId:state.session.id};
+ const m=draft.sample;
+ modal('Editar muestra · Lote '+m.lote,
+  '<div class="form-grid"><label class="field">Lote<input name="lote" maxlength="120" required value="'+esc(m.lote)+'"></label><label class="field">Fecha de recepción<input name="receivedDate" placeholder="dd/mm/aaaa" required value="'+esc(m.receivedDate?m.receivedDate.split('-').reverse().join('/'):'')+'"></label>'+receptionFields(m)+'<div class="full" id="edit-sample-receipt"><label class="field">Sabor de recepción de materia prima</label>'+editorPerfil(perfilMateriaPrima(m)||[{sabor:'Normal',porcentaje:''}])+'</div></div>'+
+  '<h3>Resultados de inspectores</h3><div class="table-wrap"><table class="sample-edit-table"><thead><tr><th>Inspector</th><th>Contramuestra</th><th>Observaciones</th></tr></thead><tbody>'+draft.inspectors.map(p=>{
+   const vote=draft.evaluations.find(v=>v.inspectorUid===p.uid);
+   return '<tr data-edit-uid="'+esc(p.uid)+'"><td>'+esc(p.name||p.email||p.uid)+'<label class="check"><input type="checkbox" data-edit-result> '+(vote?'Editar resultado':'Registrar resultado')+'</label></td><td><fieldset disabled>'+editorPerfil(vote?.counterFlavors||[{sabor:'Normal',porcentaje:''}])+'</fieldset></td><td><textarea aria-label="Observaciones de '+esc(p.name||p.email||p.uid)+'" maxlength="2000" disabled>'+esc(vote?.observations||'')+'</textarea></td></tr>';
+  }).join('')+'</tbody></table></div>',
+  'Guardar y cerrar','edit-sample-form');
 }
 
 function csvCell(value){let text=String(value??'');if(/^[\s]*[=+@-]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';}
@@ -160,6 +176,7 @@ document.addEventListener('click',async e=>{
   if(action==='logout'){rememberAnalysis();const form=dialog.querySelector('form');if(form)saveForm(form);saveWorkspace(form?.id||'');progress.flush();await signOut(auth);}
   else if(action==='new-session')await newSession();
   else if(action==='toggle-trash'){state.trash=!state.trash;await loadSessions();}
+  else if(action==='edit-sample'){rememberAnalysis();await editSample(b.dataset.id);}
   else if(action==='edit-reception'){if(!state.admin)throw Error('Acción exclusiva de los responsables del laboratorio.');editReception(b.dataset.id);}
   else if(action==='remove-inspector'){state.removeUid=b.dataset.uid;modal('Eliminar inspector','<p>Se eliminarán el inspector y todos sus resultados y evidencias de esta sesión.</p>','Eliminar inspector y resultados','remove-inspector-form');}
   else if(action==='add-inspectors'){rememberAnalysis();await addInspectorsDialog();}
@@ -185,10 +202,10 @@ document.addEventListener('click',async e=>{
   else if(action==='close-session')modal('Terminar sesión','<p>Todos los análisis están completos. ¿Terminar esta sesión?</p>','Terminar sesión','close-form');
  }catch(error){notify(message(error));}finally{state.busy=false;b.disabled=false;}
 });
-document.addEventListener('change',e=>{const form=e.target.closest('form');if(form){form.dataset.dirty='true';saveForm(form);}if(e.target.id==='analysis-sample'){rememberAnalysis();state.analysisSampleId=e.target.value;state.analysisInspectorUid='';renderDetail();}else if(e.target.id==='analysis-inspector'){rememberAnalysis();state.analysisInspectorUid=e.target.value;renderDetail();saveWorkspace();}});
+document.addEventListener('change',e=>{if(e.target.matches('[data-edit-result]')){const row=e.target.closest('[data-edit-uid]');row.querySelector('fieldset').disabled=!e.target.checked;row.querySelector('textarea').disabled=!e.target.checked;}const form=e.target.closest('form');if(form){form.dataset.dirty='true';saveForm(form);}if(e.target.id==='analysis-sample'){rememberAnalysis();state.analysisSampleId=e.target.value;state.analysisInspectorUid='';renderDetail();}else if(e.target.id==='analysis-inspector'){rememberAnalysis();state.analysisInspectorUid=e.target.value;renderDetail();saveWorkspace();}});
 document.addEventListener('input',e=>{const form=e.target.closest('form');if(form){form.dataset.dirty='true';saveForm(form);}if(e.target.id==='sample-filter'){rememberAnalysis();const start=e.target.selectionStart;state.filter=e.target.value;renderDetail();const input=document.querySelector('#sample-filter');input.focus();input.setSelectionRange(start,start);}});
 document.addEventListener('submit',async e=>{
- const form=e.target;if(!['login-form','session-form','sample-form','evaluation-form','open-form','close-form','lab-evaluation-form','inspectors-form','delete-session-form','reception-form','remove-inspector-form','delete-sample-form'].includes(form.id))return;e.preventDefault();if(state.busy)return;state.busy=true;const button=form.querySelector('[type=submit]');button.disabled=true;const data=new FormData(form),errors=form.querySelector('.error');if(errors)errors.textContent='';
+ const form=e.target;if(!['login-form','session-form','sample-form','evaluation-form','open-form','close-form','lab-evaluation-form','inspectors-form','delete-session-form','reception-form','remove-inspector-form','delete-sample-form','edit-sample-form'].includes(form.id))return;e.preventDefault();if(state.busy)return;state.busy=true;const button=form.querySelector('[type=submit]');button.disabled=true;const data=new FormData(form),errors=form.querySelector('.error');if(errors)errors.textContent='';
  try{
   if(form.id==='login-form'){await signInWithEmailAndPassword(auth,data.get('email').trim(),data.get('password'));return;}
   const id=state.session?.id;
@@ -201,6 +218,13 @@ document.addEventListener('submit',async e=>{
   else if(form.id==='delete-session-form'){await api('deleteSession',{sessionId:state.pendingSessionId});dialog.close();state.analysisMode=false;await loadSessions();notify('Sesión movida a la papelera.');}
   else if(form.id==='delete-sample-form'){await api('deleteSample',{sessionId:id,sampleId:state.deleteSampleId});dialog.close();await loadDetail(id);notify('Muestra eliminada de la sesión.');}
   else if(form.id==='remove-inspector-form'){let done=false;while(!done){const r=await api('removeInspector',{sessionId:id,inspectorUid:state.removeUid});done=r.done;}dialog.close();await loadDetail(id);notify('Inspector y resultados eliminados de la sesión.');}
+  else if(form.id==='edit-sample-form'){
+   if(!state.admin)throw Error('Acción exclusiva del administrador.');
+   const edit=state.sampleEdit;
+   const evaluations=[...form.querySelectorAll('[data-edit-uid]')].filter(row=>row.querySelector('[data-edit-result]').checked).map(row=>({inspectorUid:row.dataset.editUid,counterFlavors:leerPerfil(row.querySelector('fieldset')),observations:row.querySelector('textarea').value}));
+   await api('saveSampleEdit',{sessionId:edit.sessionId,sampleId:edit.sample.id,version:edit.version,sample:{lote:data.get('lote'),receivedDate:fechaRecepcion(data.get('receivedDate')),receptionAnalyst:data.get('receptionAnalyst'),blindLetter:data.get('blindLetter'),receiptFlavors:leerPerfil(form.querySelector('#edit-sample-receipt'))},evaluations});
+   dialog.close();state.sampleEdit=null;await loadDetail(edit.sessionId);results(edit.sample.id);notify('Muestra actualizada y edición cerrada.');
+  }
   else if(form.id==='reception-form'){await api('updateSample',{sessionId:id,sampleId:state.editSampleId,receivedDate:fechaRecepcion(data.get('receivedDate')),...(e.submitter?.dataset.dateOnly?{}:{receiptFlavors:leerPerfil(form),receptionAnalyst:data.get('receptionAnalyst'),blindLetter:data.get('blindLetter')})});progress.save(`reception/${id}/${state.editSampleId}`,{cleared:true});dialog.close();await loadDetail(id);notify('Recepción actualizada.');}
   else if(form.id==='sample-form'){media.assertReady();const created=await api('addSample',{sessionId:id,requestId:form.dataset.requestId,sample:{lote:data.get('lote'),receptionAnalyst:data.get('receptionAnalyst'),blindLetter:data.get('blindLetter'),receivedDate:fechaRecepcion(data.get('receivedDate')),receiptFlavors:leerPerfil(form)}});let warning='';try{await media.saveNewSample({sessionId:id,sampleId:created.id});}catch(error){warning='Muestra registrada. Hay fotos pendientes: '+message(error);}progress.save(`new-sample/${id}`,{cleared:true});dialog.close();state.analysisMode=false;state.analysisSampleId=created.id;await loadDetail(id);notify(warning||'Muestra y fotografías registradas.');}
   else if(form.id==='lab-evaluation-form'){media.assertReady();const sampleId=state.analysisSampleId,inspectorUid=state.analysisInspectorUid;await api('recordEvaluation',{sessionId:id,sampleId,inspectorUid,counterFlavors:leerPerfil(form),observations:data.get('observations')});let warning='';try{await media.uploadEvidence({sessionId:id,sampleId,inspectorUid});}catch(error){warning='Evaluación registrada. Hay evidencias pendientes: '+message(error);}progress.save(`evaluation/${id}/${sampleId}/${inspectorUid}`,{cleared:true});analysisDrafts.delete(`${id}/${sampleId}/${inspectorUid}`);state.analysisInspectorUid='';await loadDetail(id);notify(warning||'Evaluación y evidencias registradas.');document.querySelector('#analysis-workbench')?.scrollIntoView({block:'start'});}
