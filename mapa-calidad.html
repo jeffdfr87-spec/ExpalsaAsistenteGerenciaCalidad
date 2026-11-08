@@ -46,6 +46,8 @@ button{font:inherit;cursor:pointer}
 svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 svg.globe-mode{touch-action:none;cursor:grab}
 svg.globe-mode:active{cursor:grabbing}
+svg.map-pan-mode{touch-action:none;cursor:grab}
+svg.map-pan-mode:active{cursor:grabbing}
 .globe-sphere{fill:url(#globeOcean);stroke:#ffffffc9;stroke-width:1.4;filter:drop-shadow(0 12px 20px #18334d40);pointer-events:none}
 .globe-graticule{fill:none;stroke:#ffffff72;stroke-width:.65;vector-effect:non-scaling-stroke;pointer-events:none}
 text.globe-label{font-size:11px;font-weight:800;letter-spacing:.025em;paint-order:stroke fill;stroke:var(--ocean);stroke-width:3px}
@@ -192,7 +194,7 @@ north:{p:function(){return d3.geoConicEqualArea().parallels([15,60]).rotate([100
 central:{p:function(){return d3.geoNaturalEarth1().rotate([75,0])},b:[-93,6,-58,28]},
 south:{p:function(){return d3.geoNaturalEarth1().rotate([60,0])},b:[-82,-56,-34,13]},
 oceania:{p:function(){return d3.geoNaturalEarth1().rotate([-150,0])},b:[110,-48,192,4]}};
-var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null,city:null,client:null},rendered=null,proj,pathG,DN=null,REGIONS=[],PLACES=[],PLACE_BY_ID={},WATER=[],mapDataPromise=null,waterPromise=null,mapScale=1,globeRotation=[-20,-8,0],globePointer=null,globeMoved=false,globeSuppressClick=false,globeRaf=false,cardHandleY=null,cardHandleGesture=false;
+var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null,city:null,client:null},rendered=null,proj,pathG,DN=null,REGIONS=[],PLACES=[],PLACE_BY_ID={},WATER=[],mapDataPromise=null,waterPromise=null,mapScale=1,globeRotation=[-20,-8,0],globePointer=null,globeMoved=false,globeSuppressClick=false,globeRaf=false,cardHandleY=null,cardHandleGesture=false,panPointer=null,panOrigin=null,panX=0,panY=0,panMoved=false,panSuppressClick=false;
 function globeMode(){return!!(window.matchMedia&&window.matchMedia("(max-width:760px)").matches)}
 function globeCenter(){return[-globeRotation[0],-globeRotation[1]]}
 try{DN=new Intl.DisplayNames(["es"],{type:"region"})}catch(e){}
@@ -203,6 +205,9 @@ function gOf(i){var e=ents(i);return e?mg(e[0]):null}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function slug(n){return n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"")}
 function size(){var r=svg.getBoundingClientRect();return[r.width,r.height]}
+function resetPan(){panOrigin=null;panX=0;panY=0;panPointer=null;panMoved=false}
+function mapTransform(){var tr=getComputedStyle(mapG).transform;if(!tr||tr==="none")return[1,0,0,1,0,0];var a=tr.match(/matrix\(([^)]+)\)/);return a?a[1].split(",").map(Number):[1,0,0,1,0,0]}
+function panTransform(x,y){var m=panOrigin;if(!m)return;mapG.style.transform="matrix("+m[0]+","+m[1]+","+m[2]+","+m[3]+","+(m[4]+x)+","+(m[5]+y)+")"}
 var REGION_COLORS=["#83c9c2","#e5c66f","#e4a28e","#a9c7e4","#b9d69d","#b9a4d6","#efaeb2","#d4bb92"];
 function fetchGzipJson(url){return fetch(url,{cache:"force-cache"}).then(function(r){if(!r.ok)throw Error("No se pudo descargar la cartografía.");if(!window.DecompressionStream)throw Error("Este navegador no permite abrir los datos del mapa.");return new Response(r.body.pipeThrough(new DecompressionStream("gzip"))).json()})}
 function loadWaterData(){if(waterPromise)return waterPromise;waterPromise=fetchGzipJson("mapa-calidad-aguas.json.gz").then(function(d){WATER=d||[];return WATER}).catch(function(e){waterPromise=null;throw e});return waterPromise}
@@ -216,7 +221,7 @@ var q=pts.map(p).filter(Boolean),x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
 q.forEach(function(a){x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])});
 var k=Math.min(W*.94/(x1-x0),H*.94/(y1-y0));
 return p.scale(k).translate([W/2-k*(x0+x1)/2,H/2-k*(y0+y1)/2]).clipExtent([[0,0],[W,H]])}
-function render(view){var s=size(),W=s[0],H=s[1],h="",dots="",globe=view==="world"&&globeMode(),sphere="",grid="";svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.classList.toggle("globe-mode",globe);
+function render(view){resetPan();var s=size(),W=s[0],H=s[1],h="",dots="",globe=view==="world"&&globeMode(),sphere="",grid="";svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.classList.toggle("globe-mode",globe);svg.classList.toggle("map-pan-mode",globeMode()&&view!=="world");
 proj=mk(view,W,H);pathG=d3.geoPath(proj);mapG.classList.remove("focus");mapG.style.transition="none";mapG.style.transform="none";void mapG.offsetWidth;mapG.style.transition="";
 if(globe){var gr=globeRadius(W,H),gy=H*.47;sphere='<defs><radialGradient id="globeOcean" cx="38%" cy="35%" r="70%"><stop offset="0%" stop-color="var(--ocean)"/><stop offset="72%" stop-color="#a9cadb"/><stop offset="100%" stop-color="#648da8"/></radialGradient></defs><circle class="globe-sphere" cx="'+(W/2)+'" cy="'+gy+'" r="'+gr+'"/>';grid='<path class="globe-graticule" d="'+pathG(d3.geoGraticule().step([30,30])())+'"/>';$("hint").textContent="Desliza el globo y toca un país para abrir su continente"}else if(view==="world")$("hint").textContent="Toca un continente para explorarlo";
 F.forEach(function(f){var d=pathG(f);if(!d)return;var i=f.id,c;
@@ -267,7 +272,7 @@ if(ADMIN&&!selectedClient)h+='<div class="ab2"><button class="btn" data-act="edi
 h+='<div class="ft">Los defectos se evalúan a partir de los mayores (cabezas anaranjadas, cabezas estropeadas y camarón mudado) y dependen del color del camarón. Matriz vigente al 29/10/2026.</div>';
 p.innerHTML=h;p.style.display="block"}
 function setCardExpanded(expanded){var p=$("card");if(!p)return;p.classList.toggle("mobile-expanded",!!expanded&&globeMode());var b=p.querySelector(".card-expand");if(b){b.textContent=expanded?"⌄":"⌃";b.setAttribute("aria-expanded",String(!!expanded));b.setAttribute("aria-label",expanded?"Contraer ficha":"Expandir ficha")}}
-function zoom(id,inst){cities();if(st.v==="country")mapG.querySelectorAll("circle.dot").forEach(function(c){c.remove()});var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[id],k=1,cx,cy,pt;
+function zoom(id,inst){resetPan();cities();if(st.v==="country")mapG.querySelectorAll("circle.dot").forEach(function(c){c.remove()});var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[id],k=1,cx,cy,pt;
 mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")});
 mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});
 var el=mapG.querySelector('path[data-id="'+id+'"]');
@@ -278,7 +283,7 @@ mapG.classList.add("focus");
 if(cx===undefined){mapG.style.transform="none";dots(1);return}
 if(inst)mapG.style.transition="none";mapG.style.transform="translate("+(aw/2-k*cx)+"px,"+(ah/2-k*cy)+"px) scale("+k+")";dots(k);if(inst){void mapG.offsetWidth;mapG.style.transition=""}
 }
-function zoomCity(id){var city=getCity(id);if(!city||!proj)return;var pt=proj([+city.lon,+city.lat]);if(!pt||!isFinite(pt[0])||!isFinite(pt[1]))return;mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[st.id],k=1;
+function zoomCity(id){var city=getCity(id);if(!city||!proj)return;resetPan();var pt=proj([+city.lon,+city.lat]);if(!pt||!isFinite(pt[0])||!isFinite(pt[1]))return;mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[st.id],k=1;
 if(f){var b=pathG.bounds(f._m);if(isFinite(b[0][0])){var bw=Math.max(b[1][0]-b[0][0],1),bh=Math.max(b[1][1]-b[0][1],1);k=Math.max(1,Math.min(aw*.7/bw,ah*.7/bh,12))}}
 if((!f||k>=9)&&FB[st.id])k=Math.max(k,6);k=Math.min(24,Math.max(k+2,k*2.3));var x=narrow?W/2:aw/2,y=narrow?H*.24:ah/2;mapG.classList.add("focus");mapG.style.transform="translate("+(x-k*pt[0])+"px,"+(y-k*pt[1])+"px) scale("+k+")";dots(k)}
 function dots(k){mapG.querySelectorAll("circle.dot").forEach(function(c){c.setAttribute("r",5/k)});lbl(k)}
@@ -328,12 +333,12 @@ else if(a==="delcity"&&confirm("¿Eliminar esta ciudad?")){FS.remove("destinos",
 $("card").addEventListener("pointerdown",function(e){if(globeMode()&&e.target.closest(".card-expand")){cardHandleY=e.clientY;cardHandleGesture=false}});
 $("card").addEventListener("pointerup",function(e){if(cardHandleY===null)return;var dy=e.clientY-cardHandleY;cardHandleY=null;if(Math.abs(dy)<28)return;cardHandleGesture=true;setCardExpanded(dy<0);setTimeout(function(){cardHandleGesture=false},350)});
 $("card").addEventListener("pointercancel",function(){cardHandleY=null;cardHandleGesture=false});
-svg.onclick=function(e){if(globeSuppressClick){globeSuppressClick=false;return}if(globeMode()&&st.v==="world")return;if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;st.client=null;upd();zoomCity(st.city);return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
+svg.onclick=function(e){if(globeSuppressClick){globeSuppressClick=false;return}if(panSuppressClick){panSuppressClick=false;return}if(globeMode()&&st.v==="world")return;if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;st.client=null;upd();zoomCity(st.city);return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
 if(st.v==="world"){if(primary[i])toCont(primary[i])}else if(mem[st.c].has(i))toCountry(i)};
-svg.onpointerdown=function(e){if(!globeMode()||st.v!=="world")return;globePointer={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY};globeMoved=false;globeSuppressClick=false;try{svg.setPointerCapture(e.pointerId)}catch(_){} };
-svg.onpointermove=function(e){if(!globePointer||e.pointerId!==globePointer.id)return;var dx=e.clientX-globePointer.lastX,dy=e.clientY-globePointer.lastY;if(Math.abs(e.clientX-globePointer.x)+Math.abs(e.clientY-globePointer.y)>4)globeMoved=true;globePointer.lastX=e.clientX;globePointer.lastY=e.clientY;if(!globeMoved)return;globeRotation[0]+=dx*.42;globeRotation[1]=Math.max(-78,Math.min(78,globeRotation[1]-dy*.42));if(!globeRaf){globeRaf=true;requestAnimationFrame(function(){globeRaf=false;if(globeMode()&&st.v==="world")render("world")})}};
-svg.onpointerup=function(e){if(!globePointer||e.pointerId!==globePointer.id)return;var moved=globeMoved;globePointer=null;globeSuppressClick=true;try{svg.releasePointerCapture(e.pointerId)}catch(_){}if(moved)return;var vb=svg.viewBox.baseVal,W=vb.width,H=vb.height,r=svg.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height,dx=x-W/2,dy=y-H*.47;if(Math.hypot(dx,dy)>globeRadius(W,H))return;var ll=proj&&proj.invert([x,y]);if(!ll)return;var f=F.find(function(g){return primary[g.id]&&d3.geoContains(g,ll)});if(f)toCont(primary[f.id])};
-svg.onpointercancel=function(e){if(globePointer&&e.pointerId===globePointer.id)globePointer=null};
+svg.onpointerdown=function(e){if(globeMode()&&st.v==="world"){globePointer={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY};globeMoved=false;globeSuppressClick=false;try{svg.setPointerCapture(e.pointerId)}catch(_){}return}if(!globeMode()||(st.v!=="country"&&st.v!=="continent"))return;var m=mapTransform();mapG.style.transition="none";void mapG.offsetWidth;m=mapTransform();if(!panOrigin)panOrigin=m;panPointer={id:e.pointerId,x:e.clientX,y:e.clientY,startX:panX,startY:panY};panMoved=false;panSuppressClick=false;try{svg.setPointerCapture(e.pointerId)}catch(_){} };
+svg.onpointermove=function(e){if(globePointer&&e.pointerId===globePointer.id){var dx=e.clientX-globePointer.lastX,dy=e.clientY-globePointer.lastY;if(Math.abs(e.clientX-globePointer.x)+Math.abs(e.clientY-globePointer.y)>4)globeMoved=true;globePointer.lastX=e.clientX;globePointer.lastY=e.clientY;if(!globeMoved)return;globeRotation[0]+=dx*.42;globeRotation[1]=Math.max(-78,Math.min(78,globeRotation[1]-dy*.42));if(!globeRaf){globeRaf=true;requestAnimationFrame(function(){globeRaf=false;if(globeMode()&&st.v==="world")render("world")})}return}if(!panPointer||e.pointerId!==panPointer.id)return;var px=e.clientX-panPointer.x,py=e.clientY-panPointer.y;if(Math.abs(px)+Math.abs(py)>4)panMoved=true;if(!panMoved)return;var s=size(),limX=s[0]*.2,limY=s[1]*.2;panX=Math.max(-limX,Math.min(limX,panPointer.startX+px));panY=Math.max(-limY,Math.min(limY,panPointer.startY+py));panTransform(panX,panY)};
+svg.onpointerup=function(e){if(globePointer&&e.pointerId===globePointer.id){var moved=globeMoved;globePointer=null;globeSuppressClick=true;try{svg.releasePointerCapture(e.pointerId)}catch(_){}if(moved)return;var vb=svg.viewBox.baseVal,W=vb.width,H=vb.height,r=svg.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height,dx=x-W/2,dy=y-H*.47;if(Math.hypot(dx,dy)>globeRadius(W,H))return;var ll=proj&&proj.invert([x,y]);if(!ll)return;var f=F.find(function(g){return primary[g.id]&&d3.geoContains(g,ll)});if(f)toCont(primary[f.id]);return}if(!panPointer||e.pointerId!==panPointer.id)return;var dragged=panMoved;panPointer=null;try{svg.releasePointerCapture(e.pointerId)}catch(_){}if(dragged){panSuppressClick=true;mapG.style.transition="transform .18s ease-out,opacity .14s ease-out";setTimeout(function(){if(mapG)mapG.style.transition=""},200)}else mapG.style.transition=""};
+svg.onpointercancel=function(e){if(globePointer&&e.pointerId===globePointer.id)globePointer=null;if(panPointer&&e.pointerId===panPointer.id){panPointer=null;mapG.style.transition=""}};
 svg.onkeydown=function(e){var n=e.target.closest&&e.target.closest("text[data-city]");if(n&&(e.key==="Enter"||e.key===" ")){e.preventDefault();st.city=n.dataset.city;st.client=null;upd();zoomCity(st.city)}};
 svg.onmousemove=function(e){var n=e.target.closest&&e.target.closest("[data-id]"),i=n&&n.dataset.id,r=$("stage").getBoundingClientRect();
 mapG.querySelectorAll(".hl").forEach(function(x){x.classList.remove("hl")});
