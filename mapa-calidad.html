@@ -37,23 +37,22 @@ button{font:inherit;cursor:pointer}
 #crumbs i{opacity:.5;font-style:normal}
 #stage{position:relative;flex:1;min-height:0}
 svg{position:absolute;inset:0;width:100%;height:100%;display:block}
-#map{transition:transform 1.1s cubic-bezier(.65,0,.25,1),opacity .2s;transform-origin:0 0}
+#map{transition:transform .62s cubic-bezier(.2,.8,.2,1),opacity .14s ease-out;transform-origin:0 0;will-change:transform,opacity}
 #map.fade{opacity:0}
-path.ct{stroke:var(--stroke);stroke-width:.6;vector-effect:non-scaling-stroke;transition:filter .25s,opacity .6s}
+path.ct{stroke:var(--stroke);stroke-width:.6;vector-effect:non-scaling-stroke;transition:filter .16s ease-out,opacity .28s ease-out}
 path.w{cursor:pointer}path.w.hl{filter:brightness(1.12) saturate(1.3);stroke-width:1.2}
 .c-europe{fill:var(--eu)}.c-asia{fill:var(--as)}.c-africa{fill:var(--af)}.c-north{fill:var(--na)}.c-south{fill:var(--sa)}.c-oceania{fill:var(--oc)}.c-central{fill:var(--ce)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ce:#2f7a72}}:root[data-theme="dark"]{--ce:#2f7a72}
 path.out{fill:var(--out);pointer-events:none;opacity:.7}
 path.m{cursor:pointer}path.nodata{fill:#b9c3cd}
 path.m:hover{filter:brightness(1.12);stroke:var(--text);stroke-width:1.4}
-path.sel{stroke:#fff;stroke-width:3;filter:brightness(1.3) saturate(1.3) drop-shadow(0 0 8px var(--glow,#ffd54a));animation:gl 1.6s ease-in-out infinite alternate}
-@keyframes gl{from{filter:brightness(1.2) saturate(1.2) drop-shadow(0 0 4px var(--glow,#ffd54a))}to{filter:brightness(1.45) saturate(1.5) drop-shadow(0 0 16px var(--glow,#ffd54a)) drop-shadow(0 0 28px var(--glow,#ffd54a))}}
+path.sel{stroke:#fff;stroke-width:2.5;filter:brightness(1.22) saturate(1.15) drop-shadow(0 0 5px var(--glow,#ffd54a))}
 #map.focus path.m:not(.sel){opacity:.5}#map.focus path.out{opacity:.25}
 circle.dot{stroke:var(--text);stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer}
 text.lb.cn{pointer-events:auto;cursor:pointer}
 text.cn:hover{fill:#e65332;font-weight:800}
 text.cn.has-data{font-weight:800;fill:#9e2e20}
-text.cn.city-selected{font-weight:900;fill:#bd7900;stroke-width:4px}
+text.cn.city-selected{font-weight:900;fill:#a95708;stroke:var(--panel);stroke-width:5px;filter:drop-shadow(0 1px 5px #e9a92b)}
 path.province{stroke:#fff;stroke-width:.75;vector-effect:non-scaling-stroke;opacity:.92;pointer-events:none}
 text.province-label{font-size:10px;font-weight:800;letter-spacing:.04em;pointer-events:none;text-anchor:middle}
 circle.ping{fill:none;stroke:var(--text);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;animation:pg 1.4s infinite}
@@ -195,7 +194,7 @@ function fixRing(f){var g=f.geometry;if(!g)return;var fx=function(p){return d3.g
 if(g.type==="Polygon")g.coordinates=fx(g.coordinates);else g.coordinates=g.coordinates.map(fx);
 var best=null,ba=-1;(g.type==="Polygon"?[g.coordinates]:g.coordinates).forEach(function(p){var a=d3.geoArea({type:"Polygon",coordinates:p});if(a>ba){ba=a;best=p}});
 f._m={type:"Polygon",coordinates:best}}
-function fade(fn){mapG.classList.add("fade");setTimeout(function(){fn();mapG.classList.remove("fade")},200)}
+function fade(fn){mapG.classList.add("fade");setTimeout(function(){fn();mapG.classList.remove("fade")},140)}
 function crumbs(){var h='<button data-go="world">Mapamundi</button>';
 if(st.c){h+=' <i>›</i> '+(st.id?'<button data-go="cont">'+CN[st.c]+'</button>':'<span>'+CN[st.c]+'</span>')}
 if(st.id)h+=' <i>›</i> '+(st.city?'<button data-go="ctry">'+esc(name(st.id))+'</button>':'<span>'+esc(name(st.id))+'</span>');
@@ -236,7 +235,7 @@ mapG.classList.add("focus");
 if(cx===undefined){mapG.style.transform="none";dots(1);return}
 if(inst)mapG.style.transition="none";mapG.style.transform="translate("+(aw/2-k*cx)+"px,"+(ah/2-k*cy)+"px) scale("+k+")";dots(k);if(inst){void mapG.offsetWidth;mapG.style.transition=""}
 if(f&&k>=9||!f){var c=document.createElementNS("http://www.w3.org/2000/svg","circle");c.setAttribute("class","ping");c.setAttribute("cx",cx);c.setAttribute("cy",cy);c.setAttribute("r",14/k);mapG.appendChild(c)}}
-function zoomCity(id){var city=getCity(id);if(!city||!proj)return;var pt=proj([+city.lon,+city.lat]);if(!pt||!isFinite(pt[0])||!isFinite(pt[1]))return;var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[st.id],k=1;
+function zoomCity(id){var city=getCity(id);if(!city||!proj)return;var pt=proj([+city.lon,+city.lat]);if(!pt||!isFinite(pt[0])||!isFinite(pt[1]))return;mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});var s=size(),W=s[0],H=s[1],narrow=W<=760,aw=narrow?W:W-400,ah=narrow?H*.45:H,f=byId[st.id],k=1;
 if(f){var b=pathG.bounds(f._m);if(isFinite(b[0][0])){var bw=Math.max(b[1][0]-b[0][0],1),bh=Math.max(b[1][1]-b[0][1],1);k=Math.max(1,Math.min(aw*.7/bw,ah*.7/bh,12))}}
 if((!f||k>=9)&&FB[st.id])k=Math.max(k,6);k=Math.min(24,Math.max(k+2,k*2.3));var x=narrow?W/2:aw/2,y=narrow?H*.24:ah/2;mapG.classList.add("focus");mapG.style.transform="translate("+(x-k*pt[0])+"px,"+(y-k*pt[1])+"px) scale("+k+")";dots(k)}
 function dots(k){mapG.querySelectorAll("circle.dot").forEach(function(c){c.setAttribute("r",5/k)});lbl(k)}
