@@ -128,17 +128,58 @@ service cloud.firestore {
         (!('puerto' in d) || (d.puerto is string && d.puerto.size() <= 120)) &&
         (!('grados' in d) || validCalidadClientGrades(d.grados)) && calidadClientCityMatches(d);
     }
+    function validFichaCalibre(c) {
+      return c is map && c.keys().hasOnly(['talla','piezasKg','uniformidad']) &&
+        c.keys().hasAll(['talla','piezasKg','uniformidad']) &&
+        c.talla is string && c.talla.size() <= 40 &&
+        c.piezasKg is string && c.piezasKg.size() <= 40 &&
+        c.uniformidad is string && c.uniformidad.size() <= 40;
+    }
+    function validFichaCalibres(a) {
+      return a is list && a.size() <= 30 &&
+        (a.size() < 1 || validFichaCalibre(a[0])) &&
+        (a.size() < 2 || validFichaCalibre(a[1])) &&
+        (a.size() < 3 || validFichaCalibre(a[2])) &&
+        (a.size() < 4 || validFichaCalibre(a[3])) &&
+        (a.size() < 5 || validFichaCalibre(a[4])) &&
+        (a.size() < 6 || validFichaCalibre(a[5])) &&
+        (a.size() < 7 || validFichaCalibre(a[6])) &&
+        (a.size() < 8 || validFichaCalibre(a[7])) &&
+        (a.size() < 9 || validFichaCalibre(a[8])) &&
+        (a.size() < 10 || validFichaCalibre(a[9])) &&
+        (a.size() < 11 || validFichaCalibre(a[10])) &&
+        (a.size() < 12 || validFichaCalibre(a[11])) &&
+        (a.size() < 13 || validFichaCalibre(a[12])) &&
+        (a.size() < 14 || validFichaCalibre(a[13])) &&
+        (a.size() < 15 || validFichaCalibre(a[14])) &&
+        (a.size() < 16 || validFichaCalibre(a[15])) &&
+        (a.size() < 17 || validFichaCalibre(a[16])) &&
+        (a.size() < 18 || validFichaCalibre(a[17])) &&
+        (a.size() < 19 || validFichaCalibre(a[18])) &&
+        (a.size() < 20 || validFichaCalibre(a[19])) &&
+        (a.size() < 21 || validFichaCalibre(a[20])) &&
+        (a.size() < 22 || validFichaCalibre(a[21])) &&
+        (a.size() < 23 || validFichaCalibre(a[22])) &&
+        (a.size() < 24 || validFichaCalibre(a[23])) &&
+        (a.size() < 25 || validFichaCalibre(a[24])) &&
+        (a.size() < 26 || validFichaCalibre(a[25])) &&
+        (a.size() < 27 || validFichaCalibre(a[26])) &&
+        (a.size() < 28 || validFichaCalibre(a[27])) &&
+        (a.size() < 29 || validFichaCalibre(a[28])) &&
+        (a.size() < 30 || validFichaCalibre(a[29]));
+    }
     function validFichaTecnica(d, id) {
       return id is string && id.size() > 0 && id.size() <= 180 &&
-        d.keys().hasOnly(['clienteId','clienteNombre','tipoCliente','producto','codigoProducto','categoria','criterios','materiaExtrana','sabor','pais','continente','ciudadId','ciudad','puerto','textoExtraido','pdfNombre','metadata','estado']) &&
+        d.keys().hasOnly(['clienteId','clienteNombre','tipoCliente','producto','codigoProducto','categoria','criterios','materiaExtrana','sabor','pais','continente','ciudadId','ciudad','puerto','textoExtraido','pdfNombre','metadata','estado','calibres']) &&
         d.keys().hasAll(['clienteId','clienteNombre','tipoCliente','producto','criterios','textoExtraido','pdfNombre','metadata']) &&
         d.clienteId is string && d.clienteId.size() > 0 && d.clienteId.size() <= 180 &&
         d.clienteNombre is string && d.clienteNombre.size() > 0 && d.clienteNombre.size() <= 120 &&
         d.tipoCliente in ['cliente','importador'] &&
         d.producto is string && d.producto.size() > 0 && d.producto.size() <= 200 &&
+        (!('estado' in d) || d.estado in ['activa','inactiva']) &&
+        (!('calibres' in d) || validFichaCalibres(d.calibres)) &&
         (!('codigoProducto' in d) || (d.codigoProducto is string && d.codigoProducto.size() <= 120)) &&
         (!('categoria' in d) || (d.categoria is string && d.categoria.size() <= 120)) &&
-        (!('estado' in d) || d.estado in ['activa','inactiva']) &&
         d.criterios is list && d.criterios.size() <= 25 &&
         (!('materiaExtrana' in d) || (d.materiaExtrana is string && d.materiaExtrana.size() <= 1000)) &&
         (!('sabor' in d) || (d.sabor is string && d.sabor.size() <= 1000)) &&
@@ -1515,5 +1556,6 @@ match /empaque_ejercicio_reportes/{reporteId} {
 
   }
 }
+
 
 
