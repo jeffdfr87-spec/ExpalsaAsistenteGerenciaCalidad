@@ -9,6 +9,7 @@ exports.manageTrainingGroups = onCall(
   {region:'us-central1',maxInstances:3,timeoutSeconds:60,memory:'256MiB'},
   require('./training-groups').handler(getFirestore(), requireTrainingAdmin)
 );
+Object.assign(exports, require("./mapa-calidad-devices"));
 
 const DOMAIN = "expalsaevaluations.com";
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$/;
@@ -484,4 +485,5 @@ exports.getTrainingEvaluationState = onCall(
     return {status,attempt:publicTrainingAttempt(publicAttempt),pendingKind:pending?.kind||"",pendingInitial,pendingRefuerzo,initialEnabled:!!permission.initialEnabled,refuerzoEnabled:!!permission.refuerzoEnabled,canRequestRefuerzo:attempts.some(a=>a.status==="submitted"||a.status==="graded")&&!permission.refuerzoEnabled&&!pendingRefuerzo,bank:dayBank};
   }
 );
+
 
