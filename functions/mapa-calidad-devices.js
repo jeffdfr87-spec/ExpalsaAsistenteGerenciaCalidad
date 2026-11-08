@@ -5,7 +5,6 @@ const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore"
 
 const REGION = "us-central1";
 const ADMIN_EMAIL = "jefferson@expalsaevaluations.com";
-const QUALITY_ADMIN_EMAILS = new Set([ADMIN_EMAIL, "fabio@expalsaevaluations.com", "karina@expalsaevaluations.com"]);
 const DEVICES = "expalsa_calidad_dispositivos";
 
 function deviceRef(db, uid, deviceId) {
@@ -22,7 +21,6 @@ async function identity(request, requireAdmin = false) {
     const snap = await db.doc("expalsa_calidad_config/administrador").get();
     admin = snap.exists && snap.data().uid === uid && snap.data().email === email;
   }
-  if (QUALITY_ADMIN_EMAILS.has(email) && email !== ADMIN_EMAIL) admin = true;
   if (requireAdmin && !admin) throw new HttpsError("permission-denied", "Acción exclusiva del administrador.");
   if (!admin) {
     const access = await db.doc(`expalsa_calidad_accesos/${uid}`).get();
