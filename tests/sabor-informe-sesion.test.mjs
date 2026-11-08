@@ -1,6 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {resumenSesion,cargarInformeSesion} from '../sabor-informe-sesion.js';
+import {createFlavorSessionReport} from '../analisis-sabor-sesion-pdf.js';
+import {createRequire} from 'node:module';
+import {readFileSync} from 'node:fs';
+const require=createRequire(import.meta.url),{jsPDF}=require('../vendor/jspdf.umd.min.js'),{autoTable}=require('../vendor/jspdf.plugin.autotable.min.js');
 const normal=[{sabor:'Normal',porcentaje:100}],baseline=[{sabor:'Combustible Leve',porcentaje:60},{sabor:'Normal',porcentaje:40}];
 const samples=Array.from({length:4},(_,i)=>({id:'m'+i,sequence:i,lote:'L'+i,receiptFlavors:baseline}));
 const people=[{uid:'a',name:'Ana'},{uid:'b',name:'Beatriz'},{uid:'c',name:'Carla'},{uid:'removed',name:'Retirada',removing:true}];
@@ -26,4 +30,14 @@ test('no genera un informe con fotos pendientes, permiso denegado o sesión modi
  await assert.rejects(cargarInformeSesion(opts),/cambió/);
  await assert.rejects(cargarInformeSesion({...opts,api:async()=>{throw Error('Permiso denegado');}}),/Permiso denegado/);
  await assert.rejects(cargarInformeSesion({...opts,media:{assertReady(){},async forReport(){throw Error('Fotos pendientes');}}}),/Fotos pendientes/);
+});
+
+test('PDF compacto coloca ranking en página 2, dos muestras por página y normaliza la nota indicada',()=>{
+ const evaluated=samples.flatMap(sample=>people.slice(0,3).map(p=>({sampleId:sample.id,inspectorUid:p.uid,observations:'Le dio combustible leve'}))),before=JSON.stringify(evaluated),tables=[];
+ const wrapped=(pdf,opts)=>{tables.push(opts);return autoTable(pdf,opts);};
+ const {pdf}=createFlavorSessionReport({jsPDF,autoTable:wrapped,logoData:'data:image/png;base64,'+readFileSync(new URL('../logoexpalsa.png',import.meta.url)).toString('base64'),session:{name:'Prueba',date:'2026-11-07',status:'closed'},samples:samples.map((s,i)=>({...s,blindLetter:String.fromCharCode(65+i)})),inspectors:people,evaluations:evaluated});
+ assert.equal(pdf.getNumberOfPages(),4);
+ const contents=page=>pdf.internal.pages[page].join('\n');
+ assert.match(contents(2),/Discrepancias y conformidades por inspector/);assert.match(contents(3),/Muestra A/);assert.match(contents(3),/Muestra B/);assert.doesNotMatch(contents(3),/Muestra C/);assert.match(contents(4),/Muestra C/);assert.match(contents(4),/Muestra D/);
+ const detail=tables.find(t=>t.head[0][0]==='INSPECTOR / MUESTRA A');assert.equal(detail.body[0][2],'Combustible leve');assert.equal(JSON.stringify(evaluated),before);
 });
