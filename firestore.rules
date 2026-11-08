@@ -1,3 +1,16 @@
+// ===============================================================
+// Assumed data model added for mapa-calidad.html
+//
+// grados/{gradeId}: l/r/q/t/s/m/c strings and lo/hi percentages.
+// destinos/{destinationId}: tipo, nombre, grados and optional country,
+// continent, latitude and longitude fields. Each record is admin managed.
+// expalsa_calidad_dispositivos/{uid}/equipos/{deviceId}: server-managed
+// device identity, public key and active/pending/revoked status.
+// Access for this page also requires an active expalsa_calidad_accesos/{uid}
+// record or the configured administrator identity, plus the matching device
+// ID in the Firebase Auth token. Device keys and status are managed by
+// trusted Cloud Functions; clients cannot read or write device records.
+// ===============================================================
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -16,6 +29,35 @@ service cloud.firestore {
         get(accessDoc(request.auth.uid)).data.active == true &&
         get(accessDoc(request.auth.uid)).data.get('deleted', false) != true &&
         get(accessDoc(request.auth.uid)).data.email == request.auth.token.email;
+    }
+    function calidadDevicePath(uid) {
+      return /databases/$(database)/documents/expalsa_calidad_dispositivos/$(uid)/equipos/$(request.auth.token.calidadDeviceId);
+    }
+    function calidadPageUser() {
+      return signedIn() && request.auth.token.calidadDeviceId is string &&
+        exists(calidadDevicePath(request.auth.uid)) &&
+        get(calidadDevicePath(request.auth.uid)).data.status == 'active' &&
+        (expalsaAdmin() || inspector());
+    }
+    function validCalidadGrade(d) {
+      return d.keys().hasOnly(['l','r','lo','hi','q','t','s','m','c']) &&
+        d.keys().hasAll(['l','r','lo','hi','q','t','s','m','c']) &&
+        d.l is string && d.l.size() <= 20 && d.r is string && d.r.size() <= 40 &&
+        d.lo is number && d.lo >= 0 && d.lo <= 100 && d.hi is number && d.hi >= d.lo && d.hi <= 100 &&
+        d.q is string && d.q.size() <= 50 && d.t in ['ok','no','mid','flex'] &&
+        d.s is string && d.s.size() <= 120 && d.m is string && d.m.size() <= 120 &&
+        d.c is string && d.c.matches('^#[0-9A-Fa-f]{6}$');
+    }
+    function validCalidadDestination(d) {
+      return d.keys().hasOnly(['tipo','codigo','nombre','continente','pais','lat','lon','grados']) &&
+        d.keys().hasAll(['tipo','nombre','grados']) && d.tipo in ['pais','continente','ciudad'] &&
+        d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 100 &&
+        d.grados is list && d.grados.size() <= 10 &&
+        (!('codigo' in d) || (d.codigo is string && d.codigo.size() <= 20)) &&
+        (!('continente' in d) || (d.continente is string && d.continente.size() <= 30)) &&
+        (!('pais' in d) || (d.pais is string && d.pais.size() <= 3)) &&
+        (!('lat' in d) || (d.lat is number && d.lat >= -90 && d.lat <= 90)) &&
+        (!('lon' in d) || (d.lon is number && d.lon >= -180 && d.lon <= 180));
     }
     function photoDoc(uid) { return /databases/$(database)/documents/expalsa_calidad_fotos_perfil/$(uid); }
     function photoPresent(uid) {
@@ -1357,6 +1399,19 @@ match /empaque_ejercicio_reportes/{reporteId} {
       allow delete: if false;
     }
 
+    // Mapa de calidad y sabor: isolated from every other repository collection.
+    match /grados/{id} {
+      allow get, list: if calidadPageUser();
+      allow create, update: if calidadPageUser() && expalsaAdmin() && validCalidadGrade(request.resource.data);
+      allow delete: if calidadPageUser() && expalsaAdmin();
+    }
+    match /destinos/{id} {
+      allow get, list: if calidadPageUser();
+      allow create, update: if calidadPageUser() && expalsaAdmin() && validCalidadDestination(request.resource.data);
+      allow delete: if calidadPageUser() && expalsaAdmin();
+    }
+
   }
 }
+
 
