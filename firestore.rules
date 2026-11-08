@@ -1,9 +1,14 @@
+Warning: truncated output (original token count: 33310)
+Total output lines: 1449
+
 // ===============================================================
 // Assumed data model added for mapa-calidad.html
 //
 // grados/{gradeId}: l/r/q/t/s/m/c strings and lo/hi percentages.
 // destinos/{destinationId}: tipo, nombre, grados and optional country,
 // continent, latitude and longitude fields. Each record is admin managed.
+// clientes_calidad/{clientId}: ciudadId, pais, ciudad, nombre and tipo
+// (cliente/importador). Each record links to an admin-managed city in destinos.
 // expalsa_calidad_dispositivos/{uid}/equipos/{deviceId}: server-managed
 // device identity, public key and active/pending/revoked status.
 // Access for this page requires the configured administrator identity, or
@@ -63,6 +68,26 @@ service cloud.firestore {
         (!('pais' in d) || (d.pais is string && d.pais.size() <= 3)) &&
         (!('lat' in d) || (d.lat is number && d.lat >= -90 && d.lat <= 90)) &&
         (!('lon' in d) || (d.lon is number && d.lon >= -180 && d.lon <= 180));
+    }
+    function calidadDestinationPath(id) {
+      return /databases/$(database)/documents/destinos/$(id);
+    }
+    function calidadClientCityMatches(d) {
+      let cityPath = calidadDestinationPath(d.ciudadId);
+      return existsAfter(cityPath) &&
+        getAfter(cityPath).data.tipo == 'ciudad' &&
+        getAfter(cityPath).data.pais == d.pais &&
+        getAfter(cityPath).data.nombre == d.ciudad;
+    }
+    function validCalidadClient(d) {
+      return d.keys().hasOnly(['ciudadId','pais','ciudad','nombre','tipo']) &&
+        d.keys().hasAll(['ciudadId','pais','ciudad','nombre','tipo']) &&
+        d.ciudadId is string && d.ciudadId.size() > 0 && d.ciudadId.size() <= 180 &&
+        d.pais is string && d.pais.matches('^[A-Z]{2}$') &&
+        d.ciudad is string && d.ciudad.size() > 0 && d.ciudad.size() <= 100 &&
+        d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 120 &&
+        d.tipo in ['cliente','importador'] &&
+        calidadClientCityMatches(d);
     }
     function photoDoc(uid) { return /databases/$(database)/documents/expalsa_calidad_fotos_perfil/$(uid); }
     function photoPresent(uid) {
@@ -513,294 +538,7 @@ service cloud.firestore {
         criteriaKeys(d.ratings) && criteriaKeys(d.evidence) && criteriaKeys(d.autonomy) &&
         d.ratings.values().hasOnly([-1,0,1,2,3,4]) && d.ratings.values().hasAny([0,1,2,3,4]) && d.autonomy.values().hasOnly([true,false]) &&
         (d.get('technical',null)!=null || (dailyPoint(levels.C1,proof.C1) && dailyPoint(levels.C2,proof.C2) && dailyPoint(levels.C3,proof.C3) && dailyPoint(levels.C4,proof.C4) && dailyPoint(levels.C5,proof.C5) &&
-        dailyPoint(levels.C6,proof.C6) && dailyPoint(levels.C7,proof.C7) && dailyPoint(levels.C8,proof.C8) && dailyPoint(levels.C9,proof.C9) && dailyPoint(levels.C10,proof.C10))) &&
-        d.createdAt is timestamp && d.createdBy==request.auth.uid && photoIdsValid(d.get('photoIds',[])) && technicalValid(d.get('technical',null),true);
-    }
-    function photoIdsValid(ids) { return ids is list && ids.size()<=4; }
-    function linkedFieldValid(id,d) {
-      let profile=getAfter(/databases/$(database)/documents/expalsa_calidad_perfiles/$(d.sourceProfileId)).data.payload;
-      let source=d.sourceKind=='formacion'?{}:getAfter(/databases/$(database)/documents/expalsa_calidad_registros/$(d.sourceId)).data;
-      return d.uid==profile.accountUid && (d.sourceKind=='formacion' || evaluationStage(d)==evaluationStage(source.payload)) && d.sourceRevision is int && d.sourceRevision>0 && d.voided is bool && d.updatedAt==request.time &&
-        (d.sourceKind=='formacion' ? id=='REF-'+d.sourceId :
-         (id=='REG-'+d.sourceId && source.kind==d.sourceKind && source.payload.profileId==d.sourceProfileId && source.payload.revision==d.sourceRevision &&
-          (d.voided || (d.ratings==source.payload.assessment.ratings && d.autonomy==source.payload.assessment.autonomy && d.get('technical',null)==source.payload.get('technical',null)))));
-    }
-    function linkedDataValid(id,d) {
-      return d.keys().hasOnly(['uid','date','area','shift','lot','activity','finding','observation','critical','containment','ratings','evidence','autonomy','createdBy','createdAt','photoIds','sourceId','sourceKind','sourceProfileId','sourceRevision','updatedAt','voided','technical','evaluationStage']) &&
-        linkedFieldValid(id,d) && activeTarget(d.uid) && identityPresent(d.uid) && photoPresent(d.uid) &&
-        calendarKey(d.date) && shortText(d.area,1,160) && shortText(d.shift,1,160) && shortText(d.lot,1,160) && shortText(d.activity,1,160) &&
-        shortText(d.observation,20,1000) && d.critical is bool && d.finding in ['Fortaleza','Oportunidad de mejora','Incidencia crítica','Condición del proceso'] &&
-        d.critical==(d.finding=='Incidencia crítica') && shortText(d.containment,d.critical?12:0,1000) &&
-        criteriaKeys(d.ratings) && d.ratings.values().hasOnly([-1,0,1,2,3,4]) && d.ratings.values().hasAny([0,1,2,3,4]) &&
-        criteriaKeys(d.autonomy) && d.autonomy.values().hasOnly([true,false]) && criteriaKeys(d.evidence) &&
-        d.evidence.values().hasOnly(['',d.observation]) && d.evidence.values().hasAny([d.observation]) &&
-        d.createdAt is timestamp && d.createdBy==request.auth.uid && photoIdsValid(d.photoIds) && technicalValid(d.get('technical',null),false);
-    }
-
-    function v2Level(v) { return v is int && v>=1 && v<=3; }
-    function v2Competencies(v) {
-      return v.values is map && v.values.size()>0 && v.values.keys().hasOnly(['K1','K2','K3','K4','K5']) &&
-        v.values.values().hasOnly([0,1,2,3]) && v.evidence is map && v.evidence.keys()==v.values.keys() &&
-        (!('K1' in v.values) || shortText(v.evidence.K1,20,1000)) && (!('K2' in v.values) || shortText(v.evidence.K2,20,1000)) &&
-        (!('K3' in v.values) || shortText(v.evidence.K3,20,1000)) && (!('K4' in v.values) || shortText(v.evidence.K4,20,1000)) && (!('K5' in v.values) || shortText(v.evidence.K5,20,1000));
-    }
-    function v2IndicatorGroupA(m) {
-      let fields=['a','b','low','high','limit','target','level','evidence','spec'];
-      let levels=[0,1,2,3,4];
-      let i1=m.get('I1',null);
-      let i2=m.get('I2',null);
-      let i3=m.get('I3',null);
-      let i4=m.get('I4',null);
-      let i5=m.get('I5',null);
-      let i6=m.get('I6',null);
-      return (i1==null || (i1.keys().hasOnly(fields) && i1.level in levels && i1.a.matches('(?s).{1,1000}') && i1.evidence.matches('(?s).{20,1000}') && i1.spec.matches('(?s).{1,160}'))) &&
-        (i2==null || (i2.keys().hasOnly(fields) && i2.level in levels && i2.a.matches('(?s).{1,1000}') && i2.evidence.matches('(?s).{20,1000}') && i2.spec.matches('(?s).{1,160}'))) &&
-        (i3==null || (i3.keys().hasOnly(fields) && i3.level in levels && i3.a.matches('(?s).{1,1000}') && i3.evidence.matches('(?s).{20,1000}') && i3.spec.matches('(?s).{1,160}'))) &&
-        (i4==null || (i4.keys().hasOnly(fields) && i4.level in levels && i4.a.matches('(?s).{1,1000}') && i4.evidence.matches('(?s).{20,1000}') && i4.spec.matches('(?s).{1,160}'))) &&
-        (i5==null || (i5.keys().hasOnly(fields) && i5.level in levels && i5.a.matches('(?s).{1,1000}') && i5.evidence.matches('(?s).{20,1000}') && i5.spec.matches('(?s).{1,160}'))) &&
-        (i6==null || (i6.keys().hasOnly(fields) && i6.level in levels && i6.a.matches('(?s).{1,1000}') && i6.evidence.matches('(?s).{20,1000}') && i6.spec.matches('(?s).{1,160}')));
-    }
-    function v2IndicatorGroupB(m) {
-      let fields=['a','b','low','high','limit','target','level','evidence','spec'];
-      let levels=[0,1,2,3,4];
-      let i7=m.get('I7',null);
-      let i8=m.get('I8',null);
-      let i9=m.get('I9',null);
-      let i10=m.get('I10',null);
-      let i11=m.get('I11',null);
-      let i12=m.get('I12',null);
-      return (i7==null || (i7.keys().hasOnly(fields) && i7.level in levels && i7.a.matches('(?s).{1,1000}') && i7.evidence.matches('(?s).{20,1000}') && i7.spec.matches('(?s).{1,160}'))) &&
-        (i8==null || (i8.keys().hasOnly(fields) && i8.level in levels && i8.a.matches('(?s).{1,1000}') && i8.evidence.matches('(?s).{20,1000}') && i8.spec.matches('(?s).{1,160}'))) &&
-        (i9==null || (i9.keys().hasOnly(fields) && i9.level in levels && i9.a.matches('(?s).{1,1000}') && i9.evidence.matches('(?s).{20,1000}') && i9.spec.matches('(?s).{1,160}'))) &&
-        (i10==null || (i10.keys().hasOnly(fields) && i10.level in levels && i10.a.matches('(?s).{1,1000}') && i10.evidence.matches('(?s).{20,1000}') && i10.spec.matches('(?s).{1,160}'))) &&
-        (i11==null || (i11.keys().hasOnly(fields) && i11.level in levels && i11.a.matches('(?s).{1,1000}') && i11.evidence.matches('(?s).{20,1000}') && i11.spec.matches('(?s).{1,160}'))) &&
-        (i12==null || (i12.keys().hasOnly(fields) && i12.level in levels && i12.a.matches('(?s).{1,1000}') && i12.evidence.matches('(?s).{20,1000}') && i12.spec.matches('(?s).{1,160}')));
-    }
-    function v2Indicators() {
-      let m=request.resource.data.v2.values;
-      return m is map && m.size()>0 && !m.values().hasAny([null]) && m.keys().hasOnly(['I1','I2','I3','I4','I5','I6','I7','I8','I9','I10','I11','I12']) && v2IndicatorGroupA(m) && v2IndicatorGroupB(m);
-    }
-    function weightDetails(parts,v) { return parts is map && parts.keys().hasOnly(['P8_1_gross', 'P8_1_net', 'P8_2_gross', 'P8_2_net', 'P8_3_gross', 'P8_3_net', 'P8_4_gross', 'P8_4_net', 'P8_5_gross', 'P8_5_net', 'P8_6_gross', 'P8_6_net', 'P8_7_gross', 'P8_7_net', 'P8_8_gross', 'P8_8_net']) && parts.values().hasOnly([0,1]) && (parts.keys().hasAny(['P8_1_gross','P8_1_net']) ? v.P8_1*2==parts.P8_1_gross+parts.P8_1_net : v.get('P8_1',0)!=0.5) && (parts.keys().hasAny(['P8_2_gross','P8_2_net']) ? v.P8_2*2==parts.P8_2_gross+parts.P8_2_net : v.get('P8_2',0)!=0.5) && (parts.keys().hasAny(['P8_3_gross','P8_3_net']) ? v.P8_3*2==parts.P8_3_gross+parts.P8_3_net : v.get('P8_3',0)!=0.5) && (parts.keys().hasAny(['P8_4_gross','P8_4_net']) ? v.P8_4*2==parts.P8_4_gross+parts.P8_4_net : v.get('P8_4',0)!=0.5) && (parts.keys().hasAny(['P8_5_gross','P8_5_net']) ? v.P8_5*2==parts.P8_5_gross+parts.P8_5_net : v.get('P8_5',0)!=0.5) && (parts.keys().hasAny(['P8_6_gross','P8_6_net']) ? v.P8_6*2==parts.P8_6_gross+parts.P8_6_net : v.get('P8_6',0)!=0.5) && (parts.keys().hasAny(['P8_7_gross','P8_7_net']) ? v.P8_7*2==parts.P8_7_gross+parts.P8_7_net : v.get('P8_7',0)!=0.5) && (parts.keys().hasAny(['P8_8_gross','P8_8_net']) ? v.P8_8*2==parts.P8_8_gross+parts.P8_8_net : v.get('P8_8',0)!=0.5); }
-    function practicalNotes(n,v) { return n is map && n.keys().hasOnly(v.keys()) && n.values().join('\u001f').matches('[^\\x1f]{0,1000}(\\x1f[^\\x1f]{0,1000}){0,58}'); }
-    function v2Payload(v) {
-      return v is map && v.keys().hasOnly(['kind','values','evidence','target','checklist','action','result','points','cycle','title','details','revision','observations','weightDetails']) && (
-        (v.kind=='practical' && v.keys().hasOnly(['kind','revision','values','observations','weightDetails']) && v.revision=='operativo-2-componentes-20261030-v1' && v.values is map && v.values.size()>0 && v.values.keys().hasOnly(['P1_1', 'P2_1', 'P3_1', 'P3_2', 'P4_1', 'P5_1', 'P5_2', 'P5_3', 'P6_1', 'P6_2', 'P6_3', 'P6_4', 'P6_5', 'P6_6', 'P6_7', 'P6_8', 'P7_1', 'P7_2', 'P7_3', 'P7_4', 'P7_5', 'P7_6', 'P7_7', 'P7_8', 'P8_1', 'P8_2', 'P8_3', 'P8_4', 'P8_5', 'P8_6', 'P8_7', 'P8_8', 'P9_1', 'P9_2', 'P9_3', 'P9_4', 'P9_5', 'P9_6', 'P9_7', 'P9_8', 'P10_1', 'P11_1', 'P11_2', 'P11_3', 'P11_4', 'P11_5', 'P11_6', 'P11_7', 'P11_8', 'P12_1', 'P13_1', 'P13_2', 'P13_3', 'P13_4', 'P13_5', 'P13_6', 'P13_7', 'P13_8', 'P13_9']) && v.values.values().hasOnly([0,0.5,1]) && v.values.values().removeAll([0,1]).size()==[v.values.get('P8_1',0),v.values.get('P8_2',0),v.values.get('P8_3',0),v.values.get('P8_4',0),v.values.get('P8_5',0),v.values.get('P8_6',0),v.values.get('P8_7',0),v.values.get('P8_8',0)].removeAll([0,1]).size() && (!('weightDetails' in v) ? v.values.values().hasOnly([0,1]) : weightDetails(v.weightDetails,v.values)) && (!('observations' in v) || practicalNotes(v.observations,v.values))) ||
-        (v.kind=='course' && v.keys().hasOnly(['kind','target','title','details','points']) && workshopTarget(v.target) && shortText(v.title,1,160) && shortText(v.details,20,1000) && v.points is int && v.points>=0 && v.points<=4) ||
-        (v.kind=='competencies' && v.keys().hasOnly(['kind','values','evidence']) && v2Competencies(v)) ||
-        (v.kind=='indicators' && v.keys().hasOnly(['kind','values']) && v2Indicators()) ||
-        (v.kind in ['training','observation'] && v.points is int && v.points>=(v.kind=='training'?0:-4) && v.points<=4 && shortText(v.action,20,1000) && shortText(v.result,20,1000) &&
-         (v.kind=='observation' ? v.keys().hasOnly(['kind','action','result','points']) : v.target in ['K1','K2','K3','K4','K5','I1','I2','I3','I4','I5','I6','I7','I8','I9','I10','I11','I12'] && v.checklist is list && v.checklist.size()>=1 && v.checklist.size()<=4 && (!('cycle' in v) || shortText(v.cycle,1,100)))));
-    }
-    function v2Daily(d) {
-      let keys=['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10'];
-      return d.keys().hasOnly(['uid','date','area','shift','lot','activity','finding','observation','critical','containment','ratings','evidence','autonomy','createdBy','createdAt','photoIds','evaluationStage','v2']) &&
-        d.uid is string && activeTarget(d.uid) && identityPresent(d.uid) && photoPresent(d.uid) && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-        d.area.matches('(?s).{1,160}') && d.shift.matches('(?s).{1,160}') && d.lot.matches('(?s).{1,160}') && d.activity.matches('(?s).{1,160}') &&
-        d.finding=='Condición del proceso' && d.critical==false && d.containment=='' && d.observation.matches('(?s).{12,1000}.{0,1000}') &&
-        (d.v2.kind=='indicators' ? d.ratings=={'C1':-1,'C2':-1,'C3':-1,'C4':-1,'C5':-1,'C6':-1,'C7':-1,'C8':-1,'C9':-1,'C10':-1} && d.evidence=={'C1':'','C2':'','C3':'','C4':'','C5':'','C6':'','C7':'','C8':'','C9':'','C10':''} && d.autonomy=={'C1':false,'C2':false,'C3':false,'C4':false,'C5':false,'C6':false,'C7':false,'C8':false,'C9':false,'C10':false} : (d.ratings.keys().hasOnly(keys) && d.ratings.size()==10 && d.ratings.values().hasOnly([-1,0,1,2,3,4]) && d.evidence.keys()==d.ratings.keys() && d.autonomy.keys()==d.ratings.keys() && d.autonomy.values().hasOnly([true,false]))) &&
-        d.createdAt==request.time && d.createdBy==request.auth.uid && d.photoIds==[] && (d.v2.kind=='indicators' ? d.v2.keys().hasOnly(['kind','values']) && v2Indicators() : v2Payload(d.v2));
-    }
-
-
-    function assignedDoc(uid,key) {return /databases/$(database)/documents/expalsa_calidad_asignaciones/$(uid+'_'+key);}
-    function assignedVersion(uid,key,fallback) {return exists(assignedDoc(uid,key))?get(assignedDoc(uid,key)).data.version:fallback;}
-
-    match /expalsa_calidad_modelos/{id} {
-      allow get: if expalsaAdmin();
-      allow create,update: if expalsaAdmin() && id=='operativo2026' && request.resource.data.keys().hasOnly(['revision','questions','certifications','theoryRevision','updatedAt']) && request.resource.data.revision=='operativo-2-componentes-20261030-v1' && request.resource.data.questions is list && request.resource.data.questions.size() in [28,43,44] && request.resource.data.certifications is list && request.resource.data.certifications.size()==9 && request.resource.data.updatedAt==request.time;
-      allow list,delete: if false;
-    }
-
-    match /expalsa_calidad_banco_maestro/{id} {
-      allow get: if expalsaAdmin();
-      allow create,update: if expalsaAdmin() && id=='activo' && request.resource.data.keys().hasOnly(['revision','questions','sources','examSize','cycleSize','maxPairOverlap','updatedAt']) && request.resource.data.revision is string && request.resource.data.questions is list && request.resource.data.questions.size()==150 && request.resource.data.examSize==30 && request.resource.data.cycleSize==8 && request.resource.data.maxPairOverlap==12 && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt==request.time);
-      allow list,delete: if false;
-    }
-    match /expalsa_calidad_calculos/{id} {
-      allow get: if expalsaAdmin();
-      allow create,update: if expalsaAdmin() && id in ['1','2','3','1_2','2_2','3_2'] && request.resource.data.keys().hasOnly(['revision','index','updatedAt']) && request.resource.data.revision=='teorico-20261031-v2' && request.resource.data.index is int && request.resource.data.index==(exists(/databases/$(database)/documents/expalsa_calidad_calculos/$(id))?resource.data.index+1:1) && request.resource.data.updatedAt==request.time;
-      allow list,delete: if false;
-    }
-    match /expalsa_calidad_sorteos/{id} {
-      allow get: if expalsaAdmin();
-      allow create,update: if expalsaAdmin() && id in ['1','2','3','1_2','2_2','3_2'] && request.resource.data.keys().hasOnly(['revision','index','cycle','deck','lastIds','updatedAt']) && request.resource.data.index is int && request.resource.data.index>0 && request.resource.data.cycle is int && request.resource.data.cycle>0 && request.resource.data.deck is list && request.resource.data.deck.size()==150 && request.resource.data.deck.toSet().size()==150 && request.resource.data.lastIds is list && request.resource.data.lastIds.size()==30 && request.resource.data.updatedAt==request.time;
-      allow list,delete: if false;
-    }
-    match /expalsa_calidad_asignaciones/{id} {
-      allow get: if expalsaAdmin() || (inspector() && theoryRequestOwnId(id));
-      allow list: if expalsaAdmin();
-      allow create: if expalsaAdmin() && request.resource.data.keys().hasOnly(['uid','stage','attempt','version','revision','cycle','slot','assignedBy','assignedAt']) && request.resource.data.uid is string && activeTarget(request.resource.data.uid) && request.resource.data.stage in [1,2,3] && ((!exists(programDoc(request.resource.data.uid)) && request.resource.data.stage==1 && request.resource.data.attempt==1) || (exists(programDoc(request.resource.data.uid)) && getAfter(programDoc(request.resource.data.uid)).data.active==true && request.resource.data.stage==getAfter(programDoc(request.resource.data.uid)).data.get('stageProgress',{'active':1}).active)) && request.resource.data.attempt in [1,2] && id==request.resource.data.uid+'_'+progressKey(request.resource.data.stage)+(request.resource.data.attempt==2?'_2':'') && request.resource.data.slot is int && request.resource.data.slot>=1 && request.resource.data.slot<=15 && request.resource.data.cycle is int && request.resource.data.cycle>0 && request.resource.data.revision is string && request.resource.data.assignedBy==request.auth.uid && request.resource.data.assignedAt==request.time && getAfter(dynamicBank(request.resource.data.version)).data.stage==request.resource.data.stage && getAfter(dynamicKey(request.resource.data.version)).data.stage==request.resource.data.stage;
-      allow update: if expalsaAdmin() && activeTarget(resource.data.uid) && request.resource.data.keys()==resource.data.keys() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['version','revision','cycle','slot','assignedBy','assignedAt']) && request.resource.data.assignedBy==request.auth.uid && request.resource.data.assignedAt==request.time && request.resource.data.slot is int && request.resource.data.slot>=1 && request.resource.data.slot<=15 && request.resource.data.cycle is int && request.resource.data.cycle>0 && resource.data.stage==activeStage(resource.data.uid) && !exists(attemptDoc(resource.data.uid,progressKey(resource.data.stage)+(resource.data.attempt==2?'_2':''))) && !exists(sessionDoc(resource.data.uid,progressKey(resource.data.stage)+(resource.data.attempt==2?'_2':''))) && getAfter(dynamicBank(request.resource.data.version)).data.stage==resource.data.stage && getAfter(dynamicKey(request.resource.data.version)).data.stage==resource.data.stage;
-      allow delete: if false;
-    }
-
-
-    function criterionPhotoWritable(d) {
-      let draft=get(/databases/$(database)/documents/expalsa_calidad_borradores/$(request.auth.uid+'__'+d.uid+'__'+d.kind+'__'+progressKey(d.evaluationStage))).data;
-      return activeTarget(d.uid) && d.evaluationStage==activeStage(d.uid) && !exists(dailyDoc(d.recordId)) && draft.status=='draft' && draft.recordId==d.recordId && draft.uid==d.uid && draft.ownerUid==request.auth.uid && draft.stage==d.evaluationStage && draft.kind==d.kind;
-    }
-    function criterionPhotoValid(id,d) {
-      return d.keys().hasOnly(['uid','recordId','kind','criterion','evaluationStage','jpeg','width','height','size','origin','createdBy','updatedAt','photoId']) && d.uid is string && d.recordId is string && d.recordId.size()<=100 && ((!('photoId' in d) && id==d.recordId+'__'+d.criterion) || (d.photoId is string && d.photoId.matches('^[a-f0-9-]{36}$') && id==d.recordId+'__'+d.criterion+'__'+d.photoId)) && d.kind in ['practical','competencies','indicators'] && (d.kind=='practical'?d.criterion in ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13', 'P1_1', 'P2_1', 'P3_1', 'P3_2', 'P4_1', 'P5_1', 'P5_2', 'P5_3', 'P6_1', 'P6_2', 'P6_3', 'P6_4', 'P6_5', 'P6_6', 'P6_7', 'P6_8', 'P7_1', 'P7_2', 'P7_3', 'P7_4', 'P7_5', 'P7_6', 'P7_7', 'P7_8', 'P8_1', 'P8_2', 'P8_3', 'P8_4', 'P8_5', 'P8_6', 'P8_7', 'P8_8', 'P9_1', 'P9_2', 'P9_3', 'P9_4', 'P9_5', 'P9_6', 'P9_7', 'P9_8', 'P10_1', 'P11_1', 'P11_2', 'P11_3', 'P11_4', 'P11_5', 'P11_6', 'P11_7', 'P11_8', 'P12_1', 'P13_1', 'P13_2', 'P13_3', 'P13_4', 'P13_5', 'P13_6', 'P13_7', 'P13_8', 'P13_9']:d.kind=='competencies'?d.criterion in ['K1','K2','K3','K4','K5']:d.criterion in ['I1','I2','I3','I4','I5','I6','I7','I8','I9','I10','I11','I12']) && d.evaluationStage in [1,2,3] && jpegValid(d) && d.origin in ['camera','gallery'] && d.createdBy==request.auth.uid && d.updatedAt==request.time && criterionPhotoWritable(d);
-    }
-    match /expalsa_calidad_fotos_criterios/{id} {
-      allow get,list: if expalsaAdmin();
-      allow create: if expalsaAdmin() && criterionPhotoValid(id,request.resource.data);
-      allow update: if expalsaAdmin() && criterionPhotoValid(id,request.resource.data) && request.resource.data.uid==resource.data.uid && request.resource.data.recordId==resource.data.recordId && request.resource.data.kind==resource.data.kind && request.resource.data.criterion==resource.data.criterion && request.resource.data.evaluationStage==resource.data.evaluationStage && request.resource.data.createdBy==resource.data.createdBy;
-      allow delete: if expalsaAdmin() && criterionPhotoWritable(resource.data) && resource.data.createdBy==request.auth.uid;
-    }
-
-    function draftKind(k) { return k in ['practical','competencies','indicators','training','observation','course']; }
-    function draftId(d) { return d.ownerUid+'__'+d.uid+'__'+d.kind+'__'+progressKey(d.stage); }
-    function completedDraftValid(d) {
-      let r=getAfter(dailyDoc(d.recordId)).data;
-      return r.uid==d.uid && r.createdBy==d.ownerUid && evaluationStage(r)==d.stage && r.v2.kind==d.kind;
-    }
-    function draftValid(id,d) {
-      return d.keys().hasOnly(['schema','uid','ownerUid','kind','stage','recordId','target','inspectorName','status','payload','clientUpdatedAt','revision','updatedAt']) &&
-        d.schema==1 && d.ownerUid==request.auth.uid && shortText(d.uid,1,128) && draftKind(d.kind) && d.stage in [1,2,3] && id==draftId(d) &&
-        shortText(d.recordId,1,100) && shortText(d.target,0,12) && shortText(d.inspectorName,0,240) && d.status in ['draft','completed','discarded'] &&
-        d.payload is string && d.payload.size()<=250000 && d.clientUpdatedAt is int && d.clientUpdatedAt>0 && d.revision is int && d.revision>=1 && d.updatedAt==request.time &&
-        (d.status=='draft' ? d.payload.size()>1 && activeTarget(d.uid) && activeStage(d.uid)==d.stage : d.payload=='' && (d.status=='discarded' || completedDraftValid(d)));
-    }
-    match /expalsa_calidad_borradores/{id} {
-      allow get: if expalsaAdmin() && (!exists(/databases/$(database)/documents/expalsa_calidad_borradores/$(id)) || resource.data.ownerUid==request.auth.uid);
-      allow list: if expalsaAdmin() && resource.data.ownerUid==request.auth.uid;
-      allow create: if expalsaAdmin() && draftValid(id,request.resource.data) && request.resource.data.revision==1;
-      allow update: if expalsaAdmin() && resource.data.ownerUid==request.auth.uid && draftValid(id,request.resource.data) &&
-        request.resource.data.revision==resource.data.revision+1 && request.resource.data.uid==resource.data.uid && request.resource.data.ownerUid==resource.data.ownerUid &&
-        request.resource.data.kind==resource.data.kind && request.resource.data.stage==resource.data.stage &&
-        ((resource.data.status=='draft' && request.resource.data.recordId==resource.data.recordId) ||
-         (resource.data.status in ['completed','discarded'] && request.resource.data.status=='draft' && request.resource.data.recordId!=resource.data.recordId));
-      allow delete: if false;
-    }
-    function theoryRequestKey(d) { return progressKey(d.stage)+(d.attempt==2?'_2':''); }
-    function theoryRequestOwnId(id) { return id in [request.auth.uid+'_1',request.auth.uid+'_2',request.auth.uid+'_3',request.auth.uid+'_1_2',request.auth.uid+'_2_2',request.auth.uid+'_3_2']; }
-    function theoryRequestShape(id,d) {
-      return d.keys().hasOnly(['uid','email','stage','attempt','status','requestedAt','durationMinutes','reviewedAt','reviewedBy','reviewNote']) &&
-        shortText(d.uid,1,128) && shortText(d.email,3,254) && d.stage in [1,2,3] && d.attempt in [1,2] && id==d.uid+'_'+theoryRequestKey(d) &&
-        d.status in ['pending','enabled','rejected'] && d.requestedAt is timestamp && d.durationMinutes is int && d.durationMinutes>=0 && d.durationMinutes<=180 &&
-        (d.reviewedAt==null || d.reviewedAt is timestamp) && shortText(d.reviewedBy,0,128) && shortText(d.reviewNote,0,1000);
-    }
-    function theoryRequestEligible(d) {
-      let key=theoryRequestKey(d);
-      return activeStage(d.uid)==d.stage && (!exists(programDoc(d.uid)) || get(programDoc(d.uid)).data.active==true) &&
-        !exists(sessionDoc(d.uid,key)) && !exists(attemptDoc(d.uid,key)) &&
-        (d.attempt==1 || (exists(programDoc(d.uid)) && retryEligible(d.uid,progressKey(d.stage)) && !get(programDoc(d.uid)).data.get('retakes',{}).keys().hasAny([progressKey(d.stage)])));
-    }
-    function theoryPendingValid(id,d) {
-      return inspector() && d.uid==request.auth.uid && d.email==request.auth.token.email && theoryRequestShape(id,d) && theoryRequestEligible(d) &&
-        d.status=='pending' && d.requestedAt==request.time && d.durationMinutes==0 && d.reviewedAt==null && d.reviewedBy=='' && d.reviewNote=='';
-    }
-    function theoryEnabledValid(d) {
-      let p=get(programDoc(d.uid)).data;
-      let key=progressKey(d.stage);
-      return d.durationMinutes>=1 && (d.attempt==1 ? p.get('enabledStages',{}).get(key,false)==true && p.timeLimits[key]==d.durationMinutes :
-        p.get('retakes',{}).get(key,{}).get('enabled',false)==true && p.retakes[key].durationMinutes==d.durationMinutes);
-    }
-    match /expalsa_calidad_solicitudes_teoria/{id} {
-      allow get: if expalsaAdmin() || (inspector() && theoryRequestOwnId(id));
-      allow list: if expalsaAdmin();
-      allow create: if theoryPendingValid(id,request.resource.data);
-      allow update: if (resource.data.status=='rejected' && theoryPendingValid(id,request.resource.data) && request.resource.data.uid==resource.data.uid &&
-        request.resource.data.stage==resource.data.stage && request.resource.data.attempt==resource.data.attempt) ||
-        (expalsaAdmin() && resource.data.status=='pending' && theoryRequestShape(id,request.resource.data) &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','durationMinutes','reviewedAt','reviewedBy','reviewNote']) &&
-         request.resource.data.reviewedAt==request.time && request.resource.data.reviewedBy==request.auth.uid &&
-         (request.resource.data.status=='rejected' ? request.resource.data.durationMinutes==0 : request.resource.data.status=='enabled' && theoryEnabledValid(request.resource.data)));
-      allow delete: if false;
-    }
-
-    match /expalsa_calidad_diario/{id} {
-      allow get,list: if expalsaAdmin();
-      allow create: if expalsaAdmin() && dailyStageOpen(request.resource.data) && request.resource.data.createdAt==request.time &&
-        (request.resource.data.keys().hasAny(['v2']) ? v2Daily(request.resource.data) : request.resource.data.keys().hasAny(['sourceId']) ? linkedDataValid(id,request.resource.data) : dailyDataValid(request.resource.data));
-      allow update: if expalsaAdmin() && dailyStageOpen(resource.data) && evaluationStage(request.resource.data)==evaluationStage(resource.data) && resource.data.keys().hasAll(['sourceId','sourceKind','sourceProfileId','sourceRevision']) &&
-        linkedDataValid(id,request.resource.data) &&
-        request.resource.data.sourceRevision>resource.data.sourceRevision &&
-        request.resource.data.uid==resource.data.uid && request.resource.data.sourceId==resource.data.sourceId &&
-        request.resource.data.sourceKind==resource.data.sourceKind && request.resource.data.sourceProfileId==resource.data.sourceProfileId &&
-        request.resource.data.createdAt==resource.data.createdAt && request.resource.data.createdBy==resource.data.createdBy;
-      allow delete: if false;
-    }
-    function actionContinuationValid(d) {
-      return !d.keys().hasAny(['continuationOf']) || actionParentValid(d,get(/databases/$(database)/documents/expalsa_calidad_acompanamientos/$(d.continuationOf)).data);
-    }
-    function actionParentValid(d,p) {
-      return p.uid==d.uid && p.originId==d.originId && p.criterion==d.criterion && evaluationStage(p)<evaluationStage(d);
-    }
-    function actionKeys(d) {
-      return d.keys().hasOnly(['uid','originId','criterion','goal','method','responsible','dueDate','status','createdAt','createdBy',
-        'executedDate','executionEvidence','executedAt','executedBy','verificationId','verificationEvidence','verifiedDate','verifiedAt','verifiedBy','closeIncident','disposition','photoIds','evaluationStage','continuationOf']) && photoIdsValid(d.get('photoIds',[]));
-    }
-    function newActionValid(d) {
-      let origin=get(dailyDoc(d.originId)).data;
-      return actionKeys(d) && d.keys().hasOnly(['uid','originId','criterion','goal','method','responsible','dueDate','status','createdAt','createdBy','photoIds','evaluationStage','continuationOf']) &&
-        d.uid==origin.uid && origin.get('voided',false)!=true && activeTarget(d.uid) && d.criterion in ['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10'] && origin.ratings[d.criterion]>=0 &&
-        shortText(d.goal,12,2000) && d.method in ['Acompañamiento en puesto','Demostración técnica','Práctica supervisada','Refuerzo de conocimientos','Análisis de casos'] &&
-        shortText(d.responsible,1,160) && calendarKey(d.dueDate) && d.dueDate>=origin.date && d.status=='planned' &&
-        d.createdAt==request.time && d.createdBy==request.auth.uid;
-    }
-    function actionExecuted(d,a) {
-      return a.status=='planned' && d.status=='executed' &&
-        d.diff(a).affectedKeys().hasOnly(['status','executedDate','executionEvidence','executedAt','executedBy','photoIds']) &&
-        calendarKey(d.executedDate) && d.executedDate>=get(dailyDoc(a.originId)).data.date && shortText(d.executionEvidence,20,2000) &&
-        d.executedAt==request.time && d.executedBy==request.auth.uid;
-    }
-    function fieldProofInvalid(a) {
-      let v=get(dailyDoc(a.verificationId)).data;
-      return v.keys().hasAny(['sourceId']) && (v.get('voided',false)==true || v.ratings[a.criterion]<3 || v.autonomy[a.criterion]!=true || v.critical==true || v.date<a.executedDate);
-    }
-    function actionEffective(d,a) {
-      let v=get(dailyDoc(d.verificationId)).data;
-      return (a.status=='executed' || (a.status=='effective' && fieldProofInvalid(a))) && d.status=='effective' &&
-        d.diff(a).affectedKeys().hasOnly(['status','verificationId','verificationEvidence','verifiedDate','verifiedAt','verifiedBy','closeIncident','disposition','photoIds','evaluationStage','continuationOf']) &&
-        d.verificationId!=a.originId && v.uid==a.uid && v.date>=a.executedDate && v.createdAt>=a.executedAt &&
-        v.get('voided',false)!=true && v.ratings[a.criterion]>=3 && v.autonomy[a.criterion]==true && v.critical==false &&
-        shortText(d.verificationEvidence,20,2000) && calendarKey(d.verifiedDate) && d.verifiedDate>=v.date &&
-        d.verifiedAt==request.time && d.verifiedBy==request.auth.uid && d.closeIncident is bool &&
-        shortText(d.disposition,d.closeIncident?20:0,2000) && (!d.closeIncident || get(dailyDoc(a.originId)).data.critical==true);
-    }
-    match /expalsa_calidad_acompanamientos/{id} {
-      allow get,list: if expalsaAdmin();
-      allow create: if expalsaAdmin() && dailyStageOpen(request.resource.data) && actionContinuationValid(request.resource.data) && newActionValid(request.resource.data);
-      allow update: if expalsaAdmin() && dailyStageOpen(resource.data) && evaluationStage(request.resource.data)==evaluationStage(resource.data) && request.resource.data.get('continuationOf','')==resource.data.get('continuationOf','') && actionKeys(request.resource.data) &&
-        (actionExecuted(request.resource.data,resource.data) || actionEffective(request.resource.data,resource.data));
-      allow delete: if false;
-    }
-    function manualStageFlags(uid,d,oldFlags) {
-      let f=d.get('enabledStages',{});
-      return d.get('mode','legacy')=='legacy' ? !d.keys().hasAny(['enabledStages']) :
-        (d.mode=='stages' && f is map && f.keys().hasOnly(['1','2','3']) && f.keys().hasAll(['1','2','3']) &&
-         f['1'] is bool && f['2'] is bool && f['3'] is bool &&
-         (!f['2'] || oldFlags.get('2',false)==true || previousClosed(d,2)) &&
-         (!f['3'] || oldFlags.get('3',false)==true || previousClosed(d,3)));
-    }
-    function releaseUnchanged(uid,stage,d) {
-      return d.get('enabledStages',{}).get(stage,false)==resource.data.get('enabledStages',{}).get(stage,false) || !resource.data.keys().hasAny(['enabledStages']) || !exists(sessionDoc(uid,stage));
-    }
-
-    function retryEligible(uid,stage) {
-      let a=get(attemptDoc(uid,stage)).data;
-      let automatic=exists(automaticResultDoc(uid,stage));
-      let grade=automatic?get(automaticResultDoc(uid,stage)).data:{'correctCount':0,'total':1};
-      let score=automatic?(grade.correctCount * 100.0 / grade.total):a.get('score',-1);
-      return a.status in ['submitted','graded'] && (automatic || a.status=='graded') && score>=40 && score<60;
-    }
-    function retakeGrantValid(uid,stage,grants,old) {
-      let g=grants.get(stage,{});
-      return g==old.get(stage,{}) ||
-        (!old.keys().hasAny([stage]) && g is map && g.keys().hasOnly(['enabled','durationMinutes','version','authorizedAt','authorizedBy']) &&
-         g.keys().hasAll(['enabled','durationMinutes','version','authorizedAt','authorizedBy']) && g.enabled==true && limitValid(g.durationMinutes) &&
-         g.authorizedAt==request.time && g.authorizedBy==request.auth.uid && g.version==assignedVersion(uid,stage+'_2',get(evaluationConfig()).data.versions[stage]) &&
-         get(evaluationConfig()).data.schema==3 && activeStage(uid)==stageNumber(stage) && retryEligible(uid,stage) &&
-         !exists(sessionDoc(uid,stage+'_2')) && !exists(attemptDoc(uid,stage+'_2')) && !exists(resultDoc(uid,stage+'_2')));
-    }
-    function retakesValid(uid,d,old) {
-      let grants=d.get('retakes',{});
-      return grants is map && grants.keys().hasOnly(['1','2','3']) && grants.keys().hasAll(old.keys()) &&
-        retakeGrantValid(uid,'1',grants,old) && retakeGrantValid(uid,'2',grants,old) && retakeGrantValid(uid,'3',grants,old);
-    }
-    function dynamicBankReadable(uid,stage,version) {
+        dailyPoint(levels.C6,proof.C6) && dailyPoint(levels.C7,proof.C7) && dailyPoint(levels.C8,proof.C8) && dailyPoint(levels.C9,proof.C9) && dailyPoint(levels.C10,proof.C10…8310 tokens truncated…  function dynamicBankReadable(uid,stage,version) {
       return exists(attemptDoc(uid,stage)) && get(attemptDoc(uid,stage)).data.status=='in_progress' &&
         get(attemptDoc(uid,stage)).data.get('bankSchema',1) in [2,3] && get(attemptDoc(uid,stage)).data.version==version &&
         sessionOpen(uid,stage) && stageDue(uid,stage);
@@ -1413,6 +1151,11 @@ match /empaque_ejercicio_reportes/{reporteId} {
     match /destinos/{id} {
       allow get, list: if calidadPageUser();
       allow create, update: if calidadPageUser() && calidadPageAdmin() && validCalidadDestination(request.resource.data);
+      allow delete: if calidadPageUser() && calidadPageAdmin();
+    }
+    match /clientes_calidad/{clientId} {
+      allow get, list: if calidadPageUser();
+      allow create, update: if calidadPageUser() && calidadPageAdmin() && validCalidadClient(request.resource.data);
       allow delete: if calidadPageUser() && calidadPageAdmin();
     }
 
