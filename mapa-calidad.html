@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Calidad y sabor por destino · EXPALSA</title>
+<meta name="theme-color" content="#0f2a43">
+<link rel="icon" type="image/svg+xml" href="favicon-calidad.svg">
+<title>Sistema de consulta de ficha técnica interna · EXPALSA</title>
 <style>
 :root{--ocean:#cfe2f1;--bar:#0f2a43;--panel:#fff;--text:#13263a;--muted:#5b6b7b;--line:#d3dde7;--out:#dde2e7;--stroke:#fff;
 --eu:#8fb4d9;--as:#e0bd8b;--af:#e6cb78;--na:#a4cf94;--sa:#dba0a0;--oc:#b7a3d9;--ce:#7fcfc4;
@@ -18,12 +20,14 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 #authgate{min-height:100%;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:var(--ocean)}
 #authgate .gatebox{width:min(420px,100%);padding:24px;box-sizing:border-box;border-radius:16px;background:var(--panel);color:var(--text);box-shadow:0 12px 40px #0002}
 #authgate h1{font-size:22px;margin:0 0 8px}#authgate p{color:var(--muted)}
+#authgate .gate-logo{display:block;width:112px;height:112px;object-fit:contain;margin:0 auto 14px;border-radius:50%;background:#fff}
 #authgate label{display:block;margin:10px 0 4px;font-size:13px;color:var(--muted)}
 #authgate input{font:inherit;width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
 #authgate button{margin-top:14px;background:#1b6fb5;color:white;border:0;border-radius:8px;padding:9px 14px}
 #gateMessage{min-height:22px;font-size:13px}
 #bar{background:var(--bar);color:#fff;display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:48px;flex:none;z-index:5}
-#bar b{font-size:13px;letter-spacing:.04em;opacity:.8;white-space:nowrap}
+.brand{display:flex;align-items:center;gap:8px;min-width:0;max-width:260px;color:#fff;font-size:12px;line-height:1.2;font-weight:700}
+.brand img{width:36px;height:36px;object-fit:contain;border-radius:50%;background:#fff;flex:none}
 .filters{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
 .filters input{box-sizing:border-box;width:clamp(105px,11vw,180px);min-width:0;padding:7px 10px;border:1px solid #ffffff35;border-radius:8px;background:#ffffff18;color:#fff;font:inherit;font-size:13px}
 .filters input::placeholder{color:#ffffffb8}
@@ -106,7 +110,8 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:1
 #loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);z-index:7;background:var(--ocean)}
 @media (max-width:760px){
 #bar{flex-wrap:wrap}
-#bar b{display:none}
+#bar .brand{max-width:none;flex:1 0 100%;font-size:12px}
+#bar .brand img{width:32px;height:32px}
 .filters{flex:1 1 100%;order:3;margin-left:0;gap:5px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 .client-search-wrap{width:100%;min-width:0}
 .filters input{width:100%;padding:6px 7px;font-size:12px}
@@ -144,9 +149,9 @@ text.cl{font-weight:800;letter-spacing:.08em}text.cn{text-anchor:start}
 </style>
 </head>
 <body>
-<section id="authgate"><div class="gatebox"><h1>Acceso a calidad y sabor</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. Los usuarios registrados necesitan autorización para cada dispositivo; la cuenta administradora entra directamente.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
+<section id="authgate"><div class="gatebox"><img class="gate-logo" src="logo-inspectores-calidad.jpg" alt="Logo de inspectores de control de calidad EXPALSA"><h1>Sistema de consulta de ficha técnica interna</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. Los usuarios registrados necesitan autorización para cada dispositivo; la cuenta administradora entra directamente.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
 <div id="app">
-<header id="bar"><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><div class="filters"><input id="countryFilter" type="search" list="countryOptions" placeholder="Buscar país" aria-label="Buscar país"><datalist id="countryOptions"></datalist><input id="cityFilter" type="search" list="cityOptions" placeholder="Buscar ciudad" aria-label="Buscar ciudad"><datalist id="cityOptions"></datalist><div class="client-search-wrap"><input id="clientFilter" type="search" placeholder="Buscar cliente/importador" aria-label="Buscar cliente o importador" autocomplete="off"><div id="clientResults" role="listbox" aria-label="Coincidencias de clientes e importadores"></div></div></div><b>EXPALSA · CALIDAD Y SABOR</b><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
+<header id="bar"><div class="brand"><img src="logo-inspectores-calidad.jpg" alt=""><span>Sistema de consulta de ficha técnica interna</span></div><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><div class="filters"><input id="countryFilter" type="search" list="countryOptions" placeholder="Buscar país" aria-label="Buscar país"><datalist id="countryOptions"></datalist><input id="cityFilter" type="search" list="cityOptions" placeholder="Buscar ciudad" aria-label="Buscar ciudad"><datalist id="cityOptions"></datalist><div class="client-search-wrap"><input id="clientFilter" type="search" placeholder="Buscar cliente/importador" aria-label="Buscar cliente o importador" autocomplete="off"><div id="clientResults" role="listbox" aria-label="Coincidencias de clientes e importadores"></div></div></div><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
 <main id="stage">
 <svg id="svg"><g id="map"></g></svg>
 <aside id="side" class="pan"></aside>
