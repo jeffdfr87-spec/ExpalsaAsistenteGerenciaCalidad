@@ -6,10 +6,10 @@
 // continent, latitude and longitude fields. Each record is admin managed.
 // expalsa_calidad_dispositivos/{uid}/equipos/{deviceId}: server-managed
 // device identity, public key and active/pending/revoked status.
-// Access for this page also requires an active expalsa_calidad_accesos/{uid}
-// record or the configured administrator identity, plus the matching device
-// ID in the Firebase Auth token. Device keys and status are managed by
-// trusted Cloud Functions; clients cannot read or write device records.
+// Access for this page requires the configured administrator identity, or
+// an active expalsa_calidad_accesos/{uid} record and a matching active device
+// ID in the Firebase Auth token. The administrator does not require device
+// approval. Device keys and status are server-managed by trusted functions.
 // ===============================================================
 rules_version = '2';
 service cloud.firestore {
@@ -34,10 +34,11 @@ service cloud.firestore {
       return /databases/$(database)/documents/expalsa_calidad_dispositivos/$(uid)/equipos/$(request.auth.token.calidadDeviceId);
     }
     function calidadPageUser() {
-      return signedIn() && request.auth.token.calidadDeviceId is string &&
-        exists(calidadDevicePath(request.auth.uid)) &&
-        get(calidadDevicePath(request.auth.uid)).data.status == 'active' &&
-        (expalsaAdmin() || inspector());
+      return expalsaAdmin() ||
+        (signedIn() && request.auth.token.calidadDeviceId is string &&
+         exists(calidadDevicePath(request.auth.uid)) &&
+         get(calidadDevicePath(request.auth.uid)).data.status == 'active' &&
+         inspector());
     }
     function validCalidadGrade(d) {
       return d.keys().hasOnly(['l','r','lo','hi','q','t','s','m','c']) &&
