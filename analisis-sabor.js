@@ -1,7 +1,7 @@
 import {createProgress} from './analisis-sabor-progreso.js?v=20261106-selectors-1';
 import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,fechaRecepcion,indexarComparaciones,compararContramuestra,saboresContramuestra} from './sabor-modelo.js?v=20261106-selectors-1';
 import {perfilHtml,editorPerfil,leerPerfil} from './sabor-ui.js?v=20261106-selectors-1';
-import {createFlavorMedia} from './analisis-sabor-media.js?v=20261106-selectors-1';
+import {createFlavorMedia} from './analisis-sabor-media.js?v=20261107-photo-edit-1';
 import {downloadFlavorResults} from './analisis-sabor-pdf.js?v=20261106-selectors-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserSessionPersistence} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
@@ -153,8 +153,10 @@ async function editSample(id){
   '<h3>Resultados de inspectores</h3><div class="table-wrap"><table class="sample-edit-table"><thead><tr><th>Inspector</th><th>Contramuestra</th><th>Observaciones</th></tr></thead><tbody>'+draft.inspectors.map(p=>{
    const vote=draft.evaluations.find(v=>v.inspectorUid===p.uid);
    return '<tr data-edit-uid="'+esc(p.uid)+'"><td>'+esc(p.name||p.email||p.uid)+'<label class="check"><input type="checkbox" data-edit-result> '+(vote?'Editar resultado':'Registrar resultado')+'</label></td><td><fieldset disabled>'+editorPerfil(vote?.counterFlavors||[{sabor:'Normal',porcentaje:''}])+'</fieldset></td><td><textarea aria-label="Observaciones de '+esc(p.name||p.email||p.uid)+'" maxlength="2000" disabled>'+esc(vote?.observations||'')+'</textarea></td></tr>';
-  }).join('')+'</tbody></table></div>',
+  }).join('')+'</tbody></table></div><section class="sample-photo-editor"><h3>Fotografías</h3><p class="hint">Las fotos se guardan al reemplazarlas y conservan su fecha de carga original.</p><div id="sample-edit-photos" aria-live="polite"><p class="hint">Cargando fotografías…</p></div></section>',
   'Guardar y cerrar','edit-sample-form');
+ try{await media.openPhotoEditor({sessionId:state.session.id,sampleId:id,inspectors:draft.inspectors});}
+ catch(error){const host=document.querySelector('#sample-edit-photos');if(host)host.textContent='No se pudieron cargar las fotografías. Vuelve a abrir Editar muestra.';notify(message(error));}
 }
 
 function csvCell(value){let text=String(value??'');if(/^[\s]*[=+@-]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';}

@@ -44,7 +44,38 @@ async function photoAction({db,user,sessionRef,session,data,id,canManage,assigne
   const snap=await query.limit(PHOTO_PAGE_SIZE+1).get(),docs=snap.docs.slice(0,PHOTO_PAGE_SIZE);
   return {photos:docs.filter(d=>d.data().kind!=='profile'&&!d.data().deleted).map(d=>({id:d.id,...d.data()})),cursor:snap.size>PHOTO_PAGE_SIZE?docs.at(-1).id:null};
  }
- if(data.action==='replacePhoto'){if(!canManage(user)||data.kind!=='sample')throw new HttpsError('permission-denied','Acción exclusiva de responsables.');const old=photos.doc(id(data.oldPhotoId)),fresh=photos.doc(id(data.newPhotoId));if(old.id===fresh.id)throw new HttpsError('invalid-argument','Selecciona otra fotografía.');return db.runTransaction(async tx=>{const [a,b]=await Promise.all([tx.get(old),tx.get(fresh)]);if(!a.exists||!b.exists||b.data().deleted)throw new HttpsError('not-found','La fotografía no está disponible.');tx.update(old,user.admin?{deleted:true,replacedBy:fresh.id,deletedAtMs:Date.now(),deletedBy:user.uid}:{replacedBy:fresh.id,replacedAtMs:Date.now(),replacedByUser:user.uid});return {saved:true,previousRetained:user.admin!==true};});}
+ if(data.action==='editPhoto'){
+  if(user.admin!==true)throw new HttpsError('permission-denied','Solo el administrador puede editar fotografías.');
+  const photoId=id(data.photoId);if(photoId==='profile')throw new HttpsError('invalid-argument','No puedes editar el perfil desde la muestra.');
+  const photo=imageData(data.photo?.dataUrl),origin=data.photo?.origin;
+  if(!['camera','gallery'].includes(origin))throw new HttpsError('invalid-argument','Origen de fotografía no válido.');
+  const ref=photos.doc(photoId),digest=createHash('sha256').update(photo.dataUrl).digest('hex');
+  return db.runTransaction(async tx=>{
+   const root=await tx.get(sessionRef),sample=await tx.get(sampleRef),old=await tx.get(ref);
+   if(!root.exists||root.data().deleted||!sample.exists||sample.data().deleted||!old.exists||old.data().deleted)throw new HttpsError('not-found','La fotografía ya no está disponible.');
+   if(old.data().kind==='profile')throw new HttpsError('invalid-argument','No puedes editar el perfil desde la muestra.');
+   if((old.data().digest||'')!==data.expectedDigest||(old.data().editedAtMs||0)!==data.expectedEditedAtMs)throw new HttpsError('aborted','La fotografía cambió. Actualiza la muestra antes de volver a editarla.');
+   const now=Date.now();
+   tx.create(ref.collection('edits').doc(),{previousPhoto:old.data(),editedAtMs:now,editedBy:user.uid});
+   // Upload and initial capture metadata belong to the first photo; corrections have their own audit fields.
+   tx.update(ref,{...photo,digest,editedOrigin:origin,editedAtMs:now,editedBy:user.uid,editedByEmail:user.email});
+   return {saved:true,id:ref.id};
+  });
+ }
+ if(data.action==='replacePhoto'){
+  if(user.admin!==true||data.kind!=='sample')throw new HttpsError('permission-denied','Solo el administrador puede reemplazar fotografías.');
+  const old=photos.doc(id(data.oldPhotoId)),fresh=photos.doc(id(data.newPhotoId));
+  if(old.id===fresh.id)throw new HttpsError('invalid-argument','Selecciona otra fotografía.');
+  return db.runTransaction(async tx=>{
+   const [root,sample,a,b]=await Promise.all([tx.get(sessionRef),tx.get(sampleRef),tx.get(old),tx.get(fresh)]);
+   if(!root.exists||root.data().deleted||!sample.exists||sample.data().deleted||!a.exists||!b.exists||b.data().deleted)throw new HttpsError('not-found','La fotografía no está disponible.');
+   if(a.data().deleted){if(a.data().replacedBy===fresh.id)return {saved:true};throw new HttpsError('not-found','La fotografía ya fue reemplazada.');}
+   const now=Date.now(),original=a.data(),metadata=Object.fromEntries(['uploadedAtMs','capturedAtMs','uploadedBy','uploadedByEmail'].filter(k=>original[k]!==undefined).map(k=>[k,original[k]]));
+   tx.update(fresh,{...metadata,editedAtMs:now,editedBy:user.uid,editedByEmail:user.email});
+   tx.update(old,{deleted:true,replacedBy:fresh.id,deletedAtMs:now,deletedBy:user.uid});
+   return {saved:true};
+  });
+ }
  if(data.action==='deletePhoto'){if(!user.admin)throw new HttpsError('permission-denied','Solo el administrador puede eliminar fotografías.');const ref=photos.doc(id(data.photoId));if(ref.id==='profile')throw new HttpsError('invalid-argument','No puedes eliminar el perfil.');await ref.update({deleted:true,deletedAtMs:Date.now(),deletedBy:user.uid});return {deleted:true};}
  if(!canManage(user)&&data.kind==='sample')throw new HttpsError('permission-denied','Solo los responsables pueden agregar fotos de muestras.');
  if(data.kind==='evidence'&&data.photo?.origin!=='camera')throw new HttpsError('invalid-argument','La evidencia del análisis debe capturarse con la cámara.');

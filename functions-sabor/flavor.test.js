@@ -236,6 +236,46 @@ test('fotos reemplazadas y eliminadas desaparecen de consultas; managers no pued
  await call(adminRequest({action:'deletePhoto',kind:'sample',photoId:'b'}));assert.equal((await call(adminRequest({action:'listPhotos',kind:'sample'}))).photos.length,0);
 });
 
+test('editar fotos de muestra y evidencias conserva carga inicial, captura, autor y estado cerrado',async()=>{
+ const bytes=Buffer.from(JPEG.slice(23),'base64'),replacement='data:image/jpeg;base64,'+Buffer.concat([bytes.subarray(0,2),Buffer.from([255,254,0,5,65,66,67]),bytes.subarray(2)]).toString('base64');
+ for(const kind of ['sample','evidence']){
+  const db=database(labSeed()),call=handler(db),base='expalsa_sabor_sesiones/s1';await call(adminRequest());
+  await call(adminRequest({action:'uploadPhoto',kind,photo:{id:'photo',dataUrl:JPEG,origin:kind==='evidence'?'camera':'gallery'}}));
+  const path=base+'/samples/m1/'+(kind==='sample'?'photos':'votes/i1/photos')+'/photo',original={...db.records.get(path),uploadedAtMs:1000,capturedAtMs:900,uploadedBy:'original',uploadedByEmail:'original@example.test'};
+  db.records.set(path,original);db.records.get(base).status='closed';
+  await call(adminRequest({action:'editPhoto',kind,photoId:'photo',expectedDigest:original.digest,expectedEditedAtMs:0,photo:{dataUrl:replacement,origin:'gallery'}}));
+  const updated=db.records.get(path);assert.equal(updated.dataUrl,replacement);assert.equal(updated.uploadedAtMs,1000);assert.equal(updated.capturedAtMs,900);assert.equal(updated.uploadedBy,'original');assert.equal(updated.uploadedByEmail,'original@example.test');assert.equal(updated.editedBy,'admin');assert.ok(updated.editedAtMs>1000);assert.equal(db.records.get(base).status,'closed');
+  assert.deepEqual(db.records.get(path+'/edits/new-id').previousPhoto,original);
+  const writes=db.writes.length;
+  await assert.rejects(call(adminRequest({action:'editPhoto',kind,photoId:'photo',expectedDigest:original.digest,expectedEditedAtMs:0,photo:{dataUrl:JPEG,origin:'gallery'}})),{code:'aborted'});assert.equal(db.writes.length,writes);
+ }
+});
+
+test('edición de fotos rechaza inspectores, lectores, perfiles, imágenes inválidas y fotos eliminadas',async()=>{
+ const db=database(labSeed()),call=handler(db);
+ await call(adminRequest({action:'uploadPhoto',kind:'sample',photo:{id:'photo',dataUrl:JPEG,origin:'gallery'}}));
+ const change={action:'editPhoto',kind:'sample',photoId:'photo',expectedDigest:'',expectedEditedAtMs:0,photo:{dataUrl:JPEG,origin:'gallery'}};
+ const before=db.writes.length;
+ await assert.rejects(call(request(change)),{code:'permission-denied'});
+ for(const who of ['fabio','karina']){
+  db.records.set('expalsa_calidad_accesos/'+who,{active:true,email:who+'@expalsaevaluations.com'});
+  await assert.rejects(call({auth:{uid:who,token:{email:who+'@expalsaevaluations.com'}},data:{...change,sessionId:'s1',sampleId:'m1'}}),{code:'permission-denied'});
+ }
+ await assert.rejects(call(adminRequest({...change,kind:'evidence',photoId:'profile'})),{code:'invalid-argument'});
+ await assert.rejects(call(adminRequest({...change,photo:{dataUrl:'invalid',origin:'gallery'}})),{code:'invalid-argument'});assert.equal(db.writes.length,before);
+ db.records.get('expalsa_sabor_sesiones/s1/samples/m1/photos/photo').deleted=true;
+ await assert.rejects(call(adminRequest(change)),{code:'not-found'});assert.equal(db.writes.length,before);
+});
+
+test('reemplazos antiguos encadenados mantienen la fecha de la primera carga',async()=>{
+ const db=database(labSeed()),call=handler(db),base='expalsa_sabor_sesiones/s1/samples/m1/photos/';
+ for(const id of ['a','b','c'])await call(adminRequest({action:'uploadPhoto',kind:'sample',photo:{id,dataUrl:JPEG,origin:'gallery'}}));
+ Object.assign(db.records.get(base+'a'),{uploadedAtMs:1000,capturedAtMs:900,uploadedBy:'original'});
+ await call(adminRequest({action:'replacePhoto',kind:'sample',oldPhotoId:'a',newPhotoId:'b'}));
+ await call(adminRequest({action:'replacePhoto',kind:'sample',oldPhotoId:'b',newPhotoId:'c'}));
+ assert.equal(db.records.get(base+'c').uploadedAtMs,1000);assert.equal(db.records.get(base+'c').capturedAtMs,900);assert.equal(db.records.get(base+'c').uploadedBy,'original');assert.equal(db.records.get(base+'c').editedBy,'admin');
+});
+
 test('Fabio y Karina solo consultan resultados y PDF; todas las escrituras se rechazan sin cambiar datos',async()=>{
  for(const uid of ['fabio','karina']){
   const initial=labSeed();initial['expalsa_calidad_accesos/'+uid]={active:true,email:uid+'@expalsaevaluations.com'};

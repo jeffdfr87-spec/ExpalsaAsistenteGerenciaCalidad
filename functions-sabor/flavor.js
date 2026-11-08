@@ -72,7 +72,7 @@ async function inspector(db,uid){
 }
 function handler(db){return async request=>{
  const data=request.data||{},action=data.action;
- if(action==='serviceInfo')return {version:SERVICE_VERSION,sampleEditing:true};
+ if(action==='serviceInfo')return {version:SERVICE_VERSION,sampleEditing:true,photoEditing:true};
  const user=await identity(db,request);
  if(user.viewer&&!['bootstrap','listSessions','detail','listMembers','listVotes','inspectorPhoto','listPhotos','authorizeComparisonReport'].includes(action))fail('permission-denied','Tu cuenta solo permite consultar y descargar PDF.');
  if(action==='bootstrap')return {admin:user.admin,manager:canManage(user),viewer:user.viewer===true,canReadResults:canReadAll(user),canDelete:user.admin===true,canViewComparisons:true,version:SERVICE_VERSION};
@@ -107,13 +107,13 @@ function handler(db){return async request=>{
    for(const person of inspectors){tx.create(ref.collection('inspectors').doc(person.uid),{...person,addedBy:user.uid,addedAtMs:now});tx.set(assignment(db,person.uid,ref.id),{sessionId:ref.id});}
   });return {id:ref.id};
  }
- if(!['prepareSampleEdit','saveSampleEdit','deleteSample','startSample','finishSample','authorizeComparisonReport','updateSample','removeInspector','deletePhoto','replacePhoto','detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
+ if(!['editPhoto','prepareSampleEdit','saveSampleEdit','deleteSample','startSample','finishSample','authorizeComparisonReport','updateSample','removeInspector','deletePhoto','replacePhoto','detail','listMembers','listVotes','addInspectors','deleteSession','restoreSession','addSample','openSession','closeSession','evaluate','recordEvaluation','inspectorPhoto','uploadPhoto','listPhotos'].includes(action))fail('invalid-argument','Acción no válida.');
  const sessionRef=sessions.doc(id(data.sessionId));
  if(['prepareSampleEdit','saveSampleEdit'].includes(action))return sampleEdit({db,ref:sessionRef,user,data,id,sampleData,resultData,uniqueLetter});
  if(['startSample','finishSample'].includes(action))return workflowAction(db,sessionRef,user,data,id);
  if(action==='authorizeComparisonReport'){requireReader(user);const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());return {allowed:true};}
  if(action==='updateSample')requireManager(user);
- if(['inspectorPhoto','uploadPhoto','listPhotos','deletePhoto','replacePhoto'].includes(action)){const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());await checkParticipant(sessionRef,snap.data(),user);return photoAction({db,user,sessionRef,session:snap.data(),data,id,canManage:canReadAll,assignedInspector});}
+ if(['inspectorPhoto','uploadPhoto','listPhotos','deletePhoto','replacePhoto','editPhoto'].includes(action)){const snap=await sessionRef.get();if(!snap.exists)fail('not-found','La sesión no existe.');live(snap.data());await checkParticipant(sessionRef,snap.data(),user);return photoAction({db,user,sessionRef,session:snap.data(),data,id,canManage:canReadAll,assignedInspector});}
  if(['detail','listMembers','listVotes'].includes(action)){
   const session=await sessionRef.get();if(!session.exists)fail('not-found','La sesión no existe.');live(session.data());await checkParticipant(sessionRef,session.data(),user);
   if(action==='listMembers')return membersPage(sessionRef,session.data(),user,data.cursor);
