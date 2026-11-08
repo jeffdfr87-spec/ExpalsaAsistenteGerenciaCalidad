@@ -9,10 +9,11 @@
 // fichas_tecnicas_calidad/{id}: extracted product criteria/text and PDF metadata.
 // expalsa_calidad_dispositivos/{uid}/equipos/{deviceId}: server-managed
 // device identity, public key and active/pending/revoked status.
-// Access for this page requires the configured administrator identity, or
-// an active expalsa_calidad_accesos/{uid} record and a matching active device
-// ID in the Firebase Auth token. The administrator does not require device
-// approval. Device keys and status are server-managed by trusted functions.
+// Access for this page requires the configured administrator identity, or an
+// active expalsa_calidad_accesos/{uid} record and a matching active device ID
+// in the Firebase Auth token. Fabio and Karina are trusted Calidad admins;
+// they still require an active evaluations access record but do not require
+// device approval. Device keys and status are server-managed by trusted functions.
 // ===============================================================
 rules_version = '2';
 service cloud.firestore {
@@ -37,11 +38,15 @@ service cloud.firestore {
       return /databases/$(database)/documents/expalsa_calidad_dispositivos/$(uid)/equipos/$(request.auth.token.calidadDeviceId);
     }
     function calidadPageAdmin() {
-      return expalsaAdmin() || (signedIn() && request.auth.token.email is string &&
-        request.auth.token.email in ['fabio@expalsaevaluations.com','karina@expalsaevaluations.com']);
+      return expalsaAdmin() || calidadTrustedAdmin();
+    }
+    function calidadTrustedAdmin() {
+      return signedIn() && request.auth.token.email is string &&
+        request.auth.token.email in ['fabio@expalsaevaluations.com','karina@expalsaevaluations.com'] &&
+        inspector();
     }
     function calidadPageUser() {
-      return expalsaAdmin() ||
+      return expalsaAdmin() || calidadTrustedAdmin() ||
         (signedIn() && request.auth.token.calidadDeviceId is string &&
          exists(calidadDevicePath(request.auth.uid)) &&
          get(calidadDevicePath(request.auth.uid)).data.status == 'active' &&
