@@ -2,7 +2,7 @@ import {createProgress} from './analisis-sabor-progreso.js?v=20261106-selectors-
 import {perfilMateriaPrima,textoPerfil,mostrarFechaRecepcion,fechaRecepcion,indexarComparaciones,compararContramuestra,saboresContramuestra} from './sabor-modelo.js?v=20261106-selectors-1';
 import {perfilHtml,editorPerfil,leerPerfil} from './sabor-ui.js?v=20261106-selectors-1';
 import {createFlavorMedia} from './analisis-sabor-media.js?v=20261107-photo-delete-1';
-import {downloadFlavorResults} from './analisis-sabor-pdf.js?v=20261106-selectors-1';
+import {downloadFlavorResults} from './analisis-sabor-pdf.js?v=20261107-pdf-profiles-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserSessionPersistence} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-functions.js';

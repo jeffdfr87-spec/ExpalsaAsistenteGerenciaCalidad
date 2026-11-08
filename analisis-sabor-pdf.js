@@ -9,6 +9,8 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
  if(!sample||!session||!Array.isArray(inspectors)||!logoData)throw Error('No se pudo preparar el reporte de la muestra.');
  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
  const votes=new Map(evaluations.filter(v=>v.sampleId===sample.id).map(v=>[v.inspectorUid,v]));
+ const portraits=new Map(inspectorPhotos.filter(p=>p.profile?.dataUrl).map(p=>[p.uid,p.profile]));
+ const portraitSize=22,portraitPadding=3;
  const reception=ordenarSabores(perfilMateriaPrima(sample)||[]);
  const stats=indexarComparaciones([sample],evaluations,inspectors).get(sample.id);
  const rows=inspectors.map(person=>{
@@ -55,12 +57,23 @@ export function createFlavorReport({jsPDF,autoTable,session,sample,inspectors,ev
   rowPageBreak:'avoid',showHead:'everyPage',
   didParseCell:cell=>{
    if(cell.section==='body'&&cell.column.index===1){const value=cell.cell.raw;cell.cell.styles.fontStyle='bold';cell.cell.styles.textColor=value==='Conforme'?[19,127,99]:value==='Discrepancia'?[172,60,80]:COLORS.muted;}
+   if(cell.section==='body'&&cell.column.index===2&&portraits.has(inspectors[cell.row.index]?.uid)){
+    cell.cell.styles.cellPadding={top:3,right:portraitSize+portraitPadding*2,bottom:3,left:3};
+    cell.cell.styles.minCellHeight=portraitSize+portraitPadding*2;
+   }
+  },
+  didDrawCell:cell=>{
+   if(cell.section!=='body'||cell.column.index!==2)return;
+   const person=inspectors[cell.row.index],portrait=portraits.get(person?.uid);if(!portrait)return;
+   let properties;try{properties=pdf.getImageProperties(portrait.dataUrl);}catch{throw Error('No se pudo incorporar la foto de perfil de un inspector al PDF. Vuelve a cargarla e intenta nuevamente.');}
+   const scale=Math.min(portraitSize/properties.width,portraitSize/properties.height),w=properties.width*scale,h=properties.height*scale;
+   const x=cell.cell.x+cell.cell.width-portraitPadding-portraitSize+(portraitSize-w)/2,y=cell.cell.y+(cell.cell.height-h)/2;
+   pdf.addImage(portrait.dataUrl,'JPEG',x,y,w,h,`inspector-profile-${cell.row.index}`,'FAST');
   }
  });
  const gallery=[];
  for(const [index,photo] of samplePhotos.entries())gallery.push({photo,label:`Fotografía de la muestra ${index+1}`,audit:photo.uploadedAtMs?`Registrada: ${dateTime(photo.uploadedAtMs)}`:''});
  for(const person of inspectorPhotos){
-  if(person.profile?.dataUrl)gallery.push({photo:person.profile,label:`Foto de perfil - ${person.name}`,audit:''});
   for(const [index,photo] of (person.evidence||[]).entries())gallery.push({photo,label:`Evidencia del análisis ${index+1} - ${person.name}`,audit:[photo.capturedAtMs?`Tomada: ${dateTime(photo.capturedAtMs)}`:'',photo.uploadedAtMs?`Registrada: ${dateTime(photo.uploadedAtMs)}`:'',photo.uploadedByEmail?`Responsable: ${photo.uploadedByEmail}`:''].filter(Boolean).join('\n')});
  }
  if(gallery.length){
