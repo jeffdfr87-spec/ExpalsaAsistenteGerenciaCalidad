@@ -12,11 +12,11 @@ La página `mapa-calidad.html` usa el proyecto Firebase `oceantreasure-app`, el 
    ```
 
 3. Verifica que exista `expalsa_calidad_config/administrador` con el UID y correo de la cuenta administradora (`jefferson@expalsaevaluations.com`).
-4. Ingresa a la página con esa cuenta. La cuenta administradora entra directamente y no necesita autorización de dispositivo.
+4. Ingresa a la página con la cuenta administradora. También las cuentas `fabio@expalsaevaluations.com` y `karina@expalsaevaluations.com` entran directamente y pueden administrar esta página sin aprobación de dispositivo.
 5. Los demás usuarios deben tener una cuenta activa en `expalsa_calidad_accesos/{uid}`. Al iniciar sesión desde un dispositivo nuevo, quedará pendiente hasta que el administrador lo autorice desde **Admin → Autorizar dispositivos**.
 6. Publica `mapa-calidad.html` junto al resto del sitio y ábrela en una URL HTTPS.
 
-Las claves privadas de dispositivo se generan como claves no exportables y se guardan en IndexedDB del navegador. Las reglas permiten leer `grados` y `destinos` a la cuenta administradora o a usuarios registrados desde un dispositivo autorizado. Solo la cuenta administradora puede modificarlos. Las demás colecciones conservan sus reglas actuales.
+Las claves privadas de dispositivo se generan como claves no exportables y se guardan en IndexedDB del navegador. Las reglas permiten leer `grados` y `destinos` a las cuentas administradoras de esta página o a usuarios registrados desde un dispositivo autorizado. Solo esas tres cuentas administradoras pueden modificarlos y autorizar dispositivos. Las demás colecciones conservan sus reglas actuales.
 
 La carga inicial de la matriz está disponible desde el menú Admin. Revisa los permisos y los dispositivos autorizados después de la primera configuración.
 
