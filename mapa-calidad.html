@@ -25,7 +25,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 #bar{background:var(--bar);color:#fff;display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:48px;flex:none;z-index:5}
 #bar b{font-size:13px;letter-spacing:.04em;opacity:.8;white-space:nowrap}
 .filters{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
-.filters input{box-sizing:border-box;width:clamp(130px,13vw,205px);min-width:0;padding:7px 10px;border:1px solid #ffffff35;border-radius:8px;background:#ffffff18;color:#fff;font:inherit;font-size:13px}
+.filters input{box-sizing:border-box;width:clamp(105px,11vw,180px);min-width:0;padding:7px 10px;border:1px solid #ffffff35;border-radius:8px;background:#ffffff18;color:#fff;font:inherit;font-size:13px}
 .filters input::placeholder{color:#ffffffb8}
 .filters input:focus{outline:2px solid #9cc8f0;outline-offset:1px}
 button{font:inherit;cursor:pointer}
@@ -66,6 +66,10 @@ circle.ping{fill:none;stroke:var(--text);stroke-width:2;vector-effect:non-scalin
 .chip{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;color:var(--text);text-align:left;padding:5px 6px;border-radius:8px}
 .chip:hover{background:var(--line)}
 .chip em{margin-left:auto;font-style:normal;font-size:12px;color:var(--muted)}
+.client-list{display:grid;gap:6px;margin:6px 14px 8px}
+.client-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+.client-row button{background:none;border:0;color:var(--text);text-align:left;padding:0;flex:1}
+.client-row em{font-style:normal;font-size:11px;color:var(--muted)}
 .sw{width:12px;height:12px;border-radius:4px;flex:none;border:1px solid #0003}
 #leg{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 #leg div{display:flex;gap:8px;align-items:center;padding:2px 6px}
@@ -85,9 +89,10 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:1
 .ft{padding:6px 16px 14px;font-size:12px;color:var(--muted)}
 #loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);z-index:7;background:var(--ocean)}
 @media (max-width:760px){
+#bar{flex-wrap:wrap}
 #bar b{display:none}
-.filters{flex:1;margin-left:0;gap:5px}
-.filters input{width:50%;padding:6px 7px;font-size:12px}
+.filters{flex:1 1 100%;order:3;margin-left:0;gap:5px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.filters input{width:100%;padding:6px 7px;font-size:12px}
 #back{padding:6px 8px;white-space:nowrap}
 #side{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:36%}
 #card{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:52%}
@@ -107,7 +112,7 @@ text.cl{font-weight:800;letter-spacing:.08em}text.cn{text-anchor:start}
 <body>
 <section id="authgate"><div class="gatebox"><h1>Acceso a calidad y sabor</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. Los usuarios registrados necesitan autorización para cada dispositivo; la cuenta administradora entra directamente.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
 <div id="app">
-<header id="bar"><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><div class="filters"><input id="countryFilter" type="search" list="countryOptions" placeholder="Buscar país" aria-label="Buscar país"><datalist id="countryOptions"></datalist><input id="cityFilter" type="search" list="cityOptions" placeholder="Buscar ciudad" aria-label="Buscar ciudad"><datalist id="cityOptions"></datalist></div><b>EXPALSA · CALIDAD Y SABOR</b><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
+<header id="bar"><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><div class="filters"><input id="countryFilter" type="search" list="countryOptions" placeholder="Buscar país" aria-label="Buscar país"><datalist id="countryOptions"></datalist><input id="cityFilter" type="search" list="cityOptions" placeholder="Buscar ciudad" aria-label="Buscar ciudad"><datalist id="cityOptions"></datalist><input id="clientFilter" type="search" list="clientOptions" placeholder="Buscar cliente/importador" aria-label="Buscar cliente o importador"><datalist id="clientOptions"></datalist></div><b>EXPALSA · CALIDAD Y SABOR</b><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
 <main id="stage">
 <svg id="svg"><g id="map"></g></svg>
 <aside id="side" class="pan"></aside>
@@ -155,7 +160,7 @@ north:{p:function(){return d3.geoConicEqualArea().parallels([15,60]).rotate([100
 central:{p:function(){return d3.geoNaturalEarth1().rotate([75,0])},b:[-93,6,-58,28]},
 south:{p:function(){return d3.geoNaturalEarth1().rotate([60,0])},b:[-82,-56,-34,13]},
 oceania:{p:function(){return d3.geoNaturalEarth1().rotate([-150,0])},b:[110,-48,192,4]}};
-var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null},rendered=null,proj,pathG,DN=null,REGIONS=[],PLACES=[],PLACE_BY_ID={},mapDataPromise=null,mapScale=1;
+var $=function(i){return document.getElementById(i)},svg=$("svg"),mapG=$("map"),tip=$("tip"),F=[],byId={},st={v:"world",c:null,id:null,city:null,client:null},rendered=null,proj,pathG,DN=null,REGIONS=[],PLACES=[],PLACE_BY_ID={},mapDataPromise=null,mapScale=1;
 try{DN=new Intl.DisplayNames(["es"],{type:"region"})}catch(e){}
 function name(i){if(NM[i])return NM[i];try{var n=DN&&DN.of(i);if(n&&n!==i)return n}catch(e){}return byId[i]?byId[i].properties.name:i}
 function mg(r){return Object.assign({},GR[r.g],r.o||{})}
@@ -195,6 +200,7 @@ function crumbs(){var h='<button data-go="world">Mapamundi</button>';
 if(st.c){h+=' <i>›</i> '+(st.id?'<button data-go="cont">'+CN[st.c]+'</button>':'<span>'+CN[st.c]+'</span>')}
 if(st.id)h+=' <i>›</i> '+(st.city?'<button data-go="ctry">'+esc(name(st.id))+'</button>':'<span>'+esc(name(st.id))+'</span>');
 if(st.city&&getCity(st.city))h+=' <i>›</i> <span>'+esc(getCity(st.city).nombre)+'</span>';
+if(st.client&&CLIENTS[st.client])h+=' <i>›</i> <span>'+esc(CLIENTS[st.client].nombre)+'</span>';
 $("crumbs").innerHTML=h;$("back").disabled=st.v==="world"}
 function getCity(id){return CITY[id]||PLACE_BY_ID[id]||null}
 function side(){var c=st.c,p=$("side");if(st.v!=="continent"){p.style.display="none";return}
@@ -215,6 +221,7 @@ if(!e)h+='<div class="en"><b>Sin datos en la matriz.</b><p class="sb" style="fon
 else e.forEach(function(r){h+=eh(r)});
 var cl=Object.keys(CITY).filter(function(k){return CITY[k].pais===i});
 if(cl.length&&!city)h+='<div class="inh" style="margin-top:8px">Ciudades</div><div class="ab2">'+cl.map(function(k){return'<button class="btn sec" data-city="'+k+'">'+esc(CITY[k].nombre)+"</button>"}).join("")+"</div>";
+if(city){var cc=Object.keys(CLIENTS).map(function(k){return Object.assign({id:k},CLIENTS[k])}).filter(function(x){return x.ciudadId===st.city}).sort(function(a,b){return a.nombre.localeCompare(b.nombre,"es")});h+='<div class="inh" style="margin:10px 14px 4px">Clientes e importadores</div>';if(cc.length)h+='<div class="client-list">'+cc.map(function(x){return'<div class="client-row"><button data-client="'+esc(x.id)+'" aria-pressed="'+(st.client===x.id)+'">'+esc(x.nombre)+'<br><em>'+ (x.tipo==="importador"?"Importador":"Cliente")+'</em></button>'+(ADMIN?'<button class="btn sec" data-client-edit="'+esc(x.id)+'">Editar</button>':"")+'</div>'}).join("")+'</div>';else h+='<div class="sb" style="margin:4px 14px 8px">Aún no hay clientes o importadores registrados.</div>';if(ADMIN)h+='<div class="ab2"><button class="btn sec" data-client-add>+ Cliente/importador</button></div>'}
 if(ADMIN)h+='<div class="ab2"><button class="btn" data-act="edit">'+(e?"Editar parámetros":"Ingresar datos")+"</button>"+(city?(CITY[st.city]?'<button class="btn red" data-act="delcity">Eliminar ciudad</button>':""):'<button class="btn sec" data-act="addcity">+ Ciudad</button>')+"</div>";
 h+='<div class="ft">Los defectos se evalúan a partir de los mayores (cabezas anaranjadas, cabezas estropeadas y camarón mudado) y dependen del color del camarón. Matriz vigente al 29/10/2026.</div>';
 p.innerHTML=h;p.style.display="block"}
@@ -235,36 +242,39 @@ for(i=0;i<=30;i++){t=i/30;pts.push([b[0]+(hi-b[0])*t,b[1]],[b[0]+(hi-b[0])*t,b[3
 pts.map(proj).filter(Boolean).forEach(function(a){x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])});
 var k=Math.min(W*.88/(x1-x0),H*.88/(y1-y0));return "translate("+(W/2-k*(x0+x1)/2)+"px,"+(H/2-k*(y0+y1)/2)+"px) scale("+k+")"}
 function zin(c){clearTimeout(zt);mapG.style.transform=camT(c);zt=setTimeout(function(){if(st.v==="continent"&&st.c===c)fade(function(){render(c)})},1150)}
-function toWorld(){var c=st.c;st={v:"world",c:null,id:null};clearTimeout(zt);
+function toWorld(){var c=st.c;st={v:"world",c:null,id:null,city:null,client:null};clearTimeout(zt);
 if(c&&rendered==="world"){mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}
 else if(c){mapG.classList.remove("focus");render("world");var T=camT(c);mapG.style.transition="none";mapG.style.transform=T;void mapG.offsetWidth;mapG.style.transition="";mapG.style.transform="none";setTimeout(function(){$("hint").style.opacity=1},1100)}
 else fade(function(){render("world");$("hint").style.opacity=1});upd()}
-function toCont(c){var same=rendered===c;st={v:"continent",c:c,id:null};$("hint").style.opacity=0;
+function toCont(c){var same=rendered===c;st={v:"continent",c:c,id:null,city:null,client:null};$("hint").style.opacity=0;
 if(same){mapG.classList.remove("focus");mapG.style.transform="none";mapG.querySelectorAll(".ping").forEach(function(n){n.remove()});setTimeout(function(){if(st.v!=="country")mapG.querySelectorAll(".sel").forEach(function(n){n.classList.remove("sel")})},700);cities();dots(1)}else if(rendered==="world"){zin(c)}else fade(function(){render(c)});upd()}
-function toCountry(i,c){c=c||st.c;if(!c||!mem[c].has(i))c=primary[i];if(!c)return;st={v:"country",c:c,id:i,city:null};$("hint").style.opacity=0;
+function toCountry(i,c){c=c||st.c;if(!c||!mem[c].has(i))c=primary[i];if(!c)return;st={v:"country",c:c,id:i,city:null,client:null};$("hint").style.opacity=0;
 if(rendered!==c){fade(function(){render(c);zoom(i)})}else zoom(i);upd();if(!REGIONS.length){$("hint").textContent="Cargando divisiones y ciudades…";$("hint").style.opacity=1;loadMapData().then(function(){if(st.v==="country"){$("hint").textContent="Toca un continente para explorarlo";$("hint").style.opacity=0;render(rendered);zoom(st.id,1);upd()}}).catch(function() {if(st.v==="country"){$("hint").textContent="No se pudo cargar el mapa detallado.";$("hint").style.opacity=1}})}}
 function upd(){crumbs();side();card();syncFilters()}
-function syncFilters(){var co=$("countryFilter"),ci=$("cityFilter");if(!co||!ci)return;
+function syncFilters(){var co=$("countryFilter"),ci=$("cityFilter"),cl=$("clientFilter");if(!co||!ci||!cl)return;
 co.value=st.v==="country"?name(st.id):"";var selectedCity=st.city?getCity(st.city):null;ci.value=selectedCity?selectedCity.nombre:"";
+cl.value=st.client&&CLIENTS[st.client]?CLIENTS[st.client].nombre:"";
 mapG.querySelectorAll("text.cn").forEach(function(n){n.classList.toggle("city-selected",!!st.city&&n.dataset.city===st.city)});lbl(mapScale);
 $("countryOptions").innerHTML=Object.keys(primary).sort(function(a,b){return name(a).localeCompare(name(b),"es")}).map(function(i){return'<option value="'+esc(name(i))+'">'}).join("");
-$("cityOptions").innerHTML=Object.keys(CITY).map(function(i){return CITY[i]}).concat(PLACES).sort(function(a,b){return a.nombre.localeCompare(b.nombre,"es")||name(a.pais).localeCompare(name(b.pais),"es")}).map(function(c){return'<option value="'+esc(c.nombre)+' · '+esc(name(c.pais))+'">'}).join("")}
+$("cityOptions").innerHTML=Object.keys(CITY).map(function(i){return CITY[i]}).concat(PLACES).sort(function(a,b){return a.nombre.localeCompare(b.nombre,"es")||name(a.pais).localeCompare(name(b.pais),"es")}).map(function(c){return'<option value="'+esc(c.nombre)+' · '+esc(name(c.pais))+'">'}).join("");
+$("clientOptions").innerHTML=Object.keys(CLIENTS).map(function(i){return CLIENTS[i]}).sort(function(a,b){return a.nombre.localeCompare(b.nombre,"es")||a.ciudad.localeCompare(b.ciudad,"es")}).map(function(c){return'<option value="'+esc(c.nombre)+' · '+esc(c.ciudad)+' · '+esc(name(c.pais))+'">'}).join("")}
 function norm(s){return slug(String(s||""))}
 $("countryFilter").addEventListener("change",function(){var q=norm(this.value),id=Object.keys(primary).find(function(i){return norm(name(i))===q||norm(i)===q});if(id)toCountry(id,primary[id]);else if(!q)toWorld();else this.setCustomValidity("Selecciona un país de la lista.");this.reportValidity();this.setCustomValidity("")});
 $("cityFilter").addEventListener("change",function(){var input=this,q=norm(input.value);if(q&&!PLACES.length){loadMapData().then(function(){input.dispatchEvent(new Event("change"))}).catch(function(){input.setCustomValidity("No se pudo cargar la lista mundial de ciudades.");input.reportValidity()});return}var all=Object.keys(CITY).map(function(i){return Object.assign({id:i},CITY[i])}).concat(PLACES.map(function(c){return Object.assign({},c,{id:c.id})})),city=all.find(function(c){return norm(c.nombre+" "+name(c.pais))===q})||all.find(function(c){return norm(c.nombre)===q});if(city){toCountry(city.pais,primary[city.pais]);st.city=city.id;upd()}else if(!q){if(st.city){st.city=null;upd()}}else input.setCustomValidity("Selecciona una ciudad de la lista.");input.reportValidity();input.setCustomValidity("")});
-function back(){if(st.city){st.city=null;upd()}else if(st.v==="country")toCont(st.c);else if(st.v==="continent")toWorld()}
+$("clientFilter").addEventListener("change",function(){var input=this,q=norm(input.value),all=Object.keys(CLIENTS).map(function(id){return Object.assign({id:id},CLIENTS[id])}),client=all.find(function(c){return norm(c.nombre+" "+c.ciudad+" "+name(c.pais))===q})||all.find(function(c){return norm(c.nombre)===q});if(client){toCountry(client.pais,primary[client.pais]);st.city=client.ciudadId;st.client=client.id;upd()}else if(!q){if(st.client){st.client=null;upd()}}else input.setCustomValidity("Selecciona un cliente o importador de la lista.");input.reportValidity();input.setCustomValidity("")});
+function back(){if(st.client){st.client=null;upd()}else if(st.city){st.city=null;upd()}else if(st.v==="country")toCont(st.c);else if(st.v==="continent")toWorld()}
 $("back").onclick=back;
 document.addEventListener("keydown",function(e){if(e.key==="Escape")back()});
 $("crumbs").onclick=function(e){var g=e.target.dataset.go;if(g==="world")toWorld();if(g==="cont")toCont(st.c);if(g==="ctry"){st.city=null;upd()}};
 $("side").onclick=function(e){var b=e.target.closest(".chip");if(b)toCountry(b.dataset.id);else if(e.target.dataset.act==="editreg")openEd("continente",st.c)};
-$("card").onclick=function(e){var t=e.target,a=t.dataset.act;if(t.dataset.city){st.city=t.dataset.city;upd();return}
+$("card").onclick=function(e){var t=e.target,a=t.dataset.act;if(t.dataset.city){st.city=t.dataset.city;st.client=null;upd();return}if(t.dataset.client){st.client=t.dataset.client;upd();return}if(t.dataset.clientEdit){openClientEditor(t.dataset.clientEdit);return}if("clientAdd" in t.dataset){openClientEditor(null);return}
 if(a==="close"){if(st.city){st.city=null;upd()}else back()}
 else if(a==="edit")st.city?openEd("ciudad",st.city):openEd("pais",st.id);
 else if(a==="addcity"){placing=true;var h=$("hint");h.textContent="Haz clic en el mapa donde está la ciudad";h.style.opacity=1}
 else if(a==="delcity"&&confirm("¿Eliminar esta ciudad?")){FS.remove("destinos",st.city);st.city=null}};
-svg.onclick=function(e){if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;upd();return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
+svg.onclick=function(e){if(placing&&st.v==="country"){placeCity(e);return}var cn=e.target.closest("[data-city]");if(cn){st.city=cn.dataset.city;st.client=null;upd();return}var n=e.target.closest("[data-id]");if(!n)return;var i=n.dataset.id;
 if(st.v==="world"){if(primary[i])toCont(primary[i])}else if(mem[st.c].has(i))toCountry(i)};
-svg.onkeydown=function(e){var n=e.target.closest&&e.target.closest("text[data-city]");if(n&&(e.key==="Enter"||e.key===" ")){e.preventDefault();st.city=n.dataset.city;upd()}};
+svg.onkeydown=function(e){var n=e.target.closest&&e.target.closest("text[data-city]");if(n&&(e.key==="Enter"||e.key===" ")){e.preventDefault();st.city=n.dataset.city;st.client=null;upd()}};
 svg.onmousemove=function(e){var n=e.target.closest&&e.target.closest("[data-id]"),i=n&&n.dataset.id,r=$("stage").getBoundingClientRect();
 mapG.querySelectorAll(".hl").forEach(function(x){x.classList.remove("hl")});
 if(!i||n.classList.contains("out")){tip.style.display="none";return}
@@ -273,7 +283,7 @@ else{var g=gOf(i);t=name(i)+(g?" · "+g.l+" (máx. "+g.hi+" %)":" · sin dato")}
 tip.textContent=t;tip.style.display="block";tip.style.left=Math.min(e.clientX-r.left+14,r.width-tip.offsetWidth-8)+"px";tip.style.top=(e.clientY-r.top+14)+"px"};
 svg.onmouseleave=function(){tip.style.display="none";mapG.querySelectorAll(".hl").forEach(function(x){x.classList.remove("hl")})};
 var fbReady=new Promise(function(r){window._fbRes=r});
-var CD={},CITY={},SC={},FS=null,USR=null,ADMIN=false,placing=false,ED=null,SD=JSON.parse(JSON.stringify(D)),SG=JSON.parse(JSON.stringify(GR));
+var CD={},CITY={},CLIENTS={},SC={},FS=null,USR=null,ADMIN=false,placing=false,ED=null,CLIENT_ED=null,SD=JSON.parse(JSON.stringify(D)),SG=JSON.parse(JSON.stringify(GR));
 "ES|Madrid|-3.70|40.42;FR|París|2.35|48.86;GB|Londres|-0.13|51.51;PT|Lisboa|-9.14|38.72;ME|Podgorica|19.26|42.44;RS|Belgrado|20.46|44.79;BG|Sofía|23.32|42.70;PL|Varsovia|21.01|52.23;AL|Tirana|19.82|41.33;DE|Berlín|13.40|52.52;RO|Bucarest|26.10|44.43;BE|Bruselas|4.35|50.85;LV|Riga|24.11|56.95;EE|Tallin|24.75|59.44;AM|Ereván|44.51|40.18;JP|Tokio|139.69|35.69;NZ|Wellington|174.78|-41.29;SV|San Salvador|-89.22|13.69;NL|Ámsterdam|4.90|52.37;AR|Buenos Aires|-58.38|-34.60;GR|Atenas|23.73|37.98;CY|Nicosia|33.38|35.19;GE|Tiflis|44.79|41.72;GE|Poti|41.67|42.15;GT|Ciudad de Guatemala|-90.51|14.63;NI|Managua|-86.25|12.13;DO|Santo Domingo|-69.93|18.49;IT|Roma|12.50|41.90;CA|Ottawa|-75.70|45.42;MA|Rabat|-6.84|34.02;ZA|Pretoria|28.19|-25.75;LB|Beirut|35.50|33.89;SG|Singapur|103.82|1.35;TT|Puerto España|-61.52|10.66;TH|Bangkok|100.50|13.76;HK|Hong Kong|114.17|22.32;CI|Yamusukro|-5.28|6.83;JO|Amán|35.93|31.95;US|Washington D. C.|-77.04|38.91;KR|Seúl|126.98|37.57;RU|Moscú|37.62|55.76;MY|Kuala Lumpur|101.69|3.14;TW|Taipéi|121.56|25.03;EG|El Cairo|31.24|30.04;OM|Mascate|58.41|23.59;AE|Abu Dabi|54.37|24.45;BH|Manama|50.58|26.23;QA|Doha|51.53|25.29;KW|Kuwait|47.98|29.38;CN|Pekín|116.41|39.90;VN|Hanói|105.85|21.03;VN|Haiphong|106.68|20.86;VN|Ho Chi Minh|106.63|10.82".split(";").forEach(function(t){var a=t.split("|"),id="ciudad_"+a[0]+"_"+slug(a[1]);SC[id]={tipo:"ciudad",pais:a[0],nombre:a[1],lon:+a[2],lat:+a[3],grados:[]};CITY[id]=SC[id]});
 var LB={europe:[20,53],asia:[88,46],africa:[20,4],north:[-100,50],central:[-84,17],south:[-60,-14],oceania:[134,-26]};
 function lab(view){var h="",p;
@@ -295,6 +305,7 @@ function initFB(api){if(!api)return;FS=api;
 api.watch("grados",function(L){L.forEach(function(d){var id=d.id;delete d.id;GR[id]=Object.assign(GR[id]||{},d)});refresh()});
 api.watch("destinos",function(L){var nd={},nc={},nt={};L.forEach(function(d){if(d.tipo==="pais")nd[d.codigo]=d.grados||[];else if(d.tipo==="continente")nc[d.codigo]=d.grados||[];else if(d.tipo==="ciudad")nt[d.id]=d});
 if(Object.keys(nd).length)D=nd;if(Object.keys(nt).length)CITY=nt;CD=nc;refresh()});
+api.watch("clientes_calidad",function(L){CLIENTS={};L.forEach(function(d){CLIENTS[d.id]=d});upd()});
 api.onAuth(function(u,ok){USR=u;ADMIN=!!ok;upd()})}
 function box(h){$("mod").innerHTML='<div class="box">'+h+"</div>";$("mod").style.display="grid"}
 function closeMod(){$("mod").style.display="none"}
@@ -313,7 +324,13 @@ function draw(){var h='<h3>Parámetros · '+esc(ttl)+'</h3><p class="sb">Elige e
 rows.forEach(function(r,n){var o=r.o||{};h+='<div class="row"><div><label>Grado</label><select class="rg">'+Object.keys(GR).map(function(k){return'<option value="'+k+'"'+(k===r.g?" selected":"")+">"+GR[k].l+" · "+GR[k].r+"</option>"}).join("")+'</select></div><div><label>¿Excepción?</label><select class="rx"><option value="">No</option><option value="1"'+(r.x?" selected":"")+'>Sí</option></select></div><div><label>Máx. defectos % (opcional)</label><input class="rh" type="number" value="'+(o.hi!==undefined?o.hi:"")+'"></div><div><label>Mín. % (opcional)</label><input class="rl" type="number" value="'+(o.lo!==undefined?o.lo:"")+'"></div><div><label>Sabor permitido (opcional)</label><input class="rs" value="'+esc(o.s||"")+'"></div><div><label>Materia extraña (opcional)</label><input class="rm" value="'+esc(o.m||"")+'"></div><div style="grid-column:1/3"><label>Nota</label><input class="rn" value="'+esc(r.n||"")+'"></div><div style="grid-column:1/3"><button class="btn red" data-del="'+n+'">Quitar</button></div></div>'});
 h+='<button class="btn sec" data-add>+ Agregar grado</button><p style="margin-top:12px"><button class="btn" data-save>Guardar en Firestore</button> <button class="btn sec" data-x>Cancelar</button></p>';box(h)}
 ED={key:key,kind:kind,id:id,collect:collect,set:function(r){rows=r;draw()}};draw()}
+function openClientEditor(id){if(!ADMIN||!FS||!st.city)return;var city=getCity(st.city);if(!city)return;CLIENT_ED=id;var c=id?CLIENTS[id]:null;
+box('<h3>'+(c?'Editar cliente/importador':'Registrar cliente/importador')+'</h3><p class="sb">Ciudad: '+esc(city.nombre)+' · '+esc(name(city.pais))+'</p><label style="display:block;margin:10px 0">Nombre<input id="clientName" maxlength="120" required value="'+esc(c?c.nombre:'')+'" placeholder="Nombre del cliente o importador" style="display:block;width:100%;padding:10px;margin-top:5px"></label><label style="display:block;margin:10px 0">Tipo<select id="clientType" style="display:block;width:100%;padding:10px;margin-top:5px"><option value="cliente"'+(!c||c.tipo==='cliente'?' selected':'')+'>Cliente</option><option value="importador"'+(c&&c.tipo==='importador'?' selected':'')+'>Importador</option></select></label><div class="ab2"><button class="btn" data-client-save>Guardar</button><button class="btn sec" data-x>Cancelar</button></div>')}
+function saveClient(){var city=getCity(st.city),field=$("clientName"),type=$("clientType"),nombre=field&&field.value.trim();if(!ADMIN||!FS||!city||!nombre){alert("Completa el nombre y confirma la ciudad seleccionada.");return}if(nombre.length>120){alert("El nombre puede tener hasta 120 caracteres.");return}if(!["cliente","importador"].includes(type.value)){alert("Selecciona Cliente o Importador.");return}
+var id=CLIENT_ED||("cliente_"+crypto.randomUUID()),record={ciudadId:st.city,pais:city.pais,ciudad:city.nombre,nombre:nombre,tipo:type.value},cityRecord={tipo:"ciudad",pais:city.pais,nombre:city.nombre,grados:Array.isArray(city.grados)?city.grados:[]};if(Number.isFinite(city.lat))cityRecord.lat=city.lat;if(Number.isFinite(city.lon))cityRecord.lon=city.lon;
+FS.save("destinos",st.city,cityRecord).then(function(){return FS.save("clientes_calidad",id,record)}).then(function(){CLIENTS[id]=record;st.client=id;closeMod();upd()}).catch(function(e){alert("No se pudo guardar el cliente/importador: "+(e.message||e))})}
 $("mod").onclick=function(e){var t=e.target,d=t.dataset,r;if(t===$("mod")||"x" in d)return closeMod();
+if("clientSave" in d)return saveClient();
 if("devices" in d)showDevices();
 else if(d.deviceStatus)FS.setDeviceStatus(d.deviceUid,d.deviceId,d.deviceStatus).then(showDevices).catch(function(x){alert("No se pudo actualizar el dispositivo: "+x.message)});
 else if("out" in d){FS.logout();closeMod()}else if("seed" in d)seed();
