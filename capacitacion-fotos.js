@@ -7,7 +7,7 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const list=id=>cache.get(id)||[];
  function thumb(p,i,done,old=false){if(!p.jpeg?.startsWith('data:image/jpeg;base64,'))return '';
-  return '<div class="photo-tile"><a href="'+esc(p.jpeg)+'" target="_blank" rel="noopener noreferrer"><img src="'+esc(p.jpeg)+'" alt="Evidencia '+(i+1)+'"></a><div class="photo-foot"><span>'+(old?'Anterior':p.origin==='camera'?'Cámara':'Galería')+' '+(i+1)+'</span>'+(done?'':old?'<button class="button sm danger" data-photo-old="1">Quitar</button>':'<button class="button sm danger" data-photo-del="'+esc(p.id)+'">Quitar</button>')+'</div></div>';
+  return '<div class="photo-tile"><a href="'+esc(p.jpeg)+'" target="_blank" rel="noopener noreferrer"><img loading="lazy" decoding="async" src="'+esc(p.jpeg)+'" alt="Evidencia '+(i+1)+'"></a><div class="photo-foot"><span>'+(old?'Anterior':p.origin==='camera'?'Cámara':'Galería')+' '+(i+1)+'</span>'+(done?'':old?'<button class="button sm danger" data-photo-old="1">Quitar</button>':'<button class="button sm danger" data-photo-del="'+esc(p.id)+'">Quitar</button>')+'</div></div>';
  }
  function grid(d){const old=d.evidenceImage?.startsWith('data:image/jpeg;base64,')?[{jpeg:d.evidenceImage}]:[];const base=list(d.id).filter(p=>!p.criterionId);return old.map((p,i)=>thumb(p,i,d.status==='done',true)).concat(base.map((p,i)=>thumb(p,i+old.length,d.status==='done'))).join('')||'<span class="small muted">Sin fotografías</span>';}
  function criterionGrid(d,c){if(!d)return '';const images=list(d.id).filter(p=>p.criterionId===c);return images.length?'<div class="photo-gallery criterion-gallery">'+images.map((p,i)=>thumb(p,i,d.status==='done')).join('')+'</div>':'';}
@@ -66,10 +66,7 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
   let uploaded=0;
   try{
     await parent(id);
-    if(!cache.has(id)){
-      const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));
-      cache.set(id,snap.docs.map(x=>({id:x.id,...x.data()})));
-    }
+    if(!cache.has(id))await readRows(id);
     const rows=cache.get(id);
     const remaining=MAX-rows.length-(current()?.evidenceImage?1:0);
     if(arr.length>remaining)throw Error('Puedes subir '+Math.max(0,remaining)+' fotos adicionales.');
@@ -102,7 +99,7 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
     draw(id);
   }
  }
- async function remove(id){const d=current();if(!d||d.status==='done'||busy)return;if(!list(d.id).some(p=>p.id===id)||!confirm('¿Eliminar esta fotografía?'))return;busy=true;try{await fs.deleteDoc(fs.doc(db,S,d.id,'fotos',id));cache.set(d.id,list(d.id).filter(x=>x.id!==id));draw(d.id);}catch(e){notify('No se pudo eliminar: '+helpfulError(e));}finally{busy=false;}}
+ async function remove(id){const d=current();if(!d||d.status==='done'||busy)return;if(!list(d.id).some(p=>p.id===id)||!confirm('¿Eliminar esta fotografía?'))return;busy=true;try{await fs.deleteDoc(fs.doc(db,S,d.id,'fotos',id));remember(d.id,list(d.id).filter(x=>x.id!==id));draw(d.id);}catch(e){notify('No se pudo eliminar: '+helpfulError(e));}finally{busy=false;}}
  const dlg=document.createElement('dialog');dlg.id='evidenceCameraDialog';dlg.className='photo-camera-dialog';dlg.innerHTML='<h3>Tomar fotografía</h3><video id="evidenceCameraVideo" autoplay playsinline muted></video><div class="row"><button type="button" class="button primary" data-photo="capture">Capturar</button><button type="button" class="button" data-photo="close">Cancelar</button></div><input type="file" id="evidenceCameraFallback" accept="image/*" capture="environment" hidden>';document.body.appendChild(dlg);
  function close(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}el('evidenceCameraVideo').srcObject=null;if(dlg.open)dlg.close();}
  dlg.addEventListener('close',()=>{if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}el('evidenceCameraVideo').srcObject=null;});
@@ -131,6 +128,8 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
   cache.clear();
   pending.clear();
   targetCriterion='';
+  stream?.getTracks().forEach(track=>track.stop());
+  stream=null;
  }
 
  return {html,activate,criterionHtml,getReportPhotos,isBusy:()=>busy,clear};
