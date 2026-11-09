@@ -279,6 +279,8 @@ async function loadCloud(){
       ...participants.docs.map(x=>x.data().accountUid),
       ...accesses.docs.map(x=>x.id)
     ].filter(uid=>typeof uid==='string'&&uid.length))];
+    const relevantUidSet=new Set(relevantUids);
+    for(const uid of state.photoUrls.keys())if(!relevantUidSet.has(uid))state.photoUrls.delete(uid);
     const uidBatches=[];
     for(let i=0;i<relevantUids.length;i+=20)uidBatches.push(relevantUids.slice(i,i+20));
     const readByUids=async(name,field,documentIds=false)=>{
