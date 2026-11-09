@@ -1,6 +1,7 @@
 export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isSaving,notify}){
  const S='expalsa_capacitacion_2026_sesiones',MAX=15,LIMIT=170000;
- const cache=new Map(),pending=new Set();
+ const CACHE_LIMIT=2,cache=new Map(),pending=new Map();
+ let cacheGeneration=0;
  let busy=false,stream=null,targetCriterion='';
  const el=id=>document.getElementById(id),current=()=>getSession();
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -14,7 +15,29 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
  function html(d){const count=list(d.id).filter(p=>!p.criterionId).length+(d.evidenceImage?1:0);return '<div class="form-field"><label>Evidencia fotográfica autorizada <span id="photoCounter" class="photo-count">'+count+' principal(es)</span></label><div class="photo-actions"><button type="button" class="button primary" data-photo="camera" '+(d.status==='done'?'disabled':'')+'>Tomar foto</button><button type="button" class="button" data-photo="gallery" '+(d.status==='done'?'disabled':'')+'>Seleccionar de galería</button><input type="file" id="evidenceGallery" accept="image/*" multiple hidden></div><div id="evidenceList" class="photo-gallery">'+grid(d)+'</div><p id="photoUploadStatus" class="photo-upload-status" role="status"></p></div>';}
  function status(s){if(el('photoUploadStatus'))el('photoUploadStatus').textContent=s;}
  function draw(id){if(current()?.id!==id)return;const d=current();if(el('evidenceList'))el('evidenceList').innerHTML=grid(d);if(el('photoCounter'))el('photoCounter').textContent=(list(id).filter(p=>!p.criterionId).length+(d.evidenceImage?1:0))+' principal(es)';document.querySelectorAll('[data-criterion-list]').forEach(node=>{const c=node.getAttribute('data-criterion-list');node.innerHTML=criterionGrid(d,c);});}
- async function load(id){if(cache.has(id)||pending.has(id))return;pending.add(id);try{const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));const rows=snap.docs.map(p=>({id:p.id,...p.data()})).filter(x=>x.jpeg?.startsWith('data:image/jpeg;base64,'));rows.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||(a.createdAt?.nanoseconds||0)-(b.createdAt?.nanoseconds||0)||a.id.localeCompare(b.id));cache.set(id,rows);}catch(e){if(current()?.id===id)status(helpfulError(e));}finally{pending.delete(id);draw(id);}}
+ function remember(id,rows){
+  cache.delete(id);
+  cache.set(id,rows);
+  while(cache.size>CACHE_LIMIT)cache.delete(cache.keys().next().value);
+ }
+ async function readRows(id){
+  if(cache.has(id)){const rows=cache.get(id);remember(id,rows);return rows;}
+  if(pending.has(id))return pending.get(id);
+  const generation=cacheGeneration;
+  const task=(async()=>{
+   const snap=await fs.getDocs(fs.collection(db,S,id,'fotos'));
+   const rows=snap.docs.map(p=>({id:p.id,...p.data()})).filter(x=>x.jpeg?.startsWith('data:image/jpeg;base64,'));
+   rows.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||(a.createdAt?.nanoseconds||0)-(b.createdAt?.nanoseconds||0)||a.id.localeCompare(b.id));
+   if(generation===cacheGeneration)remember(id,rows);
+   return rows;
+  })();
+  pending.set(id,task);
+  try{return await task;}finally{if(pending.get(id)===task)pending.delete(id);}
+ }
+ async function load(id){
+  try{await readRows(id);}catch(e){if(current()?.id===id)status(helpfulError(e));}
+  if(current()?.id===id)draw(id);
+ }
  function activate(){const d=current();const mount=el('photoMount');if(mount&&d)mount.outerHTML=html(d);if(d)void load(d.id);if(d)draw(d.id);}
  async function parent(id){if(current()?.id!==id||current().status==='done')throw Error('La jornada está cerrada.');let i=0;while(isSaving()&&i++<100)await new Promise(ok=>setTimeout(ok,50));if(isSaving())throw Error('Se está guardando la jornada.');if(!getSaved(id)){await saveDraft();i=0;while(isSaving()&&i++<100)await new Promise(ok=>setTimeout(ok,50));}if(!getSaved(id))throw Error('Guarda el borrador antes de subir fotografías.');}
  async function compressed(f,maxLen=LIMIT){if(!f?.type?.startsWith('image/'))throw Error('Archivo de imagen no válido.');if(f.size>15*1024*1024)throw Error('Fotografía superior a 15 MB.');
@@ -91,10 +114,7 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
   if(!d)throw Error('No hay jornada seleccionada.');
   let stored=[],partial=false;
   try{
-    const snap=await fs.getDocs(fs.collection(db,S,d.id,'fotos'));
-    stored=snap.docs.map(x=>({id:x.id,...x.data()})).filter(x=>typeof x.jpeg==='string'&&x.jpeg.startsWith('data:image/jpeg;base64,'));
-    stored.sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)||(a.createdAt?.nanoseconds||0)-(b.createdAt?.nanoseconds||0)||a.id.localeCompare(b.id));
-    cache.set(d.id,stored);
+    stored=await readRows(d.id);
     draw(d.id);
   }catch(e){
     if(!permissionError(e))throw e;
@@ -106,5 +126,12 @@ export function createPhotoManager({fs,db,auth,getSession,getSaved,saveDraft,isS
   const annexes=[...stored.filter(x=>x.criterionId),...general.slice(1)];
   return {main:general[0]||null,annexes,all:stored,partial};
  }
- return {html,activate,criterionHtml,getReportPhotos,isBusy:()=>busy};
+ function clear(){
+  cacheGeneration++;
+  cache.clear();
+  pending.clear();
+  targetCriterion='';
+ }
+
+ return {html,activate,criterionHtml,getReportPhotos,isBusy:()=>busy,clear};
 }
