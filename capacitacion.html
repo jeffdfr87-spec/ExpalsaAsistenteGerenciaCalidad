@@ -269,19 +269,35 @@ async function loadCloud(){
   finalReport.clear();
   state.loading=true;
   try{
-    const [accesses,identities,profiles,photos,participants,sessions]=await Promise.all([
-      fs.getDocs(fs.collection(db,'expalsa_calidad_accesos')),
-      fs.getDocs(fs.collection(db,'expalsa_calidad_identidades')),
-      fs.getDocs(fs.collection(db,'expalsa_calidad_perfiles')),
-      fs.getDocs(fs.collection(db,'expalsa_calidad_fotos_perfil')),
+    const [accesses,participants,sessions]=await Promise.all([
+      fs.getDocs(fs.query(fs.collection(db,'expalsa_calidad_accesos'),fs.where('active','==',true))),
       fs.getDocs(fs.collection(db,P)),
       fs.getDocs(fs.collection(db,S))
     ]);
     await refreshGroups();
+    const relevantUids=[...new Set([
+      ...participants.docs.map(x=>x.data().accountUid),
+      ...accesses.docs.map(x=>x.id)
+    ].filter(uid=>typeof uid==='string'&&uid.length))];
+    const uidBatches=[];
+    for(let i=0;i<relevantUids.length;i+=20)uidBatches.push(relevantUids.slice(i,i+20));
+    const readByUids=async(name,field,documentIds=false)=>{
+      if(!uidBatches.length)return {docs:[]};
+      const fieldPath=documentIds?fs.documentId():field;
+      const pages=await Promise.all(uidBatches.map(batch=>fs.getDocs(fs.query(
+        fs.collection(db,name),
+        fs.where(fieldPath,'in',batch)
+      ))));
+      return {docs:pages.flatMap(page=>page.docs)};
+    };
+    const [identities,profiles,photos]=await Promise.all([
+      readByUids('expalsa_calidad_identidades',null,true),
+      readByUids('expalsa_calidad_perfiles','payload.accountUid'),
+      readByUids('expalsa_calidad_fotos_perfil',null,true)
+    ]);
     state.identities=new Map(identities.docs.map(x=>[x.id,x.data()]));
     state.profileNames=new Map(profiles.docs.map(x=>x.data().payload).filter(x=>x?.accountUid&&x?.name).map(x=>[x.accountUid,String(x.name).trim()]));
     state.photoDocs=new Map(photos.docs.map(x=>[x.id,x.data()]));
-    state.photoUrls.clear();
     state.accounts=accesses.docs.filter(x=>x.data().active===true&&x.data().deleted!==true).map(x=>{
       const d=x.data(),name=officialName(x.id);
       return {id:x.id,email:d.email||'',name,hasName:!!name};
@@ -295,8 +311,8 @@ async function loadCloud(){
     void publishTrainingBoard().catch(()=>{});
     render();
     for(const p of state.people){
-      if(p.active===true&&p.deleted!==true&&p.accountUid&&state.photoDocs.has(p.accountUid)&&!photoUrl(p.accountUid)){
-        loadLegacyPhoto(p.accountUid);
+      if(p.active===true&&p.deleted!==true&&p.accountUid&&state.photoDocs.has(p.accountUid)){
+        if(!photoUrl(p.accountUid))loadLegacyPhoto(p.accountUid);
       }
     }
   }catch(e){
@@ -304,68 +320,7 @@ async function loadCloud(){
     root.innerHTML='<div class="login-wrap"><div class="login"><h2>No se pudo cargar la capacitación</h2><p>'+enc(e.message)+'</p><button class="button primary" data-action="refresh">Reintentar</button><div style="margin-top:15px"><a href="./index.html">Volver a evaluaciones</a></div></div></div>';
   }
 }
-function inspectorTrainingShell(user){
- inspectorViewActive=true;clearInterval(inspectorTimer);
- root.innerHTML='<div class="inspector-training"><header><div class="training-brand"><img src="./favicon.png" alt=""><div><strong>EXPALSA</strong><span>GERENCIA DE CALIDAD</span></div></div><div class="training-user"><span>'+enc(user.email||'')+'</span><button class="button" data-it="logout">Cerrar sesión</button></div></header><main id="inspectorTrainingApp"><p class="panel">Consultando evaluación…</p></main></div>';
- loadInspectorTraining();
-}
-function runInspectorClock(expiredAt){
- clearInterval(inspectorTimer);
- const tick=()=>{const el=document.getElementById('inspectorTrainingClock');if(!el)return;const sec=Math.max(0,Math.ceil((expiredAt-Date.now())/1000));el.textContent='Tiempo restante · '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');if(sec===0){clearInterval(inspectorTimer);finishInspectorTraining(true).catch(showInspectorTrainingError);}};
- inspectorTimer=setInterval(tick,1000);tick();
-}
-function renderInspectorTraining(state,bank,attempt){
- const host=document.getElementById('inspectorTrainingApp');if(!host||!inspectorViewActive)return;
- const escape=enc,email=currentUser?.email||'';let html='<nav class="inspector-training-tabs"><button class="active">Evaluación</button></nav>';
- if(attempt&&attempt.status==='active'&&bank){
-  const maxDay=Math.min(10,Number(attempt.savedThrough||0)+1),day=maxDay;window.inspectorTrainingDay=day;
-  const questions=bank.questions.filter(q=>q.day===day),answers=JSON.parse(attempt.answers||'{}'),expiredAt=Number(attempt.startedAtMs||0)+Number(attempt.durationMinutes)*60000;
-  if(Number(attempt.savedThrough||0)>=10){
-   host.innerHTML=html+'<section class="panel"><h2>Cuestionario completado</h2><p>Respuestas de D01 a D10 guardadas.</p><strong id="inspectorTrainingClock" class="mono"></strong><div class="row"><button class="button good" data-it="finish">Entregar evaluación</button></div><p id="inspectorTrainingStatus" role="status"></p></section>';
-   runInspectorClock(expiredAt);return;
-  }
-  html+='<section class="panel"><div class="section-title"><div><h2>Evaluación de capacitación</h2><span class="muted">'+escape(email)+'</span></div><span class="tag good">Jornada '+day+' / 10</span></div><div class="spread"><strong id="inspectorTrainingClock" class="mono"></strong><span>Respuestas guardadas automáticamente</span></div><div class="exam-days">'+Array.from({length:10},(_,i)=>'<button class="button sm '+(i+1===day?'primary':'')+'" data-it-day="'+(i+1)+'" '+(i+1!==maxDay?'disabled':'')+'>D'+String(i+1).padStart(2,'0')+'</button>').join('')+'</div><h3>'+escape(days[day-1]?.title||('Día '+day))+'</h3>';
-  html+=questions.map((q,i)=>{const val=answers[q.id],disabled=q.day<=Number(attempt.savedThrough||0);return '<article class="exam-question"><b>'+(i+1)+'. '+escape(q.competency||'')+' · '+(q.type==='choice'?'Selección única':'Caso de aplicación')+'</b><p>'+escape(q.text)+'</p>'+(q.type==='choice'?(q.options||[]).map((o,j)=>'<label><input type="radio" autocomplete="off" name="'+escape(attempt.id+'_'+day+'_'+q.id)+'" data-it-answer="'+escape(q.id)+'" value="'+j+'" '+(val===j?'checked':'')+' '+(disabled?'disabled':'')+'><span>'+escape(o)+'</span></label>').join(''):'<label for="answer-'+escape(q.id)+'">Respuesta</label><textarea id="answer-'+escape(q.id)+'" data-it-answer="'+escape(q.id)+'" maxlength="3000" '+(disabled?'disabled':'')+'>'+escape(val||'')+'</textarea>')+'</article>';}).join('');
-  const canSave=day===Number(attempt.savedThrough||0)+1;html+='<div class="row">'+(canSave?'<button class="button primary" data-it="saveDay">Guardar respuestas</button>':Number(attempt.savedThrough||0)>=10?'<button class="button good" data-it="finish">Entregar evaluación</button>':'<span class="tag good">Jornada guardada</span>')+(Number(attempt.savedThrough||0)>=10&&canSave?'<button class="button good" data-it="finish">Entregar evaluación</button>':'')+'</div><p id="inspectorTrainingStatus" role="status"></p></section>';
-  host.innerHTML=html;
-  host.querySelectorAll('input[data-it-answer]').forEach(input=>{input.checked=answers[input.dataset.itAnswer]===Number(input.value);});
-  runInspectorClock(expiredAt);return;
- }
- if(state.status==='pending')html+='<section class="panel"><h2>Evaluación de capacitación</h2><p>Solicitud de autorización pendiente.</p></section>';
- else if(state.status==='enabled'||state.initialEnabled||state.refuerzoEnabled)html+='<section class="panel"><h2>Evaluación de capacitación</h2><p>Evaluación habilitada.</p><button class="button primary" data-it="start">Iniciar evaluación</button></section>';
- else if(state.status==='completed')html+='<section class="panel"><h2>Evaluación finalizada</h2><p>Revisa tu calificación en tu cuenta individual.</p>'+(state.refuerzoEnabled?'<button class="button primary" data-it="start">Iniciar evaluación de refuerzo</button>':state.canRequestRefuerzo?'<button class="button" data-it="requestRefuerzo">Solicitar evaluación de refuerzo</button>':'')+'</section>';
- else html+='<section class="panel"><h2>Evaluación de capacitación</h2><button class="button primary" data-it="requestInicial">Solicitar aprobación</button></section>';
- host.innerHTML=html;
-}
-async function loadInspectorTraining(){
- if(!inspectorViewActive||!currentUser||!trainingCall)return;const host=document.getElementById('inspectorTrainingApp');if(host)host.innerHTML='<p class="panel">Consultando evaluación…</p>';
- try{let state=(await trainingCall('getTrainingEvaluationState')).data;let bank=state.bank,attempt=state.attempt;if(state.status==='active'){const opened=(await trainingCall('startTrainingEvaluation')).data;if(opened.status==='submitted'){state=(await trainingCall('getTrainingEvaluationState')).data;bank=state.bank||bank;attempt=state.attempt||opened.attempt;}else{bank=opened.bank||bank;attempt=opened.attempt||attempt;state.status=opened.status;}}window.inspectorTrainingState=state;window.inspectorTrainingBank=bank;window.inspectorTrainingAttempt=attempt;renderInspectorTraining(state,bank,attempt);}catch(e){showInspectorTrainingError(e);}
-}
-function showInspectorTrainingError(e){const el=document.getElementById('inspectorTrainingStatus')||document.getElementById('inspectorTrainingApp');if(el)el.textContent=e?.message||'No se pudo cargar la evaluación.';}
-async function flushInspectorAnswers(){
- clearTimeout(inspectorAnswerSave);inspectorAnswerSave=null;
- if(Object.keys(inspectorPendingAnswers).length){
-  const batch=inspectorPendingAnswers;inspectorPendingAnswers={};const attempt=window.inspectorTrainingAttempt;
-  if(!attempt||attempt.status!=='active')return;
-  const pendingSave=inspectorAnswerQueue.catch(()=>{}).then(()=>trainingCall('saveTrainingAnswers',{attemptId:attempt.id,answers:batch}));inspectorAnswerQueue=pendingSave;
-
-  try{await inspectorAnswerQueue;const answers=JSON.parse(attempt.answers||'{}');Object.assign(answers,batch);attempt.answers=JSON.stringify(answers);}
-  catch(e){if(window.inspectorTrainingAttempt?.id===attempt.id)inspectorPendingAnswers={...batch,...inspectorPendingAnswers};throw e;}
- }
- await inspectorAnswerQueue;
-}
-async function finishInspectorTraining(expired=false){
- const attempt=window.inspectorTrainingAttempt;if(!attempt)return;const status=document.getElementById('inspectorTrainingStatus');if(status)status.textContent=expired?'Tiempo agotado. Cerrando evaluación…':'Entregando evaluación…';
- try{if(!expired)await flushInspectorAnswers();else{try{await flushInspectorAnswers();}catch{}}await trainingCall('finishTrainingEvaluation',{attemptId:attempt.id});clearInterval(inspectorTimer);if(!expired)await fs.signOut(auth);else{const el=document.getElementById('inspectorTrainingApp');if(el)el.innerHTML='<section class="panel"><h2>Evaluación finalizada</h2><p>Revisa tu calificación en tu cuenta individual.</p></section>';}}catch(e){showInspectorTrainingError(e);}
-}
-function handleInspectorTrainingClick(e){
- const b=e.target.closest('button');if(!b||b.disabled||inspectorActionBusy)return;if(b.dataset.itDay){window.inspectorTrainingDay=Number(b.dataset.itDay);renderInspectorTraining(window.inspectorTrainingState,window.inspectorTrainingBank,window.inspectorTrainingAttempt);return;}const action=b.dataset.it;if(!action)return;e.preventDefault();
- inspectorActionBusy=true;document.querySelectorAll('[data-it-answer], [data-it]').forEach(el=>el.disabled=true);
- (async()=>{if(action==='logout'){clearInterval(inspectorTimer);await fs.signOut(auth);return;}if(action==='start'){const r=(await trainingCall('startTrainingEvaluation')).data;window.inspectorTrainingState={...window.inspectorTrainingState,status:r.status};window.inspectorTrainingBank=r.bank;window.inspectorTrainingAttempt=r.attempt;window.inspectorTrainingDay=Number(r.attempt?.savedThrough||0)+1;renderInspectorTraining(window.inspectorTrainingState,r.bank,r.attempt);return;}if(action==='requestInicial'||action==='requestRefuerzo'){await trainingCall('requestTrainingEvaluation',{kind:action==='requestRefuerzo'?'refuerzo':'inicial'});await loadInspectorTraining();return;}if(action==='saveDay'){const attempt=window.inspectorTrainingAttempt,day=Number(window.inspectorTrainingDay||1);await flushInspectorAnswers();await trainingCall('saveTrainingDay',{attemptId:attempt.id,day});attempt.savedThrough=day;window.inspectorTrainingDay=Math.min(10,day+1);await loadInspectorTraining();return;}if(action==='finish'&&confirm('¿Entregar la evaluación? No podrás volver a ingresar sin una autorización de refuerzo.'))await finishInspectorTraining(false);})().catch(showInspectorTrainingError).finally(()=>{inspectorActionBusy=false;if(inspectorViewActive)renderInspectorTraining(window.inspectorTrainingState,window.inspectorTrainingBank,window.inspectorTrainingAttempt);});
-}
-document.addEventListener('input',e=>{if(!inspectorViewActive)return;const q=e.target.closest('[data-it-answer]');if(!q||q.disabled||inspectorActionBusy)return;const attempt=window.inspectorTrainingAttempt,question=window.inspectorTrainingBank?.questions?.find(item=>item.id===q.dataset.itAnswer);if(!attempt||attempt.status!=='active'||question?.day!==Number(attempt.savedThrough||0)+1)return;const id=q.dataset.itAnswer,value=q.type==='radio'?Number(q.value):q.value;inspectorPendingAnswers[id]=value;clearTimeout(inspectorAnswerSave);inspectorAnswerSave=setTimeout(()=>flushInspectorAnswers().catch(showInspectorTrainingError),350);});
-document.addEventListener('click',e=>{if(inspectorViewActive)handleInspectorTrainingClick(e);});
-async function init(){login('');const cfg=window.EXPALSA_FIREBASE_CONFIG;if(!cfg?.apiKey||!cfg?.projectId||!days.length){login('No se cargaron la configuración Firebase o los contenidos de las jornadas.');return;}try{const V='13.0.0';const [appMod,authMod,fire,functionsMod]=await Promise.all([import('https://www.gstatic.com/firebasejs/'+V+'/firebase-app.js'),import('https://www.gstatic.com/firebasejs/'+V+'/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/'+V+'/firebase-firestore.js'),import('https://www.gstatic.com/firebasejs/'+V+'/firebase-functions.js')]);fs=Object.assign({},fire,authMod);const app=appMod.initializeApp(cfg,'expalsa-capacitacion-2026');auth=authMod.getAuth(app);db=fire.getFirestore(app);trainingCall=(name,data={})=>functionsMod.httpsCallable(functionsMod.getFunctions(app,'us-central1'),name)(data);photoManager=createPhotoManager({fs,db,auth,getSession:()=>state.draft,getSaved:id=>state.sessions.has(id),saveDraft:()=>saveSession(false),isSaving:()=>!!activeSave,notify:toast});await authMod.setPersistence(auth,authMod.browserSessionPersistence);authMod.onAuthStateChanged(auth,async u=>{if(!u){graphViewerActive=false;clearInterval(graphViewerTimer);graphViewerTimer=null;clearTimeout(inspectorAnswerSave);inspectorPendingAnswers={};inspectorAnswerQueue=Promise.resolve();window.inspectorTrainingAttempt=null;window.inspectorTrainingDay=null;currentUser=null;inspectorViewActive=false;clearInterval(inspectorTimer);trainingEvaluation.clear();progressGraphs.clear();finalReport.clear();responsible.clear();compliance.reset();documentsManager.clear();login('');return;}try{currentUser=u;const email=(u.email||'').trim().toLowerCase();if(email==='jefferson@expalsaevaluations.com'){const snap=await fire.getDoc(fire.doc(db,'expalsa_calidad_config','administrador'));if(!snap.exists()||snap.data().uid!==u.uid||snap.data().email!==email)throw Error('La cuenta no coincide con la identidad administrativa autorizada.');inspectorViewActive=false;if(!trainingTimer)trainingTimer=createTrainingTimer({getSession:()=>state.draft,getPersonName:d=>{const p=state.people.find(x=>x.id===d.personId);return p?(officialName(p.accountUid)||p.name):d.personName;},notify:toast});await loadCloud();return;}if(['fabio@expalsaevaluations.com','karina@expalsaevaluations.com'].includes(email)){graphViewerActive=true;state.tab='progress';render();clearInterval(graphViewerTimer);graphViewerTimer=setInterval(()=>{if(graphViewerActive&&currentUser?.uid===u.uid)progressGraphs.activate();},30000);return;}const access=await fire.getDoc(fire.doc(db,'expalsa_calidad_accesos',u.uid));if(!access.exists()||access.data().active!==true||access.data().deleted===true||access.data().email!==email)throw Error('La cuenta de inspector no está habilitada.');trainingEvaluation.clear();progressGraphs.clear();finalReport.clear();responsible.clear();compliance.reset();documentsManager.clear();inspectorTrainingShell(u);}catch(e){currentUser=null;inspectorViewActive=false;clearInterval(inspectorTimer);trainingEvaluation.clear();progressGraphs.clear();finalReport.clear();responsible.clear();compliance.reset();documentsManager.clear();login(e.message);}});}catch(e){login('Error al conectar con Firebase: '+e.message);}}
+async function init(){login('');const cfg=window.EXPALSA_FIREBASE_CONFIG;if(!cfg?.apiKey||!cfg?.projectId||!days.length){login('No se cargaron la configuración Firebase o los contenidos de las jornadas.');return;}try{const V='13.0.0';const [appMod,authMod,fire,functionsMod]=await Promise.all([import('https://www.gstatic.com/firebasejs/'+V+'/firebase-app.js'),import('https://www.gstatic.com/firebasejs/'+V+'/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/'+V+'/firebase-firestore.js'),import('https://www.gstatic.com/firebasejs/'+V+'/firebase-functions.js')]);fs=Object.assign({},fire,authMod);const app=appMod.initializeApp(cfg,'expalsa-capacitacion-2026');auth=authMod.getAuth(app);db=fire.getFirestore(app);trainingCall=(name,data={})=>functionsMod.httpsCallable(functionsMod.getFunctions(app,'us-central1'),name)(data);photoManager=createPhotoManager({fs,db,auth,getSession:()=>state.draft,getSaved:id=>state.sessions.has(id),saveDraft:()=>saveSession(false),isSaving:()=>!!activeSave,notify:toast});await authMod.setPersistence(auth,authMod.browserSessionPersistence);authMod.onAuthStateChanged(auth,async u=>{if(!u){photoManager?.clear();state.photoUrls.clear();state.photoDocs.clear();state.identities.clear();state.profileNames.clear();state.accounts=[];state.people=[];state.sessions.clear();state.draft=null;graphViewerActive=false;clearInterval(graphViewerTimer);graphViewerTimer=null;clearTimeout(inspectorAnswerSave);inspectorPendingAnswers={};inspectorAnswerQueue=Promise.resolve();window.inspectorTrainingAttempt=null;window.inspectorTrainingDay=null;currentUser=null;inspectorViewActive=false;clearInterval(inspectorTimer);trainingEvaluation.clear();progressGraphs.clear();finalReport.clear();responsible.clear();compliance.reset();documentsManager.clear();login('');return;}try{currentUser=u;const email=(u.email||'').trim().toLowerCase();if(email==='jefferson@expalsaevaluations.com'){const snap=await fire.getDoc(fire.doc(db,'expalsa_calidad_config','administrador'));if(!snap.exists()||snap.data().uid!==u.uid||snap.data().email!==email)throw Error('La cuenta no coincide con la identidad administrativa autorizada.');inspectorViewActive=false;if(!trainingTimer)trainingTimer=createTrainingTimer({getSession:()=>state.draft,getPersonName:d=>{const p=state.people.find(x=>x.id===d.personId);return p?(officialName(p.accountUid)||p.name):d.personName;},notify:toast});await loadCloud();return;}if(['fabio@expalsaevaluations.com','karina@expalsaevaluations.com'].includes(email)){graphViewerActive=true;state.tab='progress';render();clearInterval(graphViewerTimer);graphViewerTimer=setInterval(()=>{if(graphViewerActive&&currentUser?.uid===u.uid)progressGraphs.activate();},30000);return;}const access=await fire.getDoc(fire.doc(db,'expalsa_calidad_accesos',u.uid));if(!access.exists()||access.data().active!==true||access.data().deleted===true||access.data().email!==email)throw Error('La cuenta de inspector no está habilitada.');trainingEvaluation.clear();progressGraphs.clear();finalReport.clear();responsible.clear();compliance.reset();documentsManager.clear();inspectorTrainingShell(u);}catch(e){currentUser=null;inspectorViewActive=false;clearInterval(inspectorTimer);trainingEvaluation.clear();progressGraphs.clear();finalReport.clear();responsible.clear();compliance.reset();documentsManager.clear();login(e.message);}});}catch(e){login('Error al conectar con Firebase: '+e.message);}}
 function readForm(){if(!state.draft)return;const d=state.draft;if($('evalDate'))d.date=$('evalDate').value;if($('evalMinutes'))d.minutes=Math.min(480,Math.max(0,parseInt($('evalMinutes').value,10)||0));if($('evalAttendance'))d.attendance=$('evalAttendance').value;if($('evalNotes'))d.notes=$('evalNotes').value.slice(0,8000);if($('evalFollowup'))d.followup=$('evalFollowup').value.slice(0,3000);if($('evalResolved'))d.followupResolved=$('evalResolved').checked;}
 function formAuto(){editSeq++;clearTimeout(autoTimer);state.saveState='Cambios pendientes…';const lbl=$('saveStatus');if(lbl)lbl.textContent=state.saveState;autoTimer=setTimeout(()=>saveSession(false),1250);}
 async function saveSession(close){if(close&&photoManager?.isBusy()){toast('Espera a que terminen de guardarse las fotografías.');return;}if(!state.draft||!currentUser||!db)return;if(!activePeople().some(p=>p.id===state.draft.personId)){toast('Solo se pueden guardar registros de inspectores activos.');return;}clearTimeout(autoTimer);readForm();const d=JSON.parse(JSON.stringify(state.draft));const seq=editSeq;const src=sourceDay(d.day);if(!d.personId||!src)return;if(close){if(d.attendance!=='asistio'){toast('Para finalizar una práctica, el inspector debe haber asistido.');return;}const answers=src.checks.map(c=>d.ratings?.[c.id]);if(answers.some(v=>v!== 'na' && !(Number.isInteger(v)&&v>=0&&v<=4))){toast('Debes calificar o marcar N/A en todos los criterios.');return;}if(answers.filter(v=>Number.isInteger(v)).length<2){toast('Se requieren al menos dos criterios evaluados.');return;}if(needsFollow(d)&&!d.followup.trim()){toast('Registra la acción de refuerzo para los criterios con calificación baja.');return;}if(!d.notes.trim()){toast('Describe brevemente la evidencia o hallazgo de la visita.');return;}d.status='done';}
