@@ -29,6 +29,11 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .brand{display:flex;align-items:center;gap:8px;min-width:0;max-width:260px;color:#fff;font-size:12px;line-height:1.2;font-weight:700}
 .brand img{width:36px;height:36px;object-fit:contain;border-radius:50%;background:#fff;flex:none}
 .filters{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
+.session-card{display:none;align-items:center;gap:8px;max-width:240px;flex:none;padding:4px 6px 4px 10px;border:1px solid #ffffff35;border-radius:9px;background:#ffffff12;color:#fff}
+.session-card.visible{display:flex}
+.session-name{display:block;max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600}
+.session-logout{flex:none;border:0;border-radius:7px;padding:5px 8px;background:#ffffff22;color:#fff;font:inherit;font-size:12px;white-space:nowrap}
+.session-logout:hover{background:#ffffff35}
 .filters input{box-sizing:border-box;width:clamp(105px,11vw,180px);min-width:0;padding:7px 10px;border:1px solid #ffffff35;border-radius:8px;background:#ffffff18;color:#fff;font:inherit;font-size:13px}
 .filters input::placeholder{color:#ffffffb8}
 .filters input:focus{outline:2px solid #9cc8f0;outline-offset:1px}
@@ -115,8 +120,11 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:1
 #bar{flex-wrap:wrap}
 #bar .brand{max-width:none;flex:1 0 100%;font-size:12px}
 #bar .brand img{width:32px;height:32px}
-.filters{flex:1 1 100%;order:3;margin-left:0;gap:5px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.filters{flex:1 1 100%;order:3;margin-left:0;gap:5px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.session-card{grid-column:1/-1;max-width:none;justify-content:space-between}
+.session-name{max-width:calc(100vw - 160px)}
 .client-search-wrap{width:100%;min-width:0}
+.client-search-wrap{grid-column:1/-1}
 .filters input{width:100%;padding:6px 7px;font-size:12px}
 #back{padding:6px 8px;white-space:nowrap}
 #side{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:36%}
@@ -158,7 +166,7 @@ text.cl{font-weight:800;letter-spacing:.08em}text.cn{text-anchor:start}
 <body>
 <section id="authgate"><div class="gatebox"><img class="gate-logo" src="logo-inspectores-calidad.jpg" alt="Logo de inspectores de control de calidad EXPALSA"><h1>Sistema de consulta de ficha técnica interna</h1><p>Ingresa con tu cuenta de Evaluaciones EXPALSA. La cuenta administradora y las cuentas de Fabio y Karina entran sin autorización de dispositivo; los demás usuarios requieren aprobación.</p><form id="gateForm"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="username" required><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" required><button type="submit">Ingresar</button></form><button id="gateLogout" type="button" style="display:none;background:var(--line);color:var(--text)">Cerrar sesión</button><p id="gateMessage" role="status">Conectando con Firebase…</p></div></section>
 <div id="app">
-<header id="bar"><div class="brand"><img src="logo-inspectores-calidad.jpg" alt=""><span>Sistema de consulta de ficha técnica interna</span></div><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><div class="filters"><input id="countryFilter" type="search" list="countryOptions" placeholder="Buscar país" aria-label="Buscar país"><datalist id="countryOptions"></datalist><input id="cityFilter" type="search" list="cityOptions" placeholder="Buscar ciudad" aria-label="Buscar ciudad"><datalist id="cityOptions"></datalist><div class="client-search-wrap"><input id="clientFilter" type="search" placeholder="Buscar cliente/importador" aria-label="Buscar cliente o importador" autocomplete="off"><div id="clientResults" role="listbox" aria-label="Coincidencias de clientes e importadores"></div></div></div><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
+<header id="bar"><div class="brand"><img src="logo-inspectores-calidad.jpg" alt=""><span>Sistema de consulta de ficha técnica interna</span></div><button id="back" disabled>← Atrás</button><nav id="crumbs"></nav><div class="filters"><div id="sessionCard" class="session-card" aria-label="Sesión iniciada"><span id="sessionName" class="session-name"></span><button id="sessionLogout" class="session-logout" type="button">Cerrar sesión</button></div><input id="countryFilter" type="search" list="countryOptions" placeholder="Buscar país" aria-label="Buscar país"><datalist id="countryOptions"></datalist><input id="cityFilter" type="search" list="cityOptions" placeholder="Buscar ciudad" aria-label="Buscar ciudad"><datalist id="cityOptions"></datalist><div class="client-search-wrap"><input id="clientFilter" type="search" placeholder="Buscar cliente/importador" aria-label="Buscar cliente o importador" autocomplete="off"><div id="clientResults" role="listbox" aria-label="Coincidencias de clientes e importadores"></div></div></div><button id="adm" class="ab">Admin</button></header><div id="mod"></div>
 <main id="stage">
 <svg id="svg"><g id="map"></g></svg>
 <aside id="side" class="pan"></aside>
@@ -397,18 +405,20 @@ records.forEach(function(c){if(placeNames[slug(c.nombre)])return;var pt=proj([c.
 function refresh(){if(!F.length||!rendered)return;if(st.city&&!getCity(st.city))st.city=null;render(rendered);if(st.v==="country"){zoom(st.id,1);if(st.city)zoomCity(st.city)}upd()}
 function placeCity(e){placing=false;var h=$("hint");h.textContent="Toca un continente para explorarlo";h.style.opacity=0;var pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var q=pt.matrixTransform(mapG.getScreenCTM().inverse()),ll=proj.invert([q.x,q.y]),nm=prompt("Nombre de la ciudad:");
 if(!nm||!ll)return;FS.save("destinos","ciudad_"+st.id+"_"+slug(nm),{tipo:"ciudad",pais:st.id,nombre:nm.trim(),lat:+ll[1].toFixed(4),lon:+ll[0].toFixed(4),grados:[]})}
+function sessionUser(u){var card=$("sessionCard"),label=$("sessionName");if(!card||!label)return;if(!u){card.classList.remove("visible");label.textContent="";return}var uid=u.uid;label.textContent=u.displayName||u.email||"Usuario";card.classList.add("visible");if(FS&&FS.identityName)FS.identityName(uid).then(function(n){if(USR&&USR.uid===uid&&n)label.textContent=n}).catch(function(){})}
 function initFB(api){if(!api)return;FS=api;
 api.watch("grados",function(L){L.forEach(function(d){var id=d.id;delete d.id;GR[id]=Object.assign(GR[id]||{},d)});refresh()});
 api.watch("destinos",function(L){var nd={},nc={},nt={};L.forEach(function(d){if(d.tipo==="pais")nd[d.codigo]=d.grados||[];else if(d.tipo==="continente")nc[d.codigo]=d.grados||[];else if(d.tipo==="ciudad")nt[d.id]=d});
 if(Object.keys(nd).length)D=nd;if(Object.keys(nt).length)CITY=nt;CD=nc;refresh()});
 api.watch("clientes_calidad",function(L){CLIENTS={};L.forEach(function(d){CLIENTS[d.id]=d});upd()});
 api.watch("fichas_tecnicas_calidad",function(L){FICHAS={};L.forEach(function(d){FICHAS[d.id]=d});upd()});
-api.onAuth(function(u,ok){USR=u;ADMIN=!!ok;upd()})}
+api.onAuth(function(u,ok){USR=u;ADMIN=!!ok;sessionUser(u);upd()})}
 function box(h){$("mod").innerHTML='<div class="box">'+h+"</div>";$("mod").style.display="grid"}
 function closeMod(){$("mod").style.display="none"}
+$("sessionLogout").onclick=function(){if(FS)FS.logout()};
 $("adm").onclick=function(){
 if(!FS)box('<h3>Administración</h3><p>Firebase no está configurado. Pega tu configuración en <code>FIREBASE_CONFIG</code> (ver LEEME.txt). Mientras tanto se muestra la matriz incorporada, en modo solo lectura.</p><button class="btn sec" data-x>Cerrar</button>');
-else if(ADMIN)box('<h3>Administración</h3><p>Sesión de administrador de calidad activa.</p><button class="btn" data-seed>Cargar matriz base</button> <button class="btn sec" data-client-manager>Gestionar clientes</button> <button class="btn sec" data-ficha-import>Importar fichas técnicas</button><input id="fichaImportFile" type="file" accept="application/json,.json" hidden> '+(USR&&String(USR.email||"").toLowerCase()==="jefferson@expalsaevaluations.com"?'<button class="btn sec" data-devices>Autorizar dispositivos</button> ':"")+'<button class="btn sec" data-out>Cerrar sesión</button> <button class="btn sec" data-x>Cerrar</button><p class="sb">La importación guarda las fichas y los parámetros en Firestore; no publica documentos en la web.</p>');
+else if(ADMIN)box('<h3>Administración</h3><p>Sesión de administrador de calidad activa.</p><button class="btn" data-seed>Cargar matriz base</button> <button class="btn sec" data-client-manager>Gestionar clientes</button> <button class="btn sec" data-ficha-import>Importar fichas técnicas</button><input id="fichaImportFile" type="file" accept="application/json,.json" hidden> '+(USR&&String(USR.email||"").toLowerCase()==="jefferson@expalsaevaluations.com"?'<button class="btn sec" data-devices>Autorizar dispositivos</button> ':"")+'<button class="btn sec" data-x>Cerrar</button><p class="sb">La importación guarda las fichas y los parámetros en Firestore; no publica documentos en la web.</p>');
 else box('<h3>Acceso restringido</h3><p class="sb">Solo el administrador puede modificar la matriz. Inicia sesión desde la pantalla de acceso.</p><button class="btn sec" data-x>Cerrar</button>')};
 function importFichaFile(){if(!ADMIN||!FS)return;var f=$("fichaImportFile");if(f){f.value="";f.click()}}
 function importFichaJson(file){if(!ADMIN||!FS||!file)return;var reader=new FileReader();reader.onerror=function(){alert("No se pudo leer el archivo seleccionado.")};reader.onload=function(){try{var pack=JSON.parse(String(reader.result||"")),clients=Array.isArray(pack.clientes)?pack.clientes:[],sheets=Array.isArray(pack.fichas)?pack.fichas:[];if(!clients.length||!sheets.length||clients.length+sheets.length>450)throw Error("El archivo debe contener clientes y fichas (máximo 450 registros).");var clientOps=[],mapped={},sheetsByClient={},current=Object.keys(CLIENTS).map(function(id){return Object.assign({id:id},CLIENTS[id])});clients.forEach(function(c){if(!c.id||!c.nombre||!c.tipo||!c.continente)throw Error("Un cliente no tiene nombre, tipo o continente.");var exists=current.find(function(x){return norm(x.nombre)===norm(c.nombre)&&x.tipo===c.tipo&&(c.pais?x.pais===c.pais:!x.pais&&x.continente===c.continente)}),id=exists?exists.id:c.id,data={nombre:c.nombre,tipo:c.tipo,continente:c.continente,grados:[]};if(c.pais)data.pais=c.pais;if(exists){var old=Object.assign({},exists);delete old.id;data=Object.assign({},data,old)}mapped[c.id]=id;clientOps.push(["clientes_calidad",id,data])});sheets.forEach(function(f){if(!f.id||!mapped[f.clienteId])throw Error("Una ficha no enlaza con un cliente del archivo.");var d=Object.assign({},f,{clienteId:mapped[f.clienteId]}),fichaId=d.id;delete d.id;(sheetsByClient[d.clienteId]||(sheetsByClient[d.clienteId]=[])).push(["fichas_tecnicas_calidad",fichaId,d])});var ids=Object.keys(sheetsByClient),clientCount=clientOps.length,sheetCount=sheets.length;if(!confirm("Se guardarán "+clientCount+" clientes o destinos y "+sheetCount+" fichas técnicas en Firestore. ¿Continuar?"))return;FS.batch(clientOps).then(function(){var fichaOps=[];ids.forEach(function(id){fichaOps=fichaOps.concat(sheetsByClient[id])});return fichaOps.reduce(function(chain,op){return chain.then(function(){return FS.batch([op]).catch(function(e){throw Error("Ficha "+op[1]+": "+(e.message||e))})})},Promise.resolve())}).then(function(){box("<h3>Importación completada</h3><p>Se guardaron "+clientCount+" clientes o destinos y "+sheetCount+" fichas técnicas en Firestore.</p><button class=\"btn sec\" data-x>Cerrar</button>")}).catch(function(e){box("<h3>No se completó la importación</h3><p>Los clientes quedaron guardados; revisa el error antes de reintentar: "+esc(e.message||e)+"</p><button class=\"btn sec\" data-x>Cerrar</button>")})}catch(e){alert("Archivo de importación no válido: "+(e.message||e))}};reader.readAsText(file,"UTF-8")}
@@ -473,7 +483,7 @@ if(d.clientGradeDel!==undefined){captureClientFields();CLIENT_FORM.grados=readCl
 if("fichaImport" in d){importFichaFile();return}
 if("devices" in d)showDevices();
 else if(d.deviceStatus)FS.setDeviceStatus(d.deviceUid,d.deviceId,d.deviceStatus).then(showDevices).catch(function(x){alert("No se pudo actualizar el dispositivo: "+x.message)});
-else if("out" in d){FS.logout();closeMod()}else if("seed" in d)seed();
+else if("seed" in d)seed();
 else if("add" in d){r=ED.collect();r.push({g:"AAA"});ED.set(r)}
 else if(d.del!==undefined){r=ED.collect();r.splice(+d.del,1);ED.set(r)}
 else if("save" in d){r=ED.collect();var k=ED.kind,i=ED.id;
@@ -531,6 +541,7 @@ U.onAuthStateChanged(au,async u=>{if(!u){readyDevice="";adminMode=false;showGate
 firestoreApi={
 watch:(c,cb)=>F.onSnapshot(F.collection(db,c),s=>cb(s.docs.map(d=>({id:d.id,...d.data()})))),
 list:c=>F.getDocs(F.collection(db,c)).then(s=>s.docs.map(d=>({id:d.id,...d.data()}))),
+identityName:uid=>F.getDoc(F.doc(db,"expalsa_calidad_identidades",uid)).then(s=>{if(!s.exists())return"";const d=s.data(),name=[d.firstNames,d.lastNames].filter(Boolean).join(" ").trim();return name||d.displayName||""}),
 save:(c,id,data)=>F.setDoc(F.doc(db,c,id),data,{merge:true}),remove:(c,id)=>F.deleteDoc(F.doc(db,c,id)),
 batch:ops=>{const b=F.writeBatch(db);ops.forEach(o=>b.set(F.doc(db,o[0],o[1]),o[2]));return b.commit()},
 login:()=>Promise.reject(Error("Inicia sesión desde la pantalla de acceso.")),logout:()=>U.signOut(au),
@@ -542,6 +553,5 @@ listDevices:()=>call("listCalidadDevices"),setDeviceStatus:(uid,deviceId,status)
 </script>
 </body>
 </html>
-
 
 
