@@ -9,6 +9,7 @@ exports.manageTrainingGroups = onCall(
   {region:'us-central1',maxInstances:3,timeoutSeconds:60,memory:'256MiB'},
   require('./training-groups').handler(getFirestore(), requireTrainingAdmin)
 );
+const {registry: trainingGroupRegistry} = require('./training-groups');
 Object.assign(exports, require("./mapa-calidad-devices"));
 
 const DOMAIN = "expalsaevaluations.com";
@@ -86,8 +87,8 @@ const TRAINING_VIEWER_UIDS = {"fabio@expalsaevaluations.com":"pC14usDq9pWuVoqLOv
 exports.getTrainingProgressView=onCall({region:"us-central1",maxInstances:5,timeoutSeconds:60},async request=>{
   if(!request.auth||TRAINING_VIEWER_UIDS[String(request.auth.token.email||"").toLowerCase()]!==request.auth.uid)throw new HttpsError("permission-denied","Acceso de consulta no autorizado.");
   const db=getFirestore();
-  const [participants,sessions,attempts,bankDoc,groupConfig]=await Promise.all([db.collection("expalsa_capacitacion_2026_participantes").get(),db.collection("expalsa_capacitacion_2026_sesiones").get(),db.collection(TRAINING_ATTEMPTS).get(),db.doc(TRAINING_BANK).get(),db.collection("expalsa_capacitacion_2026_grupos").get()]);
-  const assistants=new Map(groupConfig.docs.filter(d=>d.data().kind==="assistant").map(d=>{const a=d.data();return [a.id||d.id.replace(/^assistant_/,""),a.name||""];})),groups=groupConfig.docs.map(d=>d.data()).filter(g=>Number.isInteger(g.number)&&g.kind!=="assistant").map(g=>({number:g.number,assistantId:g.assistantId||"",name:assistants.get(g.assistantId)||g.name||""})).sort((a,b)=>a.number-b.number);
+  const [participants,sessions,attempts,bankDoc,groupConfig,legacyGroup]=await Promise.all([db.collection("expalsa_capacitacion_2026_participantes").get(),db.collection("expalsa_capacitacion_2026_sesiones").get(),db.collection(TRAINING_ATTEMPTS).get(),db.doc(TRAINING_BANK).get(),db.collection("expalsa_capacitacion_2026_grupos").get(),db.doc("expalsa_capacitacion_2026_equipo/responsable").get()]);
+  const groups=trainingGroupRegistry(groupConfig.docs.map(d=>d.data()),legacyGroup.exists?legacyGroup.data():null).groups.map(({number,assistantId,name})=>({number,assistantId,name}));
   const people=[];for(const doc of participants.docs){const p=doc.data();if(p.active!==true||p.deleted===true||!p.accountUid)continue;const [access,identity,photo]=await Promise.all([db.doc(`expalsa_calidad_accesos/${p.accountUid}`).get(),db.doc(`expalsa_calidad_identidades/${p.accountUid}`).get(),db.doc(`expalsa_calidad_fotos_perfil/${p.accountUid}`).get()]);if(!access.exists||access.data().active!==true||access.data().deleted===true)continue;const i=identity.exists?identity.data():{},f=photo.exists?photo.data():{};people.push({id:doc.id,accountUid:p.accountUid,active:true,deleted:false,name:[i.firstNames,i.lastNames].filter(Boolean).join(" ")||p.name||"Inspector",groupNumber:Number.isInteger(p.groupNumber)?p.groupNumber:1,firstNames:i.firstNames||"",lastNames:i.lastNames||"",employeeCode:i.employeeId||"",station:p.station||"",portrait:typeof f.jpeg==="string"&&/^\/9j\/[A-Za-z0-9+/=]+$/.test(f.jpeg)?"data:image/jpeg;base64,"+f.jpeg:"",createdAtMs:p.createdAt?.toMillis?.()||0});}
   const ids=new Set(people.map(p=>p.id)),rows=sessions.docs.map(d=>({id:d.id,...d.data()})).filter(s=>ids.has(s.personId)).map(s=>({id:s.id,personId:s.personId,day:s.day,status:s.status,ratings:s.ratings||{},station:s.station||"",date:s.date||""}));
   const bank=bankDoc.exists?bankDoc.data():{questions:[]},records=attempts.docs.map(d=>({id:d.id,...d.data()})),theory={};
@@ -485,5 +486,6 @@ exports.getTrainingEvaluationState = onCall(
     return {status,attempt:publicTrainingAttempt(publicAttempt),pendingKind:pending?.kind||"",pendingInitial,pendingRefuerzo,initialEnabled:!!permission.initialEnabled,refuerzoEnabled:!!permission.refuerzoEnabled,canRequestRefuerzo:attempts.some(a=>a.status==="submitted"||a.status==="graded")&&!permission.refuerzoEnabled&&!pendingRefuerzo,bank:dayBank};
   }
 );
+
 
 
