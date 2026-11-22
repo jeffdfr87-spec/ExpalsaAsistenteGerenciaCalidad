@@ -1,6 +1,6 @@
 # Oliver
 
-App web progresiva independiente, publicada en `https://oliver-oceantreasure.web.app/`. Usa la app web Firebase `Oliver` y la base Firestore `default` del proyecto `oceantreasure-app`.
+App web progresiva independiente, publicada en `https://oliverasist.web.app/`. Usa Firebase Authentication y la base Firestore configurada para la app.
 
 ## Datos
 
