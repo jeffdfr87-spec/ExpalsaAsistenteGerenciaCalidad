@@ -9,6 +9,9 @@ let selectedPhoto = '';
 let installPrompt = null;
 let toastTimer;
 const pendingNotices = new Set();
+let voiceFlow = null;
+let voiceRecognition = null;
+let voiceTurn = 0;
 
 const database = new Promise((resolve, reject) => {
   if (!('indexedDB' in window)) {
@@ -109,10 +112,12 @@ async function compressedPhoto(file) {
 async function checkDueNotices() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   for (const reminder of reminders) {
-    if (reminder.done || reminder.notified || pendingNotices.has(reminder.id) || reminder.dueAt > Date.now()) continue;
+    const notifyAt = reminder.notifyAt ?? reminder.dueAt;
+    if (reminder.done || reminder.notified || pendingNotices.has(reminder.id) || notifyAt > Date.now()) continue;
     pendingNotices.add(reminder.id);
     try {
-      new Notification('Oliver', { body:reminder.title, icon:'/icon.svg', tag:reminder.id });
+      const when = new Intl.DateTimeFormat('es-EC', { hour:'2-digit', minute:'2-digit' }).format(new Date(reminder.dueAt));
+      new Notification('Oliver · Recordatorio', { body:`${reminder.title} · Hoy a las ${when}`, icon:'/icon.svg', tag:reminder.id });
       reminder.notified = true;
       reminder.updatedAt = Date.now();
       await storageRequest('readwrite', store => store.put(reminder));
@@ -146,8 +151,10 @@ $('reminderForm').addEventListener('submit', async event => {
     note: $('note').value.trim(),
     photoDataUrl: selectedPhoto || previous?.photoDataUrl || '',
     dueAt: due.getTime(),
+    reminderLeadMinutes: previous?.reminderLeadMinutes ?? null,
     done: previous?.done || false,
     notified: false,
+    notifyAt: previous?.reminderLeadMinutes != null ? due.getTime() - previous.reminderLeadMinutes * 60000 : previous?.notifyAt ?? due.getTime(),
     createdAt: previous?.createdAt || now,
     updatedAt: now
   };
@@ -236,24 +243,107 @@ $('locateBtn').addEventListener('click', () => {
   }, { enableHighAccuracy:true, timeout:10000 });
 });
 
-$('voiceBtn').addEventListener('click', () => {
-  const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Speech) {
-    showToast('Prueba el micrófono del teclado para dictar.');
-    return;
+const voiceSpeech = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voiceMonths = {enero:0, febrero:1, marzo:2, abril:3, mayo:4, junio:5, julio:6, agosto:7, septiembre:8, octubre:9, noviembre:10, diciembre:11};
+const voiceNumbers = {una:1,uno:1,un:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,dieciseis:16,diecisiete:17,dieciocho:18,diecinueve:19,veinte:20,veintiuno:21,veintidos:22,veintitres:23,veinticuatro:24,veinticinco:25,veintiseis:26,veintisiete:27,veintiocho:28,veintinueve:29,treinta:30,treintaiuno:31,media:30};
+function voiceNorm(text) { return text.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.,;!?]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function spokenNumber(text) { const clean = voiceNorm(text); if (/^\d{1,2}$/.test(clean)) return Number(clean); const words = clean.split(' '); return voiceNumbers[words.find(word => word in voiceNumbers)] ?? null; }
+function parseVoiceDate(text) {
+  const clean = voiceNorm(text), now = new Date();
+  if (/\bpasado manana\b/.test(clean)) { now.setDate(now.getDate()+2); return isoDate(now); }
+  if (/\bmanana\b/.test(clean)) { now.setDate(now.getDate()+1); return isoDate(now); }
+  if (/\bhoy\b/.test(clean)) return isoDate(now);
+  const numeric = clean.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+  if (numeric) { const year = numeric[3] ? Number(numeric[3].length === 2 ? `20${numeric[3]}` : numeric[3]) : now.getFullYear(); const date = new Date(year, Number(numeric[2])-1, Number(numeric[1])); return date.getMonth() === Number(numeric[2])-1 && date.getDate() === Number(numeric[1]) ? isoDate(date) : null; }
+  const named = clean.match(/\b(\d{1,2}|[a-z]+)\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+de\s+(\d{4}))?/);
+  if (named) { const day = spokenNumber(named[1]); if (!day) return null; let year = Number(named[3] || now.getFullYear()); let date = new Date(year, voiceMonths[named[2]], day); if (date.getMonth() !== voiceMonths[named[2]] || date.getDate() !== day) return null; if (!named[3] && date < new Date(now.getFullYear(), now.getMonth(), now.getDate())) date = new Date(year+1, voiceMonths[named[2]], day); return isoDate(date); }
+  const weekdays = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+  const weekday = weekdays.findIndex(day => new RegExp(`\\b${day}\\b`).test(clean));
+  if (weekday >= 0) { const date = new Date(now); let delta = (weekday - date.getDay() + 7) % 7; if (delta === 0 || /proximo|que viene/.test(clean)) delta += 7; date.setDate(date.getDate()+delta); return isoDate(date); }
+  return null;
+}
+function parseVoiceTime(text) {
+  const clean = voiceNorm(text);
+  const match = clean.match(/(?:a\s+las?\s+)?(\d{1,2})(?::(\d{2}))?(?:\s+y\s+(media|cuarto)|\s+(media|cuarto))?\s*(de\s+la\s+(manana|tarde|noche))?/);
+  let hour, minute;
+  if (match) { hour = Number(match[1]); minute = match[2] ? Number(match[2]) : (match[3] || match[4] ? (match[3] || match[4]) === 'media' ? 30 : 15 : 0); }
+  else { const word = clean.match(/(?:a\s+las?\s+)?(una|uno|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)(?:\s+y\s+(media|cuarto))?\s*(?:de\s+la\s+(manana|tarde|noche))?/); if (!word) return null; hour = voiceNumbers[word[1]]; minute = word[2] === 'media' ? 30 : word[2] === 'cuarto' ? 15 : 0; if (word[3] && ['tarde','noche'].includes(word[3]) && hour < 12) hour += 12; }
+  const period = match?.[6]; if (period && ['tarde','noche'].includes(period) && hour < 12) hour += 12;
+  if (!Number.isInteger(hour) || hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+}
+function speakVoice(text, onEnd) {
+  const turn = ++voiceTurn;
+  window.speechSynthesis?.cancel();
+  $('voicePrompt').textContent = text;
+  $('voiceStatus').textContent = 'Oliver está hablando…';
+  $('voiceStatus').classList.remove('listening');
+  $('voiceRetry').classList.add('hidden');
+  if (!('speechSynthesis' in window)) { $('voiceStatus').textContent = 'Lee la pregunta y responde cuando veas «Escuchando…».'; onEnd?.(); return; }
+  const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'es-EC';
+  const voice = speechSynthesis.getVoices().find(item => item.lang.toLowerCase().startsWith('es'));
+  if (voice) utterance.voice = voice;
+  utterance.onend = () => { if (turn === voiceTurn && voiceFlow) onEnd?.(); };
+  utterance.onerror = () => { if (turn === voiceTurn && voiceFlow) onEnd?.(); };
+  speechSynthesis.speak(utterance);
+}
+function listenVoice() {
+  if (!voiceFlow) return;
+  if (!voiceSpeech) { $('voiceStatus').textContent = 'Este navegador no admite dictado por voz. Puedes cerrar y usar el formulario.'; $('voiceRetry').classList.add('hidden'); return; }
+  const recognition = new voiceSpeech(); voiceRecognition = recognition;
+  recognition.lang = 'es-EC'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+  $('voiceStatus').textContent = 'Escuchando…'; $('voiceStatus').classList.add('listening'); $('voiceRetry').classList.add('hidden');
+  recognition.onresult = event => { const answer = event.results[0][0].transcript; voiceRecognition = null; handleVoiceAnswer(answer); };
+  recognition.onerror = event => { $('voiceStatus').classList.remove('listening'); $('voiceStatus').textContent = event.error === 'not-allowed' ? 'Permite el micrófono para continuar.' : 'No te escuché con claridad.'; $('voiceRetry').classList.remove('hidden'); };
+  recognition.onend = () => { if (voiceRecognition === recognition) { voiceRecognition = null; $('voiceStatus').classList.remove('listening'); $('voiceStatus').textContent = 'No alcancé a escucharte.'; $('voiceRetry').classList.remove('hidden'); } };
+  try { recognition.start(); } catch { $('voiceStatus').textContent = 'No se pudo iniciar el micrófono. Inténtalo de nuevo.'; $('voiceRetry').classList.remove('hidden'); }
+}
+function askVoice(step, prompt) { voiceFlow.step = step; speakVoice(prompt, listenVoice); }
+function showVoiceChoices() {
+  const summary = `Agendaré: ${voiceFlow.data.title}. Fecha: ${new Intl.DateTimeFormat('es-EC',{dateStyle:'full'}).format(new Date(`${voiceFlow.data.date}T12:00`))}, a las ${voiceFlow.data.time}.${voiceFlow.data.place ? ` Lugar: ${voiceFlow.data.place}.` : ''}${voiceFlow.data.note ? ` Detalle: ${voiceFlow.data.note}.` : ''}`;
+  voiceFlow.step = 'choice'; $('voicePrompt').textContent = `${summary}\n\n¿Con cuánta anticipación quieres que te lo recuerde?`;
+  $('voiceStatus').textContent = 'Elige una opción para guardar. Mantén Oliver abierto para recibir el aviso.'; $('voiceStatus').classList.remove('listening'); $('voiceChoices').classList.remove('hidden'); $('voiceActions').classList.add('hidden');
+  const options = [['5 minutos',5],['30 minutos',30],['1 hora',60],['1 día',1440]];
+  $('voiceChoices').innerHTML = options.map(([label,minutes]) => `<button class="voice-choice" type="button" data-minutes="${minutes}">${label}</button>`).join('');
+  speakVoice(`${summary} ¿Con cuánta anticipación quieres que te lo recuerde? Elige cinco minutos, treinta minutos, una hora o un día.`, () => { $('voiceStatus').textContent = 'Elige una opción para guardar. Mantén Oliver abierto para recibir el aviso.'; });
+}
+function yesAnswer(text) { return /\b(si|claro|correcto|por supuesto|aj[aá]|ok|dale)\b/.test(voiceNorm(text)); }
+function noAnswer(text) { return /\b(no|ninguno|nada|eso es todo)\b/.test(voiceNorm(text)); }
+function handleVoiceAnswer(answer) {
+  if (!voiceFlow) return;
+  const flow = voiceFlow;
+  if (flow.step === 'title') { if (!answer.trim()) return askVoice('title','No alcancé a entender el aviso. ¿Qué necesitas agendar?'); flow.data.title = answer.trim(); return askVoice('date','Dime la fecha.'); }
+  if (flow.step === 'date') { const date = parseVoiceDate(answer); if (!date) return askVoice('date','No pude identificar la fecha. Dime, por ejemplo, mañana, el 15 de abril o el lunes.'); flow.data.date = date; return askVoice('time','Ahora, dime la hora del evento.'); }
+  if (flow.step === 'time') { const time = parseVoiceTime(answer); if (!time) return askVoice('time','No pude identificar la hora. Dime la hora, por ejemplo, a las siete de la tarde.'); const due = dateTime(flow.data.date,time); if (due.getTime() < Date.now()-60000) return askVoice('date','Esa fecha y hora ya pasaron. Dime otra vez la fecha.'); flow.data.time = time; return askVoice('place','¿Me podrías indicar el lugar? Si no tiene lugar, di que no.'); }
+  if (flow.step === 'place') { flow.data.place = noAnswer(answer) ? '' : answer.trim().replace(/^(en|a)\s+/i,''); return askVoice('noteDecision','¿Deseas dar algún otro detalle para recordártelo?'); }
+  if (flow.step === 'noteDecision') { if (yesAnswer(answer)) return askVoice('note','Te escucho.'); if (noAnswer(answer)) { flow.data.note = ''; return showVoiceChoices(); } return askVoice('noteDecision','Dime sí para agregar un detalle o no para continuar.'); }
+  if (flow.step === 'note') { flow.data.note = noAnswer(answer) ? '' : answer.trim(); return showVoiceChoices(); }
+}
+async function saveVoiceReminder(minutes) {
+  if (!voiceFlow) return;
+  const { title, date, time, place, note } = voiceFlow.data;
+  const due = dateTime(date,time), now = Date.now();
+  if (due.getTime() < now-60000) { $('voiceDialog').close(); voiceFlow = null; showToast('La fecha y hora ya pasaron. Vuelve a intentarlo.'); return; }
+  let noticePermission = 'unsupported';
+  if ('Notification' in window) {
+    noticePermission = Notification.permission;
+    if (noticePermission === 'default') noticePermission = await Notification.requestPermission();
   }
-  const recognition = new Speech();
-  recognition.lang = 'es-EC';
-  recognition.interimResults = false;
-  $('voiceBtn').innerHTML = '<span>●</span> Escuchando…';
-  recognition.onresult = e => {
-    const text = e.results[0][0].transcript;
-    $('title').value = $('title').value ? `${$('title').value} ${text}` : text;
-  };
-  recognition.onerror = () => showToast('No se pudo escuchar. Revisa el permiso del micrófono.');
-  recognition.onend = () => { $('voiceBtn').innerHTML = '<span>●</span> Dictar'; };
-  recognition.start();
+  const reminder = { id:crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(36).slice(2)}`, title, date, time, place, note, photoDataUrl:'', dueAt:due.getTime(), notifyAt:due.getTime()-minutes*60000, reminderLeadMinutes:minutes, done:false, notified:false, createdAt:now, updatedAt:now };
+  $('voiceStatus').textContent = 'Guardando en este teléfono…'; $('voiceChoices').classList.add('hidden');
+  try { await storageRequest('readwrite', store => store.put(reminder)); reminders.push(reminder); render(); voiceFlow = null; window.speechSynthesis?.cancel(); $('voiceDialog').close(); resetForm(); showToast(noticePermission === 'granted' ? 'Recordatorio guardado en este teléfono.' : 'Guardado. Activa avisos para recibir la notificación.'); if ('Notification' in window && Notification.permission === 'granted') checkDueNotices(); }
+  catch (error) { $('voiceStatus').textContent = error.message || 'No se pudo guardar el recordatorio.'; $('voiceChoices').classList.remove('hidden'); }
+}
+function closeVoice() { voiceTurn++; window.speechSynthesis?.cancel(); try { voiceRecognition?.abort(); } catch {} voiceRecognition = null; voiceFlow = null; $('voiceDialog').close(); $('voiceChoices').classList.add('hidden'); $('voiceActions').classList.remove('hidden'); }
+$('voiceBtn').addEventListener('click', () => {
+  if (!voiceSpeech) { showToast('Este navegador no admite dictado. Prueba el micrófono del teclado.'); return; }
+  voiceFlow = { step:'title', data:{} }; $('voiceDialog').showModal();
+  speakVoice('Bienvenido. ¿Qué necesitas agendar?', listenVoice);
 });
+$('voiceClose').addEventListener('click', closeVoice);
+$('voiceCancel').addEventListener('click', closeVoice);
+$('voiceRetry').addEventListener('click', () => { if (voiceFlow) speakVoice($('voicePrompt').textContent, listenVoice); });
+$('voiceChoices').addEventListener('click', event => { const button = event.target.closest('button[data-minutes]'); if (button) saveVoiceReminder(Number(button.dataset.minutes)); });
 
 $('notifyBtn').addEventListener('click', async () => {
   if (!('Notification' in window)) {
@@ -291,9 +381,6 @@ setInterval(checkDueNotices, 30000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 async function start() {
-  $('todayLabel').textContent = new Intl.DateTimeFormat('es-EC', {
-    weekday:'long', day:'numeric', month:'long'
-  }).format(new Date()).toLocaleUpperCase('es-EC');
   resetForm();
   try {
     reminders = await storageRequest('readonly', store => store.getAll());
@@ -305,4 +392,3 @@ async function start() {
   }
 }
 start();
-

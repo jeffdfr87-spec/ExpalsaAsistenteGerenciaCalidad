@@ -10,9 +10,8 @@
   <div class="shell" id="appScreen">
     <header class="topbar"><a class="brand" href="/"><span class="brand-mark">✳</span><span>Oliver</span></a><button id="installBtn" class="install hidden" type="button">Instalar app</button><button id="notifyBtn" class="icon-btn" type="button" aria-label="Activar notificaciones">♧</button></header>
     <main id="top">
-      <section class="welcome"><div><p class="eyebrow" id="todayLabel">TU DÍA, CON CALMA</p><h2>Que no se te<br><em>pase nada.</em></h2><p class="subhead">Anota lo que importa. Yo te ayudo a recordarlo.</p></div><div class="sun-art" aria-hidden="true"><span>✳</span></div></section>
       <section class="quick-add" aria-label="Agregar recordatorio">
-        <div class="quick-head"><div><span class="eyebrow">NUEVO RECORDATORIO</span><h2>¿Qué necesitas recordar?</h2></div><button class="voice" id="voiceBtn" type="button" title="Dictar por voz"><span>●</span> Dictar</button></div>
+        <div class="quick-head"><div><span class="eyebrow">NUEVO RECORDATORIO</span><h2>¿Qué necesitas recordar?</h2></div><button class="voice" id="voiceBtn" type="button" title="Crear un recordatorio conversando"><span>●</span> Dictar</button></div>
         <form id="reminderForm">
           <label class="sr-only" for="title">Escribe un recordatorio</label><input id="title" class="title-input" maxlength="100" placeholder="Ej. Comprar medicina para mamá" required>
           <div class="form-grid"><label class="field"><span>FECHA</span><input id="date" type="date" required></label><label class="field"><span>HORA</span><input id="time" type="time" required></label></div>
@@ -27,11 +26,17 @@
       <footer><span class="footer-mark">✳</span> Un pequeño espacio para acordarte de lo importante.</footer>
     </main>
     <nav class="bottom-nav"><a class="selected" href="#top"><span>⌂</span> Inicio</a><button id="addNav" type="button"><b>＋</b> Nuevo</button><button id="settingsNav" type="button"><span>☼</span> Avisos</button></nav>
+    <dialog id="voiceDialog" class="voice-dialog" aria-labelledby="voiceTitle">
+      <div class="voice-dialog-head"><span class="voice-mark" aria-hidden="true">✳</span><div><span class="eyebrow">OLIVER POR VOZ</span><h2 id="voiceTitle">Agendar un aviso</h2></div><button id="voiceClose" class="voice-close" type="button" aria-label="Cerrar">×</button></div>
+      <p id="voicePrompt" class="voice-prompt" aria-live="polite"></p>
+      <p id="voiceStatus" class="voice-status" role="status"></p>
+      <div id="voiceChoices" class="voice-choices hidden" aria-label="Anticipación del aviso"></div>
+      <div id="voiceActions" class="voice-actions"><button id="voiceRetry" class="voice-retry hidden" type="button">Repetir pregunta</button><button id="voiceCancel" class="voice-cancel" type="button">Cancelar</button></div>
+    </dialog>
     <div id="toast" role="status" class="toast"></div>
   </div>
-  <script type="module" src="/app.js?v=local3"></script>
+  <script type="module" src="/app.js?v=local7"></script>
 </body>
 </html>
-
 
 
