@@ -339,7 +339,9 @@ function listenVoice() {
     voiceRecognition = null;
     if (voiceFlow) voiceFlow.mobileVoiceActive = false;
     $('voiceDialog').classList.remove('listening');
-    $('voiceStatus').textContent = event.error === 'not-allowed' ? 'Permite el micrófono para continuar.' : 'La escucha continua no está disponible. Puedes dictar con el micrófono del teclado.';
+    $('voiceStatus').textContent = event.error === 'not-allowed' || event.error === 'service-not-allowed'
+      ? 'El permiso de micrófono está bloqueado. Actívalo para Oliver en los permisos de Android o de Chrome y vuelve a intentarlo.'
+      : 'No pude acceder al micrófono. Revisa su permiso o responde con el micrófono del teclado.';
     $('voiceRetry').classList.remove('hidden'); $('voiceFallback').classList.remove('hidden');
   };
   recognition.onend = () => {
@@ -367,6 +369,50 @@ function afterVoicePrompt() {
   if (mobileVoiceMode) {
     if (voiceFlow?.mobileVoiceActive) { $('voiceStatus').textContent = 'Escuchando…'; $('voiceDialog').classList.add('listening'); }
   } else listenVoice();
+}
+const voiceWelcome = 'Bienvenido. ¿Qué necesitas agendar?';
+async function requestMobileVoiceAccess() {
+  const flow = voiceFlow;
+  if (!flow) return;
+  const fallback = message => {
+    if (voiceFlow !== flow) return;
+    flow.mobileVoiceActive = false;
+    $('voiceFallback').classList.remove('hidden');
+    speakVoice(voiceWelcome, () => {
+      $('voiceStatus').textContent = message;
+      $('voiceRetry').classList.remove('hidden');
+    });
+  };
+  if (!navigator.mediaDevices?.getUserMedia) {
+    if (voiceSpeech) {
+      flow.mobileVoiceActive = true;
+      listenVoice();
+      speakVoice(voiceWelcome, afterVoicePrompt);
+    } else fallback('Este navegador no permite pedir el micrófono desde Oliver. Responde con el micrófono del teclado.');
+    return;
+  }
+  $('voiceStatus').textContent = 'Solicitando permiso para usar el micrófono…';
+  $('voiceRetry').classList.add('hidden');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    stream.getTracks().forEach(track => track.stop());
+    if (voiceFlow !== flow) return;
+    if (!voiceSpeech) {
+      fallback('Permiso concedido. Este navegador no incluye dictado directo; puedes responder con el micrófono del teclado.');
+      return;
+    }
+    flow.mobileVoiceActive = true;
+    listenVoice();
+    speakVoice(voiceWelcome, afterVoicePrompt);
+  } catch (error) {
+    if (voiceFlow !== flow) return;
+    const message = error?.name === 'NotAllowedError' || error?.name === 'SecurityError'
+      ? 'El permiso fue denegado. En Android, permite el micrófono para Oliver en Ajustes > Apps > Chrome > Permisos; luego vuelve a intentarlo.'
+      : error?.name === 'NotFoundError'
+        ? 'No encontré un micrófono disponible. Conecta uno o responde con el micrófono del teclado.'
+        : 'No pude activar el micrófono. Revisa el permiso de Oliver en Android y vuelve a intentarlo.';
+    fallback(message);
+  }
 }
 function askVoice(step, prompt) { voiceFlow.step = step; $('voiceFallbackInput').value = ''; $('voiceFallback').classList.add('hidden'); speakVoice(prompt, afterVoicePrompt); }
 function showVoiceChoices() {
@@ -413,17 +459,17 @@ async function saveVoiceReminder(minutes) {
 }
 function closeVoice() { voiceTurn++; clearTimeout(voiceSpeakTimer); window.speechSynthesis?.cancel(); try { voiceRecognition?.abort(); } catch {} voiceRecognition = null; voiceFlow = null; $('voiceDialog').classList.add('hidden'); $('voiceDialog').classList.remove('speaking','listening'); document.body.classList.remove('voice-open'); $('voiceChoices').classList.add('hidden'); $('voiceFallback').classList.add('hidden'); $('voiceActions').classList.remove('hidden'); $('voiceListen').disabled = false; }
 $('voiceBtn').addEventListener('click', () => {
-  voiceFlow = { step:'title', data:{}, mobileVoiceActive: mobileVoiceMode && !!voiceSpeech };
+  voiceFlow = { step:'title', data:{}, mobileVoiceActive:false };
   $('voiceFallback').classList.add('hidden'); $('voiceFallbackInput').value = ''; $('voiceListen').classList.toggle('hidden', !mobileVoiceMode); $('voiceDialog').classList.remove('hidden'); document.body.classList.add('voice-open'); $('voiceClose').focus({preventScroll:true});
-  if (mobileVoiceMode && voiceSpeech) listenVoice();
-  else if (mobileVoiceMode) { $('voiceFallback').classList.remove('hidden'); $('voiceStatus').textContent = 'Puedes responder con el micrófono del teclado.'; }
-  speakVoice('Bienvenido. ¿Qué necesitas agendar?', afterVoicePrompt);
+  $('voiceRetry').textContent = mobileVoiceMode ? 'Volver a solicitar micrófono' : 'Repetir pregunta';
+  if (mobileVoiceMode) requestMobileVoiceAccess();
+  else speakVoice(voiceWelcome, afterVoicePrompt);
 });
 $('voiceDialog').addEventListener('click', event => { if (event.target === $('voiceDialog')) closeVoice(); });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('voiceDialog').classList.contains('hidden')) { event.preventDefault(); closeVoice(); } });
 $('voiceClose').addEventListener('click', closeVoice);
 $('voiceCancel').addEventListener('click', closeVoice);
-$('voiceRetry').addEventListener('click', () => { if (voiceFlow) speakVoice($('voicePrompt').textContent, afterVoicePrompt); });
+$('voiceRetry').addEventListener('click', () => { if (!voiceFlow) return; if (mobileVoiceMode) requestMobileVoiceAccess(); else speakVoice($('voicePrompt').textContent, afterVoicePrompt); });
 $('voiceListen').addEventListener('click', listenVoice);
 $('voiceFallbackSend').addEventListener('click', () => { const answer = $('voiceFallbackInput').value.trim(); if (answer) { $('voiceFallback').classList.add('hidden'); handleVoiceAnswer(answer); } });
 
