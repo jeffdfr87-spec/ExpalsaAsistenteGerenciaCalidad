@@ -1,6 +1,6 @@
-# Mis Avisos
+# Oliver
 
-App web progresiva independiente, servida en `/recordatorios/` dentro del alojamiento Firebase existente. Usa la app web Firebase `Mis Avisos` y la base Firestore `default` del proyecto `oceantreasure-app`.
+App web progresiva independiente, publicada en `https://oliver-oceantreasure.web.app/`. Usa la app web Firebase `Oliver` y la base Firestore `default` del proyecto `oceantreasure-app`.
 
 ## Datos
 
