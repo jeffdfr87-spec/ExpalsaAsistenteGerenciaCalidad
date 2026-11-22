@@ -312,8 +312,8 @@ function noAnswer(text) { return /\b(no|ninguno|nada|eso es todo)\b/.test(voiceN
 function handleVoiceAnswer(answer) {
   if (!voiceFlow) return;
   const flow = voiceFlow;
-  if (flow.step === 'title') { if (!answer.trim()) return askVoice('title','No alcancé a entender el aviso. ¿Qué necesitas agendar?'); flow.data.title = answer.trim(); return askVoice('date','Dime la fecha.'); }
-  if (flow.step === 'date') { const date = parseVoiceDate(answer); if (!date) return askVoice('date','No pude identificar la fecha. Dime, por ejemplo, mañana, el 15 de abril o el lunes.'); flow.data.date = date; return askVoice('time','Ahora, dime la hora del evento.'); }
+  if (flow.step === 'title') { if (!answer.trim()) return askVoice('title','No alcancé a entender el aviso. ¿Qué necesitas agendar?'); flow.data.title = answer.trim(); return askVoice('date','¡Dime la fecha!'); }
+  if (flow.step === 'date') { const date = parseVoiceDate(answer); if (!date) return askVoice('date','No pude identificar la fecha. Dime, por ejemplo, mañana, el 15 de abril o el lunes.'); flow.data.date = date; return askVoice('time','¡Ahora, dime la hora del evento!'); }
   if (flow.step === 'time') { const time = parseVoiceTime(answer); if (!time) return askVoice('time','No pude identificar la hora. Dime la hora, por ejemplo, a las siete de la tarde.'); const due = dateTime(flow.data.date,time); if (due.getTime() < Date.now()-60000) return askVoice('date','Esa fecha y hora ya pasaron. Dime otra vez la fecha.'); flow.data.time = time; return askVoice('place','¿Me podrías indicar el lugar? Si no tiene lugar, di que no.'); }
   if (flow.step === 'place') { flow.data.place = noAnswer(answer) ? '' : answer.trim().replace(/^(en|a)\s+/i,''); return askVoice('noteDecision','¿Deseas dar algún otro detalle para recordártelo?'); }
   if (flow.step === 'noteDecision') { if (yesAnswer(answer)) return askVoice('note','Te escucho.'); if (noAnswer(answer)) { flow.data.note = ''; return showVoiceChoices(); } return askVoice('noteDecision','Dime sí para agregar un detalle o no para continuar.'); }
@@ -327,7 +327,10 @@ async function saveVoiceReminder(minutes) {
   let noticePermission = 'unsupported';
   if ('Notification' in window) {
     noticePermission = Notification.permission;
-    if (noticePermission === 'default') noticePermission = await Notification.requestPermission();
+    if (noticePermission === 'default') {
+      try { noticePermission = await Notification.requestPermission(); }
+      catch { noticePermission = 'denied'; }
+    }
   }
   const reminder = { id:crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(36).slice(2)}`, title, date, time, place, note, photoDataUrl:'', dueAt:due.getTime(), notifyAt:due.getTime()-minutes*60000, reminderLeadMinutes:minutes, done:false, notified:false, createdAt:now, updatedAt:now };
   $('voiceStatus').textContent = 'Guardando en este teléfono…'; $('voiceChoices').classList.add('hidden');
@@ -392,3 +395,4 @@ async function start() {
   }
 }
 start();
+
