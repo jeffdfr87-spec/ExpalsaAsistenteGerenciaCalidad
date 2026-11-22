@@ -7,7 +7,7 @@ const [appSdk, authSdk, dbSdk] = await Promise.all([
   import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
 ]);
 
-const app = appSdk.initializeApp(config, 'mis-avisos');
+const app = appSdk.initializeApp(config, 'oliver');
 const auth = authSdk.getAuth(app);
 const db = dbSdk.getFirestore(app);
 await authSdk.setPersistence(auth, authSdk.browserLocalPersistence);
@@ -112,7 +112,7 @@ async function checkDueNotices() {
     if (r.done || r.notified || pendingNotices.has(r.id) || dateTime(r.date, r.time).getTime() > Date.now()) continue;
     pendingNotices.add(r.id);
     try {
-      new Notification('Mis Avisos', { body:r.title, icon:'/recordatorios/icon.svg', tag:r.id });
+      new Notification('Oliver', { body:r.title, icon:'/icon.svg', tag:r.id });
       await dbSdk.updateDoc(dbSdk.doc(db, 'recordatorios', user.uid, 'avisos', r.id), { notified:true, updatedAt:dbSdk.serverTimestamp() });
     } catch (error) { console.warn('No se pudo enviar el aviso:', error); }
   }
@@ -223,6 +223,6 @@ window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();ins
 $('addNav').addEventListener('click',()=>{$('title').focus();window.scrollTo({top:0,behavior:'smooth'});});
 $('settingsNav').addEventListener('click',()=>$('notifyBtn').click());
 setInterval(checkDueNotices,30000);
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/recordatorios/sw.js').catch(()=>{});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 resetForm();
 
