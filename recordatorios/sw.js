@@ -1,5 +1,5 @@
-const CACHE='oliver-local-v3';
-const FILES=['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg'];
+const CACHE='oliver-local-v4';
+const FILES=['/','/index.html','/styles.css','/app.js?v=local3','/manifest.webmanifest','/icon.svg'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES))));
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(
