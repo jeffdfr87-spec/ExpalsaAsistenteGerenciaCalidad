@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "oceantreasure-app"
+  },
+  "targets": {
+    "oceantreasure-app": {
+      "hosting": {
+        "mis-avisos": [
+          "mis-avisos-oceantreasure"
+        ]
+      }
+    }
   }
 }
