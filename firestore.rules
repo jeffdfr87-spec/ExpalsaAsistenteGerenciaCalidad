@@ -1753,44 +1753,5 @@ match /empaque_ejercicio_reportes/{reporteId} {
     }
 
 
-    // Mis Avisos: cada cuenta solo puede acceder a sus propios avisos.
-    function misAvisosOwns(uid) {
-      return request.auth != null && request.auth.uid == uid;
-    }
-    function misAvisosValidReminder(d) {
-      return d.keys().hasOnly([
-          'title','date','time','place','note','photoDataUrl',
-          'dueAt','done','notified','createdAt','updatedAt'
-        ]) &&
-        d.keys().hasAll([
-          'title','date','time','place','note','photoDataUrl',
-          'dueAt','done','notified','createdAt','updatedAt'
-        ]) &&
-        d.title is string && d.title.size() > 0 && d.title.size() <= 100 &&
-        d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-        d.time is string && d.time.matches('^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$') &&
-        d.place is string && d.place.size() <= 160 &&
-        d.note is string && d.note.size() <= 500 &&
-        d.photoDataUrl is string &&
-        (d.photoDataUrl == '' ||
-          (d.photoDataUrl.size() <= 410000 &&
-           d.photoDataUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9/+=]*$'))) &&
-        d.dueAt is timestamp &&
-        d.done is bool && d.notified is bool &&
-        d.createdAt is timestamp && d.updatedAt is timestamp;
-    }
-    match /recordatorios/{uid}/avisos/{avisoId} {
-      allow get, list: if misAvisosOwns(uid);
-      allow create: if misAvisosOwns(uid) &&
-        misAvisosValidReminder(request.resource.data) &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.updatedAt == request.time;
-      allow update: if misAvisosOwns(uid) &&
-        misAvisosValidReminder(request.resource.data) &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.updatedAt == request.time;
-      allow delete: if misAvisosOwns(uid);
-    }
-
   }
 }
