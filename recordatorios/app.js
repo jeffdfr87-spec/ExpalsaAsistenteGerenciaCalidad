@@ -495,6 +495,28 @@ $('installBtn').addEventListener('click', async () => {
   installPrompt = null;
   $('installBtn').classList.add('hidden');
 });
+$('clearAppCacheBtn').addEventListener('click', async () => {
+  const button = $('clearAppCacheBtn');
+  button.disabled = true;
+  button.textContent = 'Limpiando…';
+  try {
+    if ('serviceWorker' in navigator) {
+      const rootScope = new URL('/', location.origin).href;
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.filter(registration => registration.scope === rootScope).map(registration => registration.unregister()));
+    }
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.filter(name => name.startsWith('oliver-local-')).map(name => caches.delete(name)));
+    }
+    showToast('Caché limpiada. Actualizando Oliver…');
+    setTimeout(() => location.replace(`${location.origin}/?refresh=${Date.now()}`), 350);
+  } catch {
+    button.disabled = false;
+    button.textContent = 'Limpiar caché y recargar';
+    showToast('No pude limpiar la caché. Vuelve a intentarlo.');
+  }
+});
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
   installPrompt = event;
