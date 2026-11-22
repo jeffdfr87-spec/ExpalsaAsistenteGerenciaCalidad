@@ -1,0 +1,2 @@
+{"name":"Mis Avisos","short_name":"Mis Avisos","description":"Tus recordatorios, a tu manera.","lang":"es","start_url":"/recordatorios/","scope":"/recordatorios/","display":"standalone","background_color":"#f6f8f3","theme_color":"#f6f8f3","icons":[{"src":"/recordatorios/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+

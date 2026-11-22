@@ -26,5 +26,22 @@
         "firebase-debug.log"
       ]
     }
-  ]
+  ],
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      ".gitignore",
+      "firestore.rules",
+      "**/.*",
+      "**/node_modules/**",
+      "functions/**",
+      "functions-sabor/**",
+      "tests/**",
+      "*.md",
+      "*.txt"
+    ]
+  }
 }
+

@@ -217,9 +217,6 @@ service cloud.firestore {
       return exists(attemptDoc(uid,stage)) && get(attemptDoc(uid,stage)).data.status in ['submitted','graded'] &&
         (get(attemptDoc(uid,stage)).data.status=='graded' || exists(automaticResultDoc(uid,stage)));
     }
-    function priorGraded(uid,stage) {
-      return retryStage(stage) ? true : stage=='1' || (stage=='2' && theoryDone(uid,'1')) || (stage=='3' && theoryDone(uid,'2'));
-    }
     function stageNumber(stage) { return stage in ['1','1_2']?1:stage in ['2','2_2']?2:3; }
     function progressKey(n) { return n==1?'1':n==2?'2':'3'; }
     function progressOf(p) { return p.get('stageProgress',{'version':1,'active':1,'closed':{}}); }
@@ -408,7 +405,6 @@ service cloud.firestore {
       let a=get(attemptDoc(uid,stage)).data;
       return a.get('bankSchema',1)==3 ? get(dynamicBank(a.version)).data.questionIds.size() : get(stageBank(stage)).data.questions.size();
     }
-    function automaticHit(a,k,id) { return a.get(id,'') in k[id].canonical ? 1 : 0; }
     function automaticThirty(a,b,k) {
       let ids=b.questionIds;
       return (a.get(ids[0],'') in k[ids[0]].canonical ? 1 : 0) + (a.get(ids[1],'') in k[ids[1]].canonical ? 1 : 0) + (a.get(ids[2],'') in k[ids[2]].canonical ? 1 : 0) + (a.get(ids[3],'') in k[ids[3]].canonical ? 1 : 0) + (a.get(ids[4],'') in k[ids[4]].canonical ? 1 : 0) + (a.get(ids[5],'') in k[ids[5]].canonical ? 1 : 0) + (a.get(ids[6],'') in k[ids[6]].canonical ? 1 : 0) + (a.get(ids[7],'') in k[ids[7]].canonical ? 1 : 0) + (a.get(ids[8],'') in k[ids[8]].canonical ? 1 : 0) + (a.get(ids[9],'') in k[ids[9]].canonical ? 1 : 0) + (a.get(ids[10],'') in k[ids[10]].canonical ? 1 : 0) + (a.get(ids[11],'') in k[ids[11]].canonical ? 1 : 0) + (a.get(ids[12],'') in k[ids[12]].canonical ? 1 : 0) + (a.get(ids[13],'') in k[ids[13]].canonical ? 1 : 0) + (a.get(ids[14],'') in k[ids[14]].canonical ? 1 : 0) + (a.get(ids[15],'') in k[ids[15]].canonical ? 1 : 0) + (a.get(ids[16],'') in k[ids[16]].canonical ? 1 : 0) + (a.get(ids[17],'') in k[ids[17]].canonical ? 1 : 0) + (a.get(ids[18],'') in k[ids[18]].canonical ? 1 : 0) + (a.get(ids[19],'') in k[ids[19]].canonical ? 1 : 0) + (a.get(ids[20],'') in k[ids[20]].canonical ? 1 : 0) + (a.get(ids[21],'') in k[ids[21]].canonical ? 1 : 0) + (a.get(ids[22],'') in k[ids[22]].canonical ? 1 : 0) + (a.get(ids[23],'') in k[ids[23]].canonical ? 1 : 0) + (a.get(ids[24],'') in k[ids[24]].canonical ? 1 : 0) + (a.get(ids[25],'') in k[ids[25]].canonical ? 1 : 0) + (a.get(ids[26],'') in k[ids[26]].canonical ? 1 : 0) + (a.get(ids[27],'') in k[ids[27]].canonical ? 1 : 0) + (ids.size()>28 && a.get(ids[28],'') in k[ids[28]].canonical ? 1 : 0) + (ids.size()>29 && a.get(ids[29],'') in k[ids[29]].canonical ? 1 : 0);
@@ -569,41 +565,11 @@ service cloud.firestore {
         (t is number && p is number && m is number && m>=(t+p)*0.5-0.0000001 && m<=(t+p)*0.5+0.0000001);
     }
 
-    function radarTopics(uid,d) {
-      return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','practicalAxes','theoreticalAxes','updatedBy','updatedAt']) && d.size()==13 && d.schema==3 && d.uid==uid && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) && radarMean(d.practice,d.theory,d.average) && d.delta==null && d.paired==0 && d.covered is int && d.covered>=0 && d.covered<=9 && d.practicalAxes is map && d.practicalAxes.size()==9 && d.practicalAxes.keys().hasOnly(['cuenta', 'bruto', 'neto', 'uniformidad', 'calidad', 'ordenes', 'registros', 'organolepticos', 'sulfitos']) && radarScore(d.practicalAxes.cuenta) && radarScore(d.practicalAxes.bruto) && radarScore(d.practicalAxes.neto) && radarScore(d.practicalAxes.uniformidad) && radarScore(d.practicalAxes.calidad) && radarScore(d.practicalAxes.ordenes) && radarScore(d.practicalAxes.registros) && radarScore(d.practicalAxes.organolepticos) && radarScore(d.practicalAxes.sulfitos) && d.theoreticalAxes is map && d.theoreticalAxes.size()==11 && d.theoreticalAxes.keys().hasOnly(['certificaciones', 'piezas', 'calculoscuenta', 'glaseo', 'uniformidad', 'cuenta', 'peso', 'calidad', 'temperatura', 'sulfitos', 'codex']) && radarScore(d.theoreticalAxes.certificaciones) && radarScore(d.theoreticalAxes.piezas) && radarScore(d.theoreticalAxes.calculoscuenta) && radarScore(d.theoreticalAxes.glaseo) && radarScore(d.theoreticalAxes.uniformidad) && radarScore(d.theoreticalAxes.cuenta) && radarScore(d.theoreticalAxes.peso) && radarScore(d.theoreticalAxes.calidad) && radarScore(d.theoreticalAxes.temperatura) && radarScore(d.theoreticalAxes.sulfitos) && radarScore(d.theoreticalAxes.codex) && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
-    }
     function radarTraining(uid,d) {
       return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','practicalAxes','theoreticalAxes','updatedBy','updatedAt']) && d.size()==13 && d.schema==4 && d.uid==uid && d.asOf is string && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) && radarMean(d.practice,d.theory,d.average) && d.delta==null && d.paired==0 && d.covered is int && d.covered>=0 && d.covered<=9 && d.practicalAxes is map && d.practicalAxes.size()==9 && d.practicalAxes.keys().hasOnly(['cuenta','bruto','neto','uniformidad','calidad','ordenes','registros','organolepticos','sulfitos']) && radarScore(d.practicalAxes.cuenta) && radarScore(d.practicalAxes.bruto) && radarScore(d.practicalAxes.neto) && radarScore(d.practicalAxes.uniformidad) && radarScore(d.practicalAxes.calidad) && radarScore(d.practicalAxes.ordenes) && radarScore(d.practicalAxes.registros) && radarScore(d.practicalAxes.organolepticos) && radarScore(d.practicalAxes.sulfitos) && d.theoreticalAxes is map && d.theoreticalAxes.size()==10 && d.theoreticalAxes.keys().hasOnly(['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10']) && radarScore(d.theoreticalAxes.C1) && radarScore(d.theoreticalAxes.C2) && radarScore(d.theoreticalAxes.C3) && radarScore(d.theoreticalAxes.C4) && radarScore(d.theoreticalAxes.C5) && radarScore(d.theoreticalAxes.C6) && radarScore(d.theoreticalAxes.C7) && radarScore(d.theoreticalAxes.C8) && radarScore(d.theoreticalAxes.C9) && radarScore(d.theoreticalAxes.C10) && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
     }
 
-    function radarOperational(uid,d) {
-      return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','competencies','technical','updatedBy','updatedAt']) && d.size()==13 && d.schema==2 && d.uid==uid && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) && radarMean(d.practice,d.theory,d.average) && d.delta==null && d.paired==0 && d.covered is int && d.covered>=0 && d.covered<=13 && d.competencies is map && d.competencies.size()==39 && d.competencies.keys().hasOnly(['P1_practice', 'P1_theory', 'P1_average', 'P2_practice', 'P2_theory', 'P2_average', 'P3_practice', 'P3_theory', 'P3_average', 'P4_practice', 'P4_theory', 'P4_average', 'P5_practice', 'P5_theory', 'P5_average', 'P6_practice', 'P6_theory', 'P6_average', 'P7_practice', 'P7_theory', 'P7_average', 'P8_practice', 'P8_theory', 'P8_average', 'P9_practice', 'P9_theory', 'P9_average', 'P10_practice', 'P10_theory', 'P10_average', 'P11_practice', 'P11_theory', 'P11_average', 'P12_practice', 'P12_theory', 'P12_average', 'P13_practice', 'P13_theory', 'P13_average']) && radarScore(d.competencies.P1_practice) && radarScore(d.competencies.P1_theory) && radarScore(d.competencies.P1_average) && radarScore(d.competencies.P2_practice) && radarScore(d.competencies.P2_theory) && radarScore(d.competencies.P2_average) && radarScore(d.competencies.P3_practice) && radarScore(d.competencies.P3_theory) && radarScore(d.competencies.P3_average) && radarScore(d.competencies.P4_practice) && radarScore(d.competencies.P4_theory) && radarScore(d.competencies.P4_average) && radarScore(d.competencies.P5_practice) && radarScore(d.competencies.P5_theory) && radarScore(d.competencies.P5_average) && radarScore(d.competencies.P6_practice) && radarScore(d.competencies.P6_theory) && radarScore(d.competencies.P6_average) && radarScore(d.competencies.P7_practice) && radarScore(d.competencies.P7_theory) && radarScore(d.competencies.P7_average) && radarScore(d.competencies.P8_practice) && radarScore(d.competencies.P8_theory) && radarScore(d.competencies.P8_average) && radarScore(d.competencies.P9_practice) && radarScore(d.competencies.P9_theory) && radarScore(d.competencies.P9_average) && radarScore(d.competencies.P10_practice) && radarScore(d.competencies.P10_theory) && radarScore(d.competencies.P10_average) && radarScore(d.competencies.P11_practice) && radarScore(d.competencies.P11_theory) && radarScore(d.competencies.P11_average) && radarScore(d.competencies.P12_practice) && radarScore(d.competencies.P12_theory) && radarScore(d.competencies.P12_average) && radarScore(d.competencies.P13_practice) && radarScore(d.competencies.P13_theory) && radarScore(d.competencies.P13_average) && d.technical is map && d.technical.size()==10 && d.technical.keys().hasOnly(['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10']) && radarScore(d.technical.C1) && radarScore(d.technical.C2) && radarScore(d.technical.C3) && radarScore(d.technical.C4) && radarScore(d.technical.C5) && radarScore(d.technical.C6) && radarScore(d.technical.C7) && radarScore(d.technical.C8) && radarScore(d.technical.C9) && radarScore(d.technical.C10) && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
-    }
 
-    function radarData(uid,d) {
-      let c=d.competencies;
-      let t=d.technical;
-      return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','competencies','technical','updatedBy','updatedAt']) && d.size()==13 &&
-        d.schema==1 && d.uid==uid && d.asOf is string && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-        radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) &&
-        radarMean(d.practice,d.theory,d.average) &&
-        (d.delta==null || (d.delta is number && d.delta>=-100 && d.delta<=100)) && d.paired is int && d.paired>=0 && d.paired<=10 && d.covered is int && d.covered>=0 && d.covered<=10 &&
-        c.size()==30 && c.keys().hasOnly(['C1_theory','C1_practice','C1_average','C2_theory','C2_practice','C2_average','C3_theory','C3_practice','C3_average','C4_theory','C4_practice','C4_average','C5_theory','C5_practice','C5_average','C6_theory','C6_practice','C6_average','C7_theory','C7_practice','C7_average','C8_theory','C8_practice','C8_average','C9_theory','C9_practice','C9_average','C10_theory','C10_practice','C10_average']) &&
-        radarScore(c.C1_theory) && c.C1_practice in [null,0,25,50,75,100] && radarScore(c.C1_average) &&
-        radarScore(c.C2_theory) && c.C2_practice in [null,0,25,50,75,100] && radarScore(c.C2_average) &&
-        radarScore(c.C3_theory) && c.C3_practice in [null,0,25,50,75,100] && radarScore(c.C3_average) &&
-        radarScore(c.C4_theory) && c.C4_practice in [null,0,25,50,75,100] && radarScore(c.C4_average) &&
-        radarScore(c.C5_theory) && c.C5_practice in [null,0,25,50,75,100] && radarScore(c.C5_average) &&
-        radarScore(c.C6_theory) && c.C6_practice in [null,0,25,50,75,100] && radarScore(c.C6_average) &&
-        radarScore(c.C7_theory) && c.C7_practice in [null,0,25,50,75,100] && radarScore(c.C7_average) &&
-        radarScore(c.C8_theory) && c.C8_practice in [null,0,25,50,75,100] && radarScore(c.C8_average) &&
-        radarScore(c.C9_theory) && c.C9_practice in [null,0,25,50,75,100] && radarScore(c.C9_average) &&
-        radarScore(c.C10_theory) && c.C10_practice in [null,0,25,50,75,100] && radarScore(c.C10_average) &&
-        t is map && t.size()==7 && t.keys().hasOnly(['temperature','sensory','weight','glaze','sulfites','defects','sampling']) &&
-        t.temperature in [null,0,25,50,75,100] && t.sensory in [null,0,25,50,75,100] && t.weight in [null,0,25,50,75,100] && t.glaze in [null,0,25,50,75,100] &&
-        t.sulfites in [null,0,25,50,75,100] && t.defects in [null,0,25,50,75,100] && t.sampling in [null,0,25,50,75,100] &&
-        d.updatedBy==request.auth.uid && d.updatedAt==request.time;
-    }
     match /expalsa_calidad_radares/{uid} {
       allow get: if expalsaAdmin() || (inspector() && request.auth.uid==uid && resource.data.get('schema',0)==4);
       allow list: if expalsaAdmin();
@@ -665,7 +631,6 @@ service cloud.firestore {
         d.createdAt is timestamp && d.createdBy==request.auth.uid && photoIdsValid(d.photoIds) && technicalValid(d.get('technical',null),false);
     }
 
-    function v2Level(v) { return v is int && v>=1 && v<=3; }
     function v2Competencies(v) {
       return v.values is map && v.values.size()>0 && v.values.keys().hasOnly(['K1','K2','K3','K4','K5']) &&
         v.values.values().hasOnly([0,1,2,3]) && v.evidence is map && v.evidence.keys()==v.values.keys() &&
@@ -1225,18 +1190,6 @@ match /empaque_ejercicio_reportes/{reporteId} {
 
     // MODULO DE CAPACITACION 2026 - EXCLUSIVAMENTE ADMINISTRADOR
     // Colecciones independientes: no modifica evaluaciones, resultados ni expedientes oficiales.
-    function capAdminWrite(d) {
-      return expalsaAdmin()
-        && d.keys().hasOnly(['id','name','station','accountUid','email','active','createdAt','updatedAt','updatedBy'])
-        && d.keys().hasAll(['id','name','station','accountUid','email','active','createdAt','updatedAt','updatedBy'])
-        && d.id is string && d.name is string && d.name.size() >= 2 && d.name.size() <= 100
-        && d.station in ['M02','M05','M06','M07','M08','M09','M10','B12','B345','T01']
-        && d.email is string && d.email.size() <= 150
-        && d.accountUid is string && d.accountUid.size() <= 128
-        && d.active is bool
-        && d.updatedBy == request.auth.uid
-        && d.updatedAt == request.time;
-    }
     function capBoardScore(v) { return v == null || (v is number && v >= 0 && v <= 100); }
     function capBoardScoresValid(s) { return s is list && s.size() == 10
       && capBoardScore(s[0]) && capBoardScore(s[1]) && capBoardScore(s[2]) && capBoardScore(s[3]) && capBoardScore(s[4])
@@ -1554,8 +1507,290 @@ match /empaque_ejercicio_reportes/{reporteId} {
       allow delete: if calidadPageUser() && calidadPageAdmin();
     }
 
+
+    // Inspection module: shared, numbered runs; append-only correction history.
+    function inspectionApprovedIdentity() {
+      return request.auth != null && request.auth.token.email is string
+        && request.auth.token.email in [
+          'karina@expalsaevaluations.com',
+          'luisc@expalsainspecciones.com',
+          'luisd@expalsainspecciones.com',
+          'gabriela@expalsainspecciones.com',
+          'anthony@expalsainspecciones.com',
+          'michelle@expalsainspecciones.com',
+          'leonor@expalsainspecciones.com'
+        ];
+    }
+    function expalsaInspectionInspector() {
+      return inspectionApprovedIdentity() && inspector();
+    }
+    function expalsaInspectionAdmin() {
+      return expalsaAdmin() || (request.auth != null
+        && request.auth.token.email == 'karina@expalsaevaluations.com'
+        && expalsaInspectionInspector());
+    }
+    function expalsaInspectionUser() { return expalsaAdmin() || expalsaInspectionInspector(); }
+    function inspectionRunCloser() {
+      return expalsaAdmin() || (request.auth != null
+        && request.auth.token.email == 'karina@expalsaevaluations.com'
+        && expalsaInspectionInspector());
+    }
+    function inspectionObservationOwner(d) {
+      return d.get('createdBy', d.get('inspectorUid', '')) == request.auth.uid;
+    }
+    function inspectionObservationEditor(d) {
+      return expalsaAdmin() || inspectionObservationOwner(d);
+    }
+    function optionalPresenceString(d, field, min, max) {
+      return !(field in d) || (d[field] is string && d[field].size() >= min && d[field].size() <= max);
+    }
+    function optionalPresenceTimestamp(d, field) {
+      return !(field in d) || d[field] == null || d[field] is timestamp;
+    }
+    function validPresenceTimestampChanges(d) {
+      let changed = d.diff(resource.data).affectedKeys();
+      return (!changed.hasAny(['connectedAt']) || d.get('connectedAt', null) == request.time)
+        && (!changed.hasAny(['disconnectedAt']) || (!d.online && d.get('disconnectedAt', null) == request.time));
+    }
+    function validPresenceCreateTimestamps(d) {
+      return (!('connectedAt' in d) || d.connectedAt == request.time)
+        && (!('disconnectedAt' in d) || d.disconnectedAt == null
+          || (!d.online && d.disconnectedAt == request.time));
+    }
+    function validInspectionPresence(d, uid) {
+      return d.keys().hasAll(['uid','email','name','empresaId','online','lastSeenAt'])
+        && d.keys().hasOnly(['uid','email','name','empresaId','online','lastSeenAt','device','os','browser','userAgent','connectedAt','disconnectedAt'])
+        && uid == request.auth.uid && d.uid == request.auth.uid
+        && d.email == request.auth.token.email
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.empresaId in ['expalsa','latamfoods']
+        && d.online is bool && d.lastSeenAt == request.time
+        && optionalPresenceString(d, 'device', 1, 160)
+        && optionalPresenceString(d, 'os', 1, 160)
+        && optionalPresenceString(d, 'browser', 1, 160)
+        && optionalPresenceString(d, 'userAgent', 0, 1000)
+        && optionalPresenceTimestamp(d, 'connectedAt')
+        && optionalPresenceTimestamp(d, 'disconnectedAt');
+    }
+    function expalsaInspectionPhotoValid(photo) {
+      return photo is map && photo.uploadedBy == request.auth.uid;
+    }
+    function inspectionRunPath(id) { return /databases/$(database)/documents/expalsa_calidad_inspecciones_runs/$(id); }
+    function inspectionRecordPath(id) { return /databases/$(database)/documents/expalsa_calidad_inspecciones/$(id); }
+    function correctiveActionPath(id) { return /databases/$(database)/documents/expalsa_calidad_acciones_correctivas/$(id); }
+    function inspectionRunOpen(id, number) {
+      let run = get(inspectionRunPath(id)).data;
+      return run.status == 'en_curso'
+        && run.inspectionNumber == number;
+    }
+    function correctionMatchesAfter(id, d) {
+      let actionId = d.get('lastCorrectionId','');
+      let action = getAfter(correctiveActionPath(actionId)).data;
+      return action.observationId == id
+        && action.newStatus == d.status && action.previousStatus == resource.data.status
+        && action.byUid == request.auth.uid;
+    }
+    function validCorrectiveAction(d, id) {
+      let observation = get(inspectionRecordPath(d.observationId)).data;
+      let updated = getAfter(inspectionRecordPath(d.observationId)).data;
+      return d.observationId is string && d.byUid == request.auth.uid
+        && inspectionObservationEditor(observation)
+        && d.empresaId == observation.get('empresaId','expalsa')
+        && d.createdAt == request.time && d.previousStatus == observation.status
+        && d.previousStatus in ['no_cumple','parcial'] && d.newStatus in ['cumple','parcial'] && d.newStatus != d.previousStatus
+        && d.note is string && d.note.size() > 0 && d.photos is list && d.photos.size() > 0
+        && expalsaInspectionPhotoValid(d.photos[0]) && updated.lastCorrectionId == id;
+    }
+    match /expalsa_calidad_inspecciones_presencia/{uid} {
+      allow get, list: if expalsaInspectionAdmin();
+      allow create: if expalsaInspectionUser()
+        && validInspectionPresence(request.resource.data, uid)
+        && validPresenceCreateTimestamps(request.resource.data);
+      allow update: if expalsaInspectionUser()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && validInspectionPresence(request.resource.data, uid)
+        && validPresenceTimestampChanges(request.resource.data);
+      allow delete: if false;
+    }
+    match /expalsa_calidad_inspecciones_runs/{id} {
+      function runUpdatedMetadataValid() {
+        return request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.updatedByName is string
+          && request.resource.data.updatedByName.size() <= 100
+          && request.resource.data.updatedAt == request.time;
+      }
+      function runSignatureCleared(d, prefix) {
+        return d.get(prefix + 'At', null) == null
+          && d.get(prefix + 'ByUid', '') == '' && d.get(prefix + 'ByName', '') == ''
+          && d.get(prefix + 'ByEmail', '') == '' && d.get(prefix + 'Device', '') == ''
+          && d.get(prefix + 'OS', '') == '' && d.get(prefix + 'Browser', '') == ''
+          && d.get(prefix + 'UserAgent', '') == '';
+      }
+      function runSignaturesCleared(d) {
+        return runSignatureCleared(d, 'reviewed') && runSignatureCleared(d, 'approved');
+      }
+      function runSignatureAuditValid(d, prefix) {
+        return d[prefix + 'At'] == request.time
+          && d[prefix + 'ByUid'] == request.auth.uid
+          && d[prefix + 'ByName'] is string && d[prefix + 'ByName'].size() > 0 && d[prefix + 'ByName'].size() <= 100
+          && d[prefix + 'ByEmail'] == request.auth.token.email
+          && d[prefix + 'Device'] is string && d[prefix + 'Device'].size() > 0 && d[prefix + 'Device'].size() <= 160
+          && d[prefix + 'OS'] is string && d[prefix + 'OS'].size() > 0 && d[prefix + 'OS'].size() <= 160
+          && d[prefix + 'Browser'] is string && d[prefix + 'Browser'].size() > 0 && d[prefix + 'Browser'].size() <= 160
+          && d[prefix + 'UserAgent'] is string && d[prefix + 'UserAgent'].size() <= 1000;
+      }
+      function runReopenChangeKeys() {
+        return ['status','closedAt','reviewedAt','reviewedByUid','reviewedByName','reviewedByEmail','reviewedDevice','reviewedOS','reviewedBrowser','reviewedUserAgent',
+          'approvedAt','approvedByUid','approvedByName','approvedByEmail','approvedDevice','approvedOS','approvedBrowser','approvedUserAgent',
+          'reopenedAt','reopenedByUid','reopenedByName','updatedBy','updatedByName','updatedAt'];
+      }
+      function runReviewUpdate() {
+        return resource.data.status == 'terminada'
+          && request.resource.data.status == 'terminada'
+          && resource.data.get('reviewedAt', null) == null
+          && resource.data.get('approvedAt', null) == null
+          && runSignatureAuditValid(request.resource.data, 'reviewed')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'reviewedAt','reviewedByUid','reviewedByName','reviewedByEmail','reviewedDevice','reviewedOS','reviewedBrowser','reviewedUserAgent',
+            'updatedBy','updatedByName','updatedAt'
+          ]);
+      }
+      function runApprovalUpdate() {
+        return resource.data.status == 'terminada'
+          && request.resource.data.status == 'terminada'
+          && resource.data.get('reviewedAt', null) != null
+          && resource.data.get('approvedAt', null) == null
+          && runSignatureAuditValid(request.resource.data, 'approved')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'approvedAt','approvedByUid','approvedByName','approvedByEmail','approvedDevice','approvedOS','approvedBrowser','approvedUserAgent',
+            'updatedBy','updatedByName','updatedAt'
+          ]);
+      }
+      function runReopenUpdate() {
+        return resource.data.status == 'terminada'
+          && request.resource.data.status == 'en_curso'
+          && request.resource.data.get('closedAt', null) == null
+          && runSignaturesCleared(request.resource.data)
+          && request.resource.data.reopenedAt == request.time
+          && request.resource.data.reopenedByUid == request.auth.uid
+          && request.resource.data.reopenedByName is string
+          && request.resource.data.reopenedByName.size() > 0
+          && request.resource.data.reopenedByName.size() <= 100
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(runReopenChangeKeys());
+      }
+      allow get, list: if expalsaInspectionUser();
+      allow create: if expalsaInspectionUser() && id.size() == 20
+        && request.resource.data.empresaId in ['expalsa','latamfoods']
+        && request.resource.data.openedByUid == request.auth.uid && request.resource.data.openedByEmail == request.auth.token.email
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && request.resource.data.status == 'en_curso' && request.resource.data.participants is list;
+      allow update: if expalsaInspectionUser()
+        && request.resource.data.get('empresaId','expalsa') == resource.data.get('empresaId','expalsa')
+        && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.openedByUid == resource.data.openedByUid && request.resource.data.openedByEmail == resource.data.openedByEmail
+        && request.resource.data.inspectionNumber == resource.data.inspectionNumber && request.resource.data.inspectedAt == resource.data.inspectedAt
+        && runUpdatedMetadataValid()
+        && ((resource.data.status == 'en_curso'
+            && request.resource.data.status == 'en_curso'
+            && request.resource.data.get('closedAt', null) == resource.data.get('closedAt', null)
+            && request.resource.data.participants is list && request.resource.data.participants.size() <= 30
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants','updatedBy','updatedByName','updatedAt']))
+          || (resource.data.status == 'en_curso'
+            && inspectionRunCloser()
+            && request.resource.data.status == 'terminada'
+            && request.resource.data.closedAt == request.time
+            && request.resource.data.closedByUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt','closedByUid','closedByName','updatedBy','updatedByName','updatedAt']))
+          || runReviewUpdate()
+          || runApprovalUpdate()
+          || runReopenUpdate());
+      allow delete: if expalsaInspectionAdmin();
+    }
+    match /expalsa_calidad_inspecciones/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create: if expalsaInspectionUser() && id.size() == 20
+        && request.resource.data.empresaId in ['expalsa','latamfoods']
+        && request.resource.data.area in ['PLANTA','EXTERIORES','BODEGAS','DESECHOS','DESPACHO','SILO DE HIELO','OTROS']
+        && request.resource.data.status in ['cumple','no_cumple','parcial','nueva']
+        && request.resource.data.photos is list && request.resource.data.photos.size() <= 6
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.inspectorUid == request.auth.uid
+        && request.resource.data.inspectorEmail == request.auth.token.email && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && inspectionRunOpen(request.resource.data.inspectionId, request.resource.data.inspectionNumber)
+        && get(inspectionRunPath(request.resource.data.inspectionId)).data.get('empresaId','expalsa') == request.resource.data.empresaId;
+      allow update: if expalsaInspectionUser()
+        && inspectionObservationEditor(resource.data)
+        && request.resource.data.get('empresaId','expalsa') == resource.data.get('empresaId','expalsa')
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.inspectorUid == resource.data.inspectorUid
+        && request.resource.data.inspectorEmail == resource.data.inspectorEmail && request.resource.data.inspectorName == resource.data.inspectorName
+        && request.resource.data.get('inspectionId','') == resource.data.get('inspectionId','') && request.resource.data.get('inspectionNumber','') == resource.data.get('inspectionNumber','')
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && ((request.resource.data.status == resource.data.status && resource.data.get('inspectionId','') != '' && inspectionRunOpen(resource.data.inspectionId, resource.data.inspectionNumber)
+          && request.resource.data.photos is list && request.resource.data.photos.size() <= 6
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['location','description','department','notificationDate','notes','photos','updatedBy','updatedByName','updatedAt']))
+          || (request.resource.data.status != resource.data.status && correctionMatchesAfter(id, request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','lastCorrectionId','lastCorrectionNote','updatedBy','updatedByName','updatedAt'])));
+      allow delete: if expalsaInspectionAdmin();
+    }
+    match /expalsa_calidad_acciones_correctivas/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create: if expalsaInspectionUser() && validCorrectiveAction(request.resource.data, id);
+      allow update: if false;
+      allow delete: if expalsaInspectionAdmin();
+    }
+    match /expalsa_calidad_inspecciones_progreso/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create, update: if expalsaInspectionUser()
+        && request.resource.data.empresaId in ['expalsa','latamfoods']
+        && request.resource.data.savedByUid == request.auth.uid
+        && inspectionRunOpen(request.resource.data.inspectionId, request.resource.data.inspectionNumber)
+        && get(inspectionRunPath(request.resource.data.inspectionId)).data.get('empresaId','expalsa') == request.resource.data.empresaId;
+      allow delete: if expalsaInspectionAdmin();
+    }
+
+
+    // Mis Avisos: cada cuenta solo puede acceder a sus propios avisos.
+    function misAvisosOwns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function misAvisosValidReminder(d) {
+      return d.keys().hasOnly([
+          'title','date','time','place','note','photoDataUrl',
+          'dueAt','done','notified','createdAt','updatedAt'
+        ]) &&
+        d.keys().hasAll([
+          'title','date','time','place','note','photoDataUrl',
+          'dueAt','done','notified','createdAt','updatedAt'
+        ]) &&
+        d.title is string && d.title.size() > 0 && d.title.size() <= 100 &&
+        d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}) &&
+        d.time is string && d.time.matches('^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]) &&
+        d.place is string && d.place.size() <= 160 &&
+        d.note is string && d.note.size() <= 500 &&
+        d.photoDataUrl is string &&
+        (d.photoDataUrl == '' ||
+          (d.photoDataUrl.size() <= 410000 &&
+           d.photoDataUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9/+=]*))) &&
+        d.dueAt is timestamp &&
+        d.done is bool && d.notified is bool &&
+        d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+    match /recordatorios/{uid}/avisos/{avisoId} {
+      allow get, list: if misAvisosOwns(uid);
+      allow create: if misAvisosOwns(uid) &&
+        misAvisosValidReminder(request.resource.data) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if misAvisosOwns(uid) &&
+        misAvisosValidReminder(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time;
+      allow delete: if misAvisosOwns(uid);
+    }
+
   }
 }
-
-
-
