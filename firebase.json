@@ -28,20 +28,18 @@
     }
   ],
   "hosting": {
-    "public": ".",
+    "public": "recordatorios",
     "ignore": [
       "firebase.json",
-      ".firebaserc",
-      ".gitignore",
-      "firestore.rules",
       "**/.*",
-      "**/node_modules/**",
-      "functions/**",
-      "functions-sabor/**",
-      "tests/**",
-      "*.md",
-      "*.txt"
-    ]
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "target": "mis-avisos"
   }
 }
-
