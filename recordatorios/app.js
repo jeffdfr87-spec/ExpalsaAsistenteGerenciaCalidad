@@ -36,7 +36,7 @@ function errorText(error) {
     'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
     'auth/invalid-email': 'Revisa el formato del correo.',
     'auth/too-many-requests': 'Hubo demasiados intentos. Prueba más tarde.',
-    'permission-denied': 'Firestore rechazó el acceso. Verifica las reglas del proyecto.'
+    'permission-denied': 'Tu cuenta está activa, pero todavía no se pueden cargar tus avisos.'
   };
   return known[error?.code] || (error?.message || 'No se pudo completar la acción.').slice(0, 240);
 }
@@ -133,6 +133,7 @@ authSdk.onAuthStateChanged(auth, nextUser => {
   if (stopListening) { stopListening(); stopListening = null; }
   reminders = []; pendingNotices.clear();
   authScreen.hidden = Boolean(user); appScreen.hidden = !user;
+  $('authMessage').textContent = '';
   if (!user) return;
   $('todayLabel').textContent = new Intl.DateTimeFormat('es-EC',{weekday:'long',day:'numeric',month:'long'}).format(new Date()).toLocaleUpperCase('es-EC');
   const q = dbSdk.query(reminderCollection(), dbSdk.orderBy('dueAt', 'asc'));
