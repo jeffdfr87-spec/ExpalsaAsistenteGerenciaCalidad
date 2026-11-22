@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#315842"><meta name="description" content="Tus recordatorios, a tu manera.">
-  <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css?v=local15">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css?v=local16">
   <title>Oliver</title>
 </head>
 <body>
   <div class="shell" id="appScreen">
-    <header class="topbar"><a class="brand" href="/"><span class="brand-mark">✳</span><span>Oliver</span></a><button id="installBtn" class="install hidden" type="button">Instalar app</button><button id="notifyBtn" class="icon-btn" type="button" aria-label="Activar notificaciones">♧</button></header>
+    <header class="topbar"><a class="brand" href="/"><span class="brand-mark">✳</span><span>Oliver</span></a><button id="clearAppCacheBtn" class="cache-clear cache-clear-top" type="button" aria-label="Limpiar caché y recargar" title="Limpiar caché y recargar"><span class="cache-icon">↻</span><span class="cache-label">Limpiar caché</span></button><button id="installBtn" class="install hidden" type="button">Instalar app</button><button id="notifyBtn" class="icon-btn" type="button" aria-label="Activar notificaciones">♧</button></header>
     <main id="top">
       <section class="quick-add" aria-label="Agregar recordatorio">
         <div class="quick-head"><div><span class="eyebrow">NUEVO RECORDATORIO</span><h2>¿Qué necesitas recordar?</h2></div><button class="voice" id="voiceBtn" type="button" title="Crear un recordatorio conversando"><span>●</span> Dictar</button></div>
@@ -23,8 +23,7 @@
         <p class="privacy-note">Tus avisos se guardan solo en este teléfono y navegador.</p>
       </section>
       <section class="list-section"><div class="list-head"><div><span class="eyebrow">A LA VISTA</span><h2>Próximos avisos <span id="count" class="count">0</span></h2></div><div class="filters" role="tablist"><button class="filter active" data-filter="upcoming" type="button">Pendientes</button><button class="filter" data-filter="done" type="button">Hechos</button></div></div><div id="reminderList" class="reminder-list"></div><div id="emptyState" class="empty"><span class="empty-icon">✳</span><strong>Tu mente puede descansar.</strong><p>Agrega tu primer aviso y aparecerá aquí.</p></div></section>
-      <footer><span class="footer-mark">✳</span><span>Un pequeño espacio para acordarte de lo importante.</span><button id="clearAppCacheBtn" class="cache-clear" type="button">Limpiar caché y recargar</button></footer>
-      <p class="cache-note">Elimina solo archivos temporales de Oliver. Tus recordatorios guardados se conservan.</p>
+      <footer><span class="footer-mark">✳</span> Un pequeño espacio para acordarte de lo importante.</footer>
     </main>
     <nav class="bottom-nav"><a class="selected" href="#top"><span>⌂</span> Inicio</a><button id="addNav" type="button"><b>＋</b> Nuevo</button><button id="settingsNav" type="button"><span>☼</span> Avisos</button></nav>
     <div id="voiceDialog" class="voice-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="voiceTitle" tabindex="-1">
@@ -40,7 +39,7 @@
     </div>
     <div id="toast" role="status" class="toast"></div>
   </div>
-  <script type="module" src="/app.js?v=local15"></script>
+  <script type="module" src="/app.js?v=local16"></script>
 </body>
 </html>
 

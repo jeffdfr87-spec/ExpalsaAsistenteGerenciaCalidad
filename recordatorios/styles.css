@@ -22,8 +22,10 @@
 @media(max-width:520px){.voice-dialog{width:calc(100vw - 22px);max-height:calc(100dvh - 24px);padding:22px 18px calc(19px + env(safe-area-inset-bottom));border-radius:27px}.voice-dialog-head h2{font-size:21px}.voice-mark{width:52px;height:52px}.voice-prompt{margin-top:22px;padding:20px 18px;border-radius:20px}.voice-orb{height:52px}}
 @media(prefers-reduced-motion:reduce){.voice-mark span,.voice-dialog.speaking .voice-orb span,.voice-dialog.listening .voice-orb span,.voice-status.listening::before{animation:none}}
 
-.cache-clear{margin-left:auto;border:1px solid #dce7dd;border-radius:999px;background:#fff;color:#526b5b;padding:9px 13px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer}.cache-clear:hover{border-color:#9bb49f;background:#f2f7f1}.cache-clear:disabled{opacity:.6;cursor:wait}.cache-note{margin:-10px 0 20px 25px;color:#829087;font-size:11px;line-height:1.45}
-@media(max-width:520px){footer{flex-wrap:wrap}footer>span:nth-child(2){flex:1}.cache-clear{margin:10px 0 0 25px}.cache-note{margin-top:-7px}}
+.cache-clear{margin-left:auto;border:1px solid #dce7dd;border-radius:999px;background:#fff;color:#526b5b;padding:9px 13px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer}.cache-clear:hover{border-color:#9bb49f;background:#f2f7f1}.cache-clear:disabled{opacity:.6;cursor:wait}
+.topbar .brand{margin-right:0}.topbar .cache-clear-top{display:inline-flex;align-items:center;gap:4px;margin:0;padding:8px 10px;font-size:11px;background:#ffffff20;border-color:#ffffff40;color:#f8fbf8}.cache-icon{font-size:17px;line-height:1}
+@media(max-width:520px){.topbar{gap:8px}.topbar .brand{gap:6px;font-size:17px}.topbar .cache-clear-top{padding:7px 9px;font-size:10px}.topbar .install{padding:8px 9px;font-size:11px}}
+@media(max-width:370px){.topbar .cache-label{display:none}.topbar .cache-clear-top{width:34px;height:34px;justify-content:center;padding:0}.topbar .cache-icon{font-size:21px}}
 
 /* Capa de voz propia: se comporta igual en navegadores y PWA instaladas. */
 body{background:linear-gradient(180deg,#315842 0,#527862 76px,#eef3ec 205px,#f6f8f3 390px);background-attachment:fixed}
