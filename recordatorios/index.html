@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f8f3"><meta name="description" content="Tus recordatorios, a tu manera.">
-  <link rel="manifest" href="/recordatorios/manifest.webmanifest"><link rel="icon" href="/recordatorios/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/recordatorios/styles.css">
-  <title>Mis Avisos</title>
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
+  <title>Oliver</title>
 </head>
 <body>
   <section id="authScreen" class="auth-screen">
     <div class="auth-card">
-      <a class="brand" href="/recordatorios/"><span class="brand-mark">✳</span><span>mis avisos</span></a>
+      <a class="brand" href="/"><span class="brand-mark">✳</span><span>Oliver</span></a>
       <p class="eyebrow">TU ESPACIO PERSONAL</p>
       <h1 id="authHeading">Tus avisos,<br><em>siempre contigo.</em></h1>
       <p class="auth-lede">Inicia sesión para ver tus recordatorios en tus dispositivos.</p>
@@ -24,7 +24,7 @@
     </div>
   </section>
   <div class="shell" id="appScreen" hidden>
-    <header class="topbar"><a class="brand" href="/recordatorios/"><span class="brand-mark">✳</span><span>mis avisos</span></a><button id="installBtn" class="install hidden" type="button">Instalar app</button><button id="notifyBtn" class="icon-btn" type="button" aria-label="Activar notificaciones">♧</button></header>
+    <header class="topbar"><a class="brand" href="/"><span class="brand-mark">✳</span><span>mis avisos</span></a><button id="installBtn" class="install hidden" type="button">Instalar app</button><button id="notifyBtn" class="icon-btn" type="button" aria-label="Activar notificaciones">♧</button></header>
     <main>
       <section class="welcome"><div><p class="eyebrow" id="todayLabel">TU DÍA, CON CALMA</p><h2>Que no se te<br><em>pase nada.</em></h2><p class="subhead">Anota lo que importa. Yo te ayudo a recordarlo.</p></div><div class="sun-art" aria-hidden="true"><span>✳</span></div></section>
       <section class="quick-add" aria-label="Agregar recordatorio">
@@ -45,7 +45,7 @@
     <nav class="bottom-nav"><a class="selected" href="#top"><span>⌂</span> Inicio</a><button id="addNav" type="button"><b>＋</b> Nuevo</button><button id="settingsNav" type="button"><span>☼</span> Avisos</button></nav>
     <div id="toast" role="status" class="toast"></div>
   </div>
-  <script type="module" src="/recordatorios/app.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
 
