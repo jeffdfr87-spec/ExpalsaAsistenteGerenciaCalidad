@@ -4,7 +4,7 @@ App web progresiva independiente, publicada en `https://oliverasist.web.app/`. N
 
 ## Datos
 
-El botón «Dictar» guía una conversación para capturar título, fecha, hora, lugar, nota opcional y anticipación del aviso. Los avisos de voz también se guardan localmente.
+El botón «Dictar» guía una conversación para capturar título, fecha, hora, lugar, nota opcional y anticipación del aviso. En teléfonos, toca «Responder» después de cada pregunta; si el navegador no ofrece reconocimiento, puedes dictar con el micrófono del teclado. Los avisos de voz también se guardan localmente.
 
 ## Datos
 

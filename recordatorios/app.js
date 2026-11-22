@@ -12,6 +12,10 @@ const pendingNotices = new Set();
 let voiceFlow = null;
 let voiceRecognition = null;
 let voiceTurn = 0;
+let voiceSpeakTimer;
+const mobileVoiceMode = navigator.standalone === true
+  || window.matchMedia?.('(display-mode: standalone)').matches
+  || /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
 const database = new Promise((resolve, reject) => {
   if (!('indexedDB' in window)) {
@@ -274,34 +278,49 @@ function parseVoiceTime(text) {
 }
 function speakVoice(text, onEnd) {
   const turn = ++voiceTurn;
+  clearTimeout(voiceSpeakTimer);
   window.speechSynthesis?.cancel();
   $('voicePrompt').textContent = text;
   $('voiceStatus').textContent = 'Oliver está hablando…';
   $('voiceStatus').classList.remove('listening');
   $('voiceRetry').classList.add('hidden');
-  if (!('speechSynthesis' in window)) { $('voiceStatus').textContent = 'Lee la pregunta y responde cuando veas «Escuchando…».'; onEnd?.(); return; }
-  const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'es-EC';
+  let finished = false;
+  const finish = () => {
+    if (finished || turn !== voiceTurn || !voiceFlow) return;
+    finished = true;
+    clearTimeout(voiceSpeakTimer);
+    if (onEnd) onEnd();
+    else if (mobileVoiceMode && voiceFlow.step !== 'choice') $('voiceStatus').textContent = 'Cuando termine la pregunta, toca «Responder».';
+  };
+  if (!('speechSynthesis' in window)) { $('voiceStatus').textContent = 'La voz no está disponible. Puedes leer la pregunta y responder.'; finish(); return; }
+  const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'es-ES';
   const voice = speechSynthesis.getVoices().find(item => item.lang.toLowerCase().startsWith('es'));
-  if (voice) utterance.voice = voice;
-  utterance.onend = () => { if (turn === voiceTurn && voiceFlow) onEnd?.(); };
-  utterance.onerror = () => { if (turn === voiceTurn && voiceFlow) onEnd?.(); };
+  if (voice) { utterance.voice = voice; utterance.lang = voice.lang; }
+  utterance.onend = finish;
+  utterance.onerror = finish;
   speechSynthesis.speak(utterance);
+  voiceSpeakTimer = setTimeout(finish, Math.max(4500, text.length * 105));
 }
 function listenVoice() {
   if (!voiceFlow) return;
-  if (!voiceSpeech) { $('voiceStatus').textContent = 'Este navegador no admite dictado por voz. Puedes cerrar y usar el formulario.'; $('voiceRetry').classList.add('hidden'); return; }
+  if (!voiceSpeech) { $('voiceStatus').textContent = 'Este navegador no ofrece dictado dentro de Oliver. Puedes usar el micrófono del teclado.'; $('voiceFallback').classList.remove('hidden'); $('voiceFallbackInput').focus(); $('voiceRetry').classList.add('hidden'); return; }
   const recognition = new voiceSpeech(); voiceRecognition = recognition;
-  recognition.lang = 'es-EC'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+  recognition.lang = 'es-ES'; recognition.interimResults = false; recognition.maxAlternatives = 1;
   $('voiceStatus').textContent = 'Escuchando…'; $('voiceStatus').classList.add('listening'); $('voiceRetry').classList.add('hidden');
-  recognition.onresult = event => { const answer = event.results[0][0].transcript; voiceRecognition = null; handleVoiceAnswer(answer); };
-  recognition.onerror = event => { $('voiceStatus').classList.remove('listening'); $('voiceStatus').textContent = event.error === 'not-allowed' ? 'Permite el micrófono para continuar.' : 'No te escuché con claridad.'; $('voiceRetry').classList.remove('hidden'); };
-  recognition.onend = () => { if (voiceRecognition === recognition) { voiceRecognition = null; $('voiceStatus').classList.remove('listening'); $('voiceStatus').textContent = 'No alcancé a escucharte.'; $('voiceRetry').classList.remove('hidden'); } };
-  try { recognition.start(); } catch { $('voiceStatus').textContent = 'No se pudo iniciar el micrófono. Inténtalo de nuevo.'; $('voiceRetry').classList.remove('hidden'); }
+  $('voiceListen').disabled = true; $('voiceFallback').classList.add('hidden');
+  recognition.onresult = event => { const answer = event.results[0][0].transcript; voiceRecognition = null; $('voiceListen').disabled = false; handleVoiceAnswer(answer); };
+  recognition.onerror = event => { voiceRecognition = null; $('voiceListen').disabled = false; $('voiceStatus').classList.remove('listening'); $('voiceStatus').textContent = event.error === 'not-allowed' ? 'Permite el micrófono o responde con el micrófono del teclado.' : 'No te escuché con claridad. Puedes intentarlo o usar el micrófono del teclado.'; $('voiceRetry').classList.remove('hidden'); $('voiceFallback').classList.remove('hidden'); };
+  recognition.onend = () => { if (voiceRecognition === recognition) { voiceRecognition = null; $('voiceListen').disabled = false; $('voiceStatus').classList.remove('listening'); $('voiceStatus').textContent = 'No alcancé a escucharte. Puedes volver a intentarlo.'; $('voiceRetry').classList.remove('hidden'); $('voiceFallback').classList.remove('hidden'); } };
+  try { recognition.start(); } catch { voiceRecognition = null; $('voiceListen').disabled = false; $('voiceStatus').textContent = 'No se pudo iniciar el micrófono. Inténtalo de nuevo o usa el micrófono del teclado.'; $('voiceRetry').classList.remove('hidden'); $('voiceFallback').classList.remove('hidden'); }
 }
-function askVoice(step, prompt) { voiceFlow.step = step; speakVoice(prompt, listenVoice); }
+function afterVoicePrompt() {
+  if (mobileVoiceMode) { $('voiceStatus').textContent = 'Cuando termine la pregunta, toca «Responder».'; $('voiceRetry').classList.remove('hidden'); }
+  else listenVoice();
+}
+function askVoice(step, prompt) { voiceFlow.step = step; $('voiceFallbackInput').value = ''; $('voiceFallback').classList.add('hidden'); $('voiceListen').classList.toggle('hidden', !mobileVoiceMode); speakVoice(prompt, afterVoicePrompt); }
 function showVoiceChoices() {
   const summary = `Agendaré: ${voiceFlow.data.title}. Fecha: ${new Intl.DateTimeFormat('es-EC',{dateStyle:'full'}).format(new Date(`${voiceFlow.data.date}T12:00`))}, a las ${voiceFlow.data.time}.${voiceFlow.data.place ? ` Lugar: ${voiceFlow.data.place}.` : ''}${voiceFlow.data.note ? ` Detalle: ${voiceFlow.data.note}.` : ''}`;
-  voiceFlow.step = 'choice'; $('voicePrompt').textContent = `${summary}\n\n¿Con cuánta anticipación quieres que te lo recuerde?`;
+  voiceFlow.step = 'choice'; $('voicePrompt').textContent = `${summary}\n\n¿Con cuánta anticipación quieres que te lo recuerde?`; $('voiceListen').classList.add('hidden'); $('voiceRetry').classList.add('hidden');
   $('voiceStatus').textContent = 'Elige una opción para guardar. Mantén Oliver abierto para recibir el aviso.'; $('voiceStatus').classList.remove('listening'); $('voiceChoices').classList.remove('hidden'); $('voiceActions').classList.add('hidden');
   const options = [['5 minutos',5],['30 minutos',30],['1 hora',60],['1 día',1440]];
   $('voiceChoices').innerHTML = options.map(([label,minutes]) => `<button class="voice-choice" type="button" data-minutes="${minutes}">${label}</button>`).join('');
@@ -337,15 +356,16 @@ async function saveVoiceReminder(minutes) {
   try { await storageRequest('readwrite', store => store.put(reminder)); reminders.push(reminder); render(); voiceFlow = null; window.speechSynthesis?.cancel(); $('voiceDialog').close(); resetForm(); showToast(noticePermission === 'granted' ? 'Recordatorio guardado en este teléfono.' : 'Guardado. Activa avisos para recibir la notificación.'); if ('Notification' in window && Notification.permission === 'granted') checkDueNotices(); }
   catch (error) { $('voiceStatus').textContent = error.message || 'No se pudo guardar el recordatorio.'; $('voiceChoices').classList.remove('hidden'); }
 }
-function closeVoice() { voiceTurn++; window.speechSynthesis?.cancel(); try { voiceRecognition?.abort(); } catch {} voiceRecognition = null; voiceFlow = null; $('voiceDialog').close(); $('voiceChoices').classList.add('hidden'); $('voiceActions').classList.remove('hidden'); }
+function closeVoice() { voiceTurn++; clearTimeout(voiceSpeakTimer); window.speechSynthesis?.cancel(); try { voiceRecognition?.abort(); } catch {} voiceRecognition = null; voiceFlow = null; $('voiceDialog').close(); $('voiceChoices').classList.add('hidden'); $('voiceFallback').classList.add('hidden'); $('voiceActions').classList.remove('hidden'); $('voiceListen').disabled = false; }
 $('voiceBtn').addEventListener('click', () => {
-  if (!voiceSpeech) { showToast('Este navegador no admite dictado. Prueba el micrófono del teclado.'); return; }
-  voiceFlow = { step:'title', data:{} }; $('voiceDialog').showModal();
-  speakVoice('Bienvenido. ¿Qué necesitas agendar?', listenVoice);
+  voiceFlow = { step:'title', data:{} }; $('voiceFallback').classList.add('hidden'); $('voiceFallbackInput').value = ''; $('voiceListen').classList.toggle('hidden', !mobileVoiceMode); $('voiceDialog').showModal();
+  speakVoice('Bienvenido. ¿Qué necesitas agendar?', afterVoicePrompt);
 });
 $('voiceClose').addEventListener('click', closeVoice);
 $('voiceCancel').addEventListener('click', closeVoice);
-$('voiceRetry').addEventListener('click', () => { if (voiceFlow) speakVoice($('voicePrompt').textContent, listenVoice); });
+$('voiceRetry').addEventListener('click', () => { if (voiceFlow) speakVoice($('voicePrompt').textContent, afterVoicePrompt); });
+$('voiceListen').addEventListener('click', listenVoice);
+$('voiceFallbackSend').addEventListener('click', () => { const answer = $('voiceFallbackInput').value.trim(); if (answer) { $('voiceFallback').classList.add('hidden'); handleVoiceAnswer(answer); } });
 $('voiceChoices').addEventListener('click', event => { const button = event.target.closest('button[data-minutes]'); if (button) saveVoiceReminder(Number(button.dataset.minutes)); });
 
 $('notifyBtn').addEventListener('click', async () => {
@@ -395,4 +415,3 @@ async function start() {
   }
 }
 start();
-
