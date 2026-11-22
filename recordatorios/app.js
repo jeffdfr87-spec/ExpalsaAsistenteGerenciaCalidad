@@ -460,7 +460,20 @@ $('addNav').addEventListener('click', () => {
 });
 $('settingsNav').addEventListener('click', () => $('notifyBtn').click());
 setInterval(checkDueNotices, 30000);
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshingForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || refreshingForUpdate) return;
+    const hasDraft = $('title').value.trim() || $('place').value.trim() || $('note').value.trim() || $('photo').files.length;
+    if (hasDraft) { showToast('Oliver se actualizó. Cierra y vuelve a abrir la app cuando termines este aviso.'); return; }
+    refreshingForUpdate = true;
+    window.location.reload();
+  });
+  navigator.serviceWorker.register('/sw.js', { updateViaCache:'none' })
+    .then(registration => registration.update().catch(() => {}))
+    .catch(() => {});
+}
 
 async function start() {
   resetForm();
