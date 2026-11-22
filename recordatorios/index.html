@@ -7,25 +7,9 @@
   <title>Oliver</title>
 </head>
 <body>
-  <section id="authScreen" class="auth-screen">
-    <div class="auth-card">
-      <a class="brand" href="/"><span class="brand-mark">✳</span><span>Oliver</span></a>
-      <p class="eyebrow">TU ESPACIO PERSONAL</p>
-      <h1 id="authHeading">Tus avisos,<br><em>siempre contigo.</em></h1>
-      <p class="auth-lede">Inicia sesión para ver tus recordatorios en tus dispositivos.</p>
-      <form id="authForm">
-        <label class="field"><span>CORREO</span><input id="email" type="email" autocomplete="username" required maxlength="254" placeholder="tu@correo.com"></label>
-        <label class="field"><span>CONTRASEÑA</span><input id="password" type="password" autocomplete="current-password" required minlength="6" maxlength="128" placeholder="Al menos 6 caracteres"></label>
-        <button id="authSubmit" class="save-btn" type="submit">Iniciar sesión</button>
-      </form>
-      <button id="authToggle" class="text-btn" type="button">¿No tienes cuenta? Crear una</button>
-      <p id="authMessage" class="auth-message" role="status"></p>
-      <p class="privacy-note">Cada cuenta solo puede leer y cambiar sus propios avisos.</p>
-    </div>
-  </section>
-  <div class="shell" id="appScreen" hidden>
+  <div class="shell" id="appScreen">
     <header class="topbar"><a class="brand" href="/"><span class="brand-mark">✳</span><span>Oliver</span></a><button id="installBtn" class="install hidden" type="button">Instalar app</button><button id="notifyBtn" class="icon-btn" type="button" aria-label="Activar notificaciones">♧</button></header>
-    <main>
+    <main id="top">
       <section class="welcome"><div><p class="eyebrow" id="todayLabel">TU DÍA, CON CALMA</p><h2>Que no se te<br><em>pase nada.</em></h2><p class="subhead">Anota lo que importa. Yo te ayudo a recordarlo.</p></div><div class="sun-art" aria-hidden="true"><span>✳</span></div></section>
       <section class="quick-add" aria-label="Agregar recordatorio">
         <div class="quick-head"><div><span class="eyebrow">NUEVO RECORDATORIO</span><h2>¿Qué necesitas recordar?</h2></div><button class="voice" id="voiceBtn" type="button" title="Dictar por voz"><span>●</span> Dictar</button></div>
@@ -37,10 +21,10 @@
           <div class="form-actions"><label class="photo-btn" for="photo">＋ <span id="photoLabel">Agregar foto</span></label><input id="photo" type="file" accept="image/*" capture="environment" hidden><button id="saveBtn" class="save-btn" type="submit">Guardar recordatorio <span>↗</span></button></div>
           <div id="photoPreview" class="photo-preview hidden"></div>
         </form>
-        <p class="privacy-note">Tus avisos se sincronizan con Firestore. Cada cuenta tiene sus propios datos.</p>
+        <p class="privacy-note">Tus avisos se guardan solo en este teléfono y navegador.</p>
       </section>
       <section class="list-section"><div class="list-head"><div><span class="eyebrow">A LA VISTA</span><h2>Próximos avisos <span id="count" class="count">0</span></h2></div><div class="filters" role="tablist"><button class="filter active" data-filter="upcoming" type="button">Pendientes</button><button class="filter" data-filter="done" type="button">Hechos</button></div></div><div id="reminderList" class="reminder-list"></div><div id="emptyState" class="empty"><span class="empty-icon">✳</span><strong>Tu mente puede descansar.</strong><p>Agrega tu primer aviso y aparecerá aquí.</p></div></section>
-      <footer><span class="footer-mark">✳</span> Un pequeño espacio para acordarte de lo importante. <button id="logoutBtn" class="logout" type="button">Cerrar sesión</button></footer>
+      <footer><span class="footer-mark">✳</span> Un pequeño espacio para acordarte de lo importante.</footer>
     </main>
     <nav class="bottom-nav"><a class="selected" href="#top"><span>⌂</span> Inicio</a><button id="addNav" type="button"><b>＋</b> Nuevo</button><button id="settingsNav" type="button"><span>☼</span> Avisos</button></nav>
     <div id="toast" role="status" class="toast"></div>
@@ -48,4 +32,6 @@
   <script type="module" src="/app.js"></script>
 </body>
 </html>
+
+
 
