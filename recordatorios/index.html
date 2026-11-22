@@ -27,17 +27,19 @@
     </main>
     <nav class="bottom-nav"><a class="selected" href="#top"><span>⌂</span> Inicio</a><button id="addNav" type="button"><b>＋</b> Nuevo</button><button id="settingsNav" type="button"><span>☼</span> Avisos</button></nav>
     <dialog id="voiceDialog" class="voice-dialog" aria-labelledby="voiceTitle">
-      <div class="voice-dialog-head"><span class="voice-mark" aria-hidden="true">✳</span><div><span class="eyebrow">OLIVER POR VOZ</span><h2 id="voiceTitle">Agendar un aviso</h2></div><button id="voiceClose" class="voice-close" type="button" aria-label="Cerrar">×</button></div>
+      <div class="voice-dialog-head"><span class="voice-mark" aria-hidden="true"><span>✳</span></span><div><span class="eyebrow" id="voiceStep">OLIVER · BIENVENIDA</span><h2 id="voiceTitle">Agendar un aviso</h2></div><button id="voiceClose" class="voice-close" type="button" aria-label="Cerrar">×</button></div>
       <p id="voicePrompt" class="voice-prompt" aria-live="polite"></p>
       <p id="voiceStatus" class="voice-status" role="status"></p>
       <label id="voiceFallback" class="voice-fallback hidden"><span>También puedes responder con el micrófono del teclado</span><textarea id="voiceFallbackInput" rows="2" placeholder="Toca aquí y dicta tu respuesta"></textarea><button id="voiceFallbackSend" class="voice-fallback-send" type="button">Continuar</button></label>
-      <div id="voiceChoices" class="voice-choices hidden" aria-label="Anticipación del aviso"></div>
+      <div class="voice-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div id="voiceChoices" class="voice-choices hidden" aria-label="Opciones de anticipación"></div>
       <div id="voiceActions" class="voice-actions"><button id="voiceListen" class="voice-listen hidden" type="button">🎙️ Responder</button><button id="voiceRetry" class="voice-retry hidden" type="button">Repetir pregunta</button><button id="voiceCancel" class="voice-cancel" type="button">Cancelar</button></div>
     </dialog>
     <div id="toast" role="status" class="toast"></div>
   </div>
-  <script type="module" src="/app.js?v=local8"></script>
+  <script type="module" src="/app.js?v=local9"></script>
 </body>
 </html>
+
 
 

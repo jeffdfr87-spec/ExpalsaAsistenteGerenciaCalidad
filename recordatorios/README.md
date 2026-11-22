@@ -4,7 +4,7 @@ App web progresiva independiente, publicada en `https://oliverasist.web.app/`. N
 
 ## Datos
 
-El botón «Dictar» guía una conversación para capturar título, fecha, hora, lugar, nota opcional y anticipación del aviso. En teléfonos, toca «Responder» después de cada pregunta; si el navegador no ofrece reconocimiento, puedes dictar con el micrófono del teclado. Los avisos de voz también se guardan localmente.
+El botón «Dictar» inicia una conversación para capturar título, fecha, hora, lugar, nota opcional y anticipación del aviso. En teléfonos compatibles, Oliver mantiene la escucha tras el toque inicial y guarda cuando dices cuánto tiempo antes quieres el aviso. Si el navegador no ofrece reconocimiento continuo, puedes responder con el micrófono del teclado. Los avisos de voz también se guardan localmente.
 
 ## Datos
 
@@ -13,6 +13,7 @@ Los datos incluyen título, fecha, hora, lugar, nota, foto JPEG comprimida, esta
 ## Límites
 
 Las notificaciones del navegador se procesan mientras la app está abierta y el permiso está concedido; el sistema puede suspender avisos en segundo plano. No hay alertas geográficas al llegar a un lugar. La ubicación se conserva como coordenadas o texto de lugar.
+
 
 
 
