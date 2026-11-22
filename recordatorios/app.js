@@ -1,25 +1,8 @@
-import config from './firebase-config.js';
-
-const V = '13.0.0';
-const [appSdk, authSdk, dbSdk] = await Promise.all([
-  import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
-  import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
-  import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
-]);
-
-const app = appSdk.initializeApp(config, 'oliver');
-const auth = authSdk.getAuth(app);
-const db = dbSdk.getFirestore(app);
-await authSdk.setPersistence(auth, authSdk.browserLocalPersistence);
-
 const $ = id => document.getElementById(id);
-const authScreen = $('authScreen');
-const appScreen = $('appScreen');
-const authForm = $('authForm');
-let authMode = 'login';
-let user = null;
+const DB_NAME = 'oliver-local';
+const STORE_NAME = 'reminders';
+
 let reminders = [];
-let stopListening = null;
 let filter = 'upcoming';
 let editing = null;
 let selectedPhoto = '';
@@ -27,22 +10,41 @@ let installPrompt = null;
 let toastTimer;
 const pendingNotices = new Set();
 
-function errorText(error) {
-  const known = {
-    'auth/invalid-credential': 'El correo o la contraseña no coinciden.',
-    'auth/user-not-found': 'No encontré una cuenta con ese correo.',
-    'auth/wrong-password': 'El correo o la contraseña no coinciden.',
-    'auth/email-already-in-use': 'Ya existe una cuenta con ese correo. Inicia sesión.',
-    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
-    'auth/invalid-email': 'Revisa el formato del correo.',
-    'auth/too-many-requests': 'Hubo demasiados intentos. Prueba más tarde.',
-    'permission-denied': 'Tu cuenta está activa, pero todavía no se pueden cargar tus avisos.'
+const database = new Promise((resolve, reject) => {
+  if (!('indexedDB' in window)) {
+    reject(new Error('Este navegador no admite almacenamiento local para Oliver.'));
+    return;
+  }
+  const request = indexedDB.open(DB_NAME, 1);
+  request.onupgradeneeded = () => {
+    if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+      const store = request.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      store.createIndex('dueAt', 'dueAt');
+    }
   };
-  return known[error?.code] || (error?.message || 'No se pudo completar la acción.').slice(0, 240);
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error || new Error('No se pudo abrir el almacenamiento local.'));
+  request.onblocked = () => reject(new Error('Cierra otras pestañas de Oliver y vuelve a intentarlo.'));
+});
+
+function storageRequest(mode, operation) {
+  return database.then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, mode);
+    const request = operation(tx.objectStore(STORE_NAME));
+    let result;
+    request.onsuccess = () => { result = request.result; };
+    request.onerror = () => reject(request.error || new Error('No se pudo guardar el aviso en este dispositivo.'));
+    tx.oncomplete = () => resolve(result);
+    tx.onabort = tx.onerror = () => reject(tx.error || new Error('No se pudo guardar el aviso en este dispositivo.'));
+  }));
 }
+
 function showToast(message) {
-  const box = $('toast'); box.textContent = message; box.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => box.classList.remove('show'), 3000);
+  const box = $('toast');
+  box.textContent = message;
+  box.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.classList.remove('show'), 3500);
 }
 function esc(value = '') {
   return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -54,30 +56,26 @@ function dateTime(date, time) { return new Date(`${date}T${time}`); }
 function dateLabel(value) {
   return new Intl.DateTimeFormat('es-EC', { day:'2-digit', month:'short' }).format(new Date(`${value}T12:00`)).replace('.', '');
 }
-function prettyDate(r) {
-  const d = dateTime(r.date, r.time);
-  return `${new Intl.DateTimeFormat('es-EC', { weekday:'short', day:'numeric', month:'short' }).format(d)} · ${r.time}`;
-}
-function setAuthMode(mode) {
-  authMode = mode;
-  $('authHeading').innerHTML = mode === 'login' ? 'Tus avisos,<br><em>siempre contigo.</em>' : 'Crea tu espacio<br><em>personal.</em>';
-  $('authSubmit').textContent = mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta';
-  $('authToggle').textContent = mode === 'login' ? '¿No tienes cuenta? Crear una' : 'Ya tengo cuenta. Iniciar sesión';
-  $('password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
-  $('authMessage').textContent = '';
-}
-function reminderCollection() {
-  return dbSdk.collection(db, 'recordatorios', user.uid, 'avisos');
+function prettyDate(reminder) {
+  const d = dateTime(reminder.date, reminder.time);
+  return `${new Intl.DateTimeFormat('es-EC', { weekday:'short', day:'numeric', month:'short' }).format(d)} · ${reminder.time}`;
 }
 function resetForm() {
-  $('reminderForm').reset(); editing = null; selectedPhoto = '';
+  $('reminderForm').reset();
+  editing = null;
+  selectedPhoto = '';
   const soon = new Date(Date.now() + 3600000);
-  $('date').value = isoDate(soon); $('time').value = `${String(soon.getHours()).padStart(2,'0')}:00`;
-  $('photoPreview').classList.add('hidden'); $('photoPreview').innerHTML = '';
-  $('photoLabel').textContent = 'Agregar foto'; $('saveBtn').innerHTML = 'Guardar recordatorio <span>↗</span>';
+  $('date').value = isoDate(soon);
+  $('time').value = `${String(soon.getHours()).padStart(2,'0')}:00`;
+  $('photoPreview').classList.add('hidden');
+  $('photoPreview').innerHTML = '';
+  $('photoLabel').textContent = 'Agregar foto';
+  $('saveBtn').innerHTML = 'Guardar recordatorio <span>↗</span>';
 }
 function render() {
-  const shown = reminders.filter(r => filter === 'done' ? r.done : !r.done);
+  const shown = reminders
+    .filter(r => filter === 'done' ? r.done : !r.done)
+    .sort((a, b) => a.dueAt - b.dueAt);
   $('count').textContent = String(shown.length);
   $('reminderList').innerHTML = shown.map(r => `
     <article class="card ${r.done ? 'done' : ''}">
@@ -102,128 +100,209 @@ async function compressedPhoto(file) {
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72));
   if (!blob || blob.size > 300000) throw new Error('La foto no pudo comprimirse lo suficiente; elige otra imagen.');
   return await new Promise((resolve, reject) => {
-    const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error);
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
 }
 async function checkDueNotices() {
-  if (!user || !('Notification' in window) || Notification.permission !== 'granted') return;
-  for (const r of reminders) {
-    if (r.done || r.notified || pendingNotices.has(r.id) || dateTime(r.date, r.time).getTime() > Date.now()) continue;
-    pendingNotices.add(r.id);
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  for (const reminder of reminders) {
+    if (reminder.done || reminder.notified || pendingNotices.has(reminder.id) || reminder.dueAt > Date.now()) continue;
+    pendingNotices.add(reminder.id);
     try {
-      new Notification('Oliver', { body:r.title, icon:'/icon.svg', tag:r.id });
-      await dbSdk.updateDoc(dbSdk.doc(db, 'recordatorios', user.uid, 'avisos', r.id), { notified:true, updatedAt:dbSdk.serverTimestamp() });
-    } catch (error) { console.warn('No se pudo enviar el aviso:', error); }
+      new Notification('Oliver', { body:reminder.title, icon:'/icon.svg', tag:reminder.id });
+      reminder.notified = true;
+      reminder.updatedAt = Date.now();
+      await storageRequest('readwrite', store => store.put(reminder));
+    } catch (error) {
+      console.warn('No se pudo enviar el aviso:', error);
+    }
   }
 }
 
-authForm.addEventListener('submit', async event => {
-  event.preventDefault(); $('authSubmit').disabled = true; $('authMessage').textContent = 'Conectando…';
-  try {
-    const email = $('email').value.trim(); const password = $('password').value;
-    if (authMode === 'login') await authSdk.signInWithEmailAndPassword(auth, email, password);
-    else await authSdk.createUserWithEmailAndPassword(auth, email, password);
-  } catch (error) { $('authMessage').textContent = errorText(error); }
-  finally { $('authSubmit').disabled = false; }
-});
-$('authToggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'register' : 'login'));
-authSdk.onAuthStateChanged(auth, nextUser => {
-  user = nextUser;
-  if (stopListening) { stopListening(); stopListening = null; }
-  reminders = []; pendingNotices.clear();
-  authScreen.hidden = Boolean(user); appScreen.hidden = !user;
-  $('authMessage').textContent = '';
-  if (!user) return;
-  $('todayLabel').textContent = new Intl.DateTimeFormat('es-EC',{weekday:'long',day:'numeric',month:'long'}).format(new Date()).toLocaleUpperCase('es-EC');
-  const q = dbSdk.query(reminderCollection(), dbSdk.orderBy('dueAt', 'asc'));
-  stopListening = dbSdk.onSnapshot(q, snapshot => {
-    reminders = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
-    render(); checkDueNotices();
-  }, error => showToast(errorText(error)));
-  resetForm();
-});
-$('logoutBtn').addEventListener('click', async () => { await authSdk.signOut(auth); });
+document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
+  filter = button.dataset.filter;
+  document.querySelectorAll('.filter').forEach(b => b.classList.toggle('active', b === button));
+  render();
+}));
 
 $('reminderForm').addEventListener('submit', async event => {
-  event.preventDefault(); if (!user) return;
+  event.preventDefault();
   const due = dateTime($('date').value, $('time').value);
-  if (!Number.isFinite(due.getTime()) || due.getTime() < Date.now() - 60000) { showToast('Elige una fecha y hora futuras.'); return; }
+  if (!Number.isFinite(due.getTime()) || due.getTime() < Date.now() - 60000) {
+    showToast('Elige una fecha y hora futuras.');
+    return;
+  }
   const previous = editing;
-  const record = {
-    title:$('title').value.trim(), date:$('date').value, time:$('time').value,
-    place:$('place').value.trim(), note:$('note').value.trim(),
-    photoDataUrl:selectedPhoto || previous?.photoDataUrl || '',
-    dueAt:dbSdk.Timestamp.fromDate(due), done:previous?.done || false, notified:false,
-    updatedAt:dbSdk.serverTimestamp()
+  const now = Date.now();
+  const reminder = {
+    id: previous?.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+    title: $('title').value.trim(),
+    date: $('date').value,
+    time: $('time').value,
+    place: $('place').value.trim(),
+    note: $('note').value.trim(),
+    photoDataUrl: selectedPhoto || previous?.photoDataUrl || '',
+    dueAt: due.getTime(),
+    done: previous?.done || false,
+    notified: false,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now
   };
+  $('saveBtn').disabled = true;
   try {
-    if (previous) await dbSdk.updateDoc(dbSdk.doc(db,'recordatorios',user.uid,'avisos',previous.id), record);
-    else await dbSdk.addDoc(reminderCollection(), { ...record, createdAt:dbSdk.serverTimestamp() });
-    resetForm(); showToast(previous ? 'Cambios guardados.' : 'Recordatorio guardado.');
-  } catch (error) { showToast(errorText(error)); }
+    await storageRequest('readwrite', store => store.put(reminder));
+    const index = reminders.findIndex(r => r.id === reminder.id);
+    if (index < 0) reminders.push(reminder); else reminders[index] = reminder;
+    render();
+    resetForm();
+    showToast(previous ? 'Cambios guardados en este teléfono.' : 'Aviso guardado en este teléfono.');
+  } catch (error) {
+    showToast(error.message || 'No se pudo guardar el aviso en este dispositivo.');
+  } finally {
+    $('saveBtn').disabled = false;
+  }
 });
+
 $('photo').addEventListener('change', async event => {
-  const file = event.target.files?.[0]; if (!file) return;
+  const file = event.target.files?.[0];
+  if (!file) return;
   try {
     selectedPhoto = await compressedPhoto(file);
     $('photoPreview').innerHTML = `<img src="${selectedPhoto}" alt="Vista previa de la foto">`;
-    $('photoPreview').classList.remove('hidden'); $('photoLabel').textContent='Cambiar foto';
-  } catch (error) { showToast(error.message); event.target.value=''; }
+    $('photoPreview').classList.remove('hidden');
+    $('photoLabel').textContent = 'Cambiar foto';
+  } catch (error) {
+    showToast(error.message);
+    event.target.value = '';
+  }
 });
+
 $('reminderList').addEventListener('click', async event => {
-  const button = event.target.closest('button[data-action]'); if (!button || !user) return;
-  const item = reminders.find(r => r.id === button.dataset.id); if (!item) return;
-  const ref = dbSdk.doc(db,'recordatorios',user.uid,'avisos',item.id);
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const reminder = reminders.find(r => r.id === button.dataset.id);
+  if (!reminder) return;
   try {
     if (button.dataset.action === 'done') {
-      await dbSdk.updateDoc(ref,{done:!item.done,updatedAt:dbSdk.serverTimestamp()});
-      showToast(item.done ? 'Aviso reactivado.' : '¡Listo! Aviso marcado como hecho.');
+      reminder.done = !reminder.done;
+      reminder.notified = false;
+      reminder.updatedAt = Date.now();
+      await storageRequest('readwrite', store => store.put(reminder));
+      showToast(reminder.done ? '¡Listo! Aviso marcado como hecho.' : 'Aviso reactivado.');
+      render();
     } else if (button.dataset.action === 'delete') {
-      await dbSdk.deleteDoc(ref); showToast('Recordatorio eliminado.');
+      await storageRequest('readwrite', store => store.delete(reminder.id));
+      reminders = reminders.filter(r => r.id !== reminder.id);
+      render();
+      showToast('Aviso eliminado de este teléfono.');
     } else if (button.dataset.action === 'edit') {
-      editing = item; selectedPhoto = '';
-      $('title').value=item.title; $('date').value=item.date; $('time').value=item.time; $('place').value=item.place||''; $('note').value=item.note||'';
-      if (item.photoDataUrl) { $('photoPreview').innerHTML=`<img src="${item.photoDataUrl}" alt="Foto adjunta">`; $('photoPreview').classList.remove('hidden'); $('photoLabel').textContent='Cambiar foto'; }
-      $('saveBtn').innerHTML='Guardar cambios <span>↗</span>'; $('title').focus(); window.scrollTo({top:0,behavior:'smooth'});
+      editing = reminder;
+      selectedPhoto = '';
+      $('title').value = reminder.title;
+      $('date').value = reminder.date;
+      $('time').value = reminder.time;
+      $('place').value = reminder.place || '';
+      $('note').value = reminder.note || '';
+      if (reminder.photoDataUrl) {
+        $('photoPreview').innerHTML = `<img src="${reminder.photoDataUrl}" alt="Foto adjunta">`;
+        $('photoPreview').classList.remove('hidden');
+        $('photoLabel').textContent = 'Cambiar foto';
+      }
+      $('saveBtn').innerHTML = 'Guardar cambios <span>↗</span>';
+      $('title').focus();
+      window.scrollTo({ top:0, behavior:'smooth' });
     }
-  } catch (error) { showToast(errorText(error)); }
+  } catch (error) {
+    showToast(error.message || 'No se pudo actualizar el aviso.');
+  }
 });
-document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
-  filter=button.dataset.filter; document.querySelectorAll('.filter').forEach(b=>b.classList.toggle('active',b===button)); render();
-}));
+
 $('locateBtn').addEventListener('click', () => {
-  if (!navigator.geolocation) { showToast('Este navegador no permite obtener ubicación.'); return; }
-  $('locateBtn').textContent='…';
-  navigator.geolocation.getCurrentPosition(pos=>{
-    $('place').value=`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
-    $('locateBtn').textContent='⌖'; showToast('Ubicación agregada como coordenadas.');
-  },()=>{ $('locateBtn').textContent='⌖'; showToast('No pude obtener la ubicación. Revisa el permiso del navegador.'); },{enableHighAccuracy:true,timeout:10000});
+  if (!navigator.geolocation) {
+    showToast('Este navegador no permite obtener ubicación.');
+    return;
+  }
+  $('locateBtn').textContent = '…';
+  navigator.geolocation.getCurrentPosition(pos => {
+    $('place').value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+    $('locateBtn').textContent = '⌖';
+    showToast('Ubicación agregada como coordenadas.');
+  }, () => {
+    $('locateBtn').textContent = '⌖';
+    showToast('No pude obtener la ubicación. Revisa el permiso del navegador.');
+  }, { enableHighAccuracy:true, timeout:10000 });
 });
+
 $('voiceBtn').addEventListener('click', () => {
-  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if (!Speech) { showToast('Prueba el micrófono del teclado para dictar.'); return; }
-  const recognition=new Speech(); recognition.lang='es-EC'; recognition.interimResults=false;
-  $('voiceBtn').innerHTML='<span>●</span> Escuchando…';
-  recognition.onresult=e=>{const text=e.results[0][0].transcript;$('title').value=$('title').value?`${$('title').value} ${text}`:text;};
-  recognition.onerror=()=>showToast('No se pudo escuchar. Revisa el permiso del micrófono.');
-  recognition.onend=()=>{$('voiceBtn').innerHTML='<span>●</span> Dictar';};
+  const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Speech) {
+    showToast('Prueba el micrófono del teclado para dictar.');
+    return;
+  }
+  const recognition = new Speech();
+  recognition.lang = 'es-EC';
+  recognition.interimResults = false;
+  $('voiceBtn').innerHTML = '<span>●</span> Escuchando…';
+  recognition.onresult = e => {
+    const text = e.results[0][0].transcript;
+    $('title').value = $('title').value ? `${$('title').value} ${text}` : text;
+  };
+  recognition.onerror = () => showToast('No se pudo escuchar. Revisa el permiso del micrófono.');
+  recognition.onend = () => { $('voiceBtn').innerHTML = '<span>●</span> Dictar'; };
   recognition.start();
 });
+
 $('notifyBtn').addEventListener('click', async () => {
-  if (!('Notification' in window)) { showToast('Este navegador no admite notificaciones.'); return; }
-  const permission=await Notification.requestPermission();
-  showToast(permission==='granted'?'Avisos activados. Mantén la app abierta para recibirlos.':'Puedes activarlos desde los ajustes del navegador.');
+  if (!('Notification' in window)) {
+    showToast('Este navegador no admite notificaciones.');
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  showToast(permission === 'granted'
+    ? 'Avisos activados. Mantén Oliver abierto para recibirlos.'
+    : 'Puedes activarlos desde los ajustes del navegador.');
   checkDueNotices();
 });
+
 $('installBtn').addEventListener('click', async () => {
-  if (!installPrompt) { showToast('En Safari: toca Compartir y luego “Añadir a pantalla de inicio”.'); return; }
-  installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; $('installBtn').classList.add('hidden');
+  if (!installPrompt) {
+    showToast('En Safari: toca Compartir y luego “Añadir a pantalla de inicio”.');
+    return;
+  }
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $('installBtn').classList.add('hidden');
 });
-window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;$('installBtn').classList.remove('hidden');});
-$('addNav').addEventListener('click',()=>{$('title').focus();window.scrollTo({top:0,behavior:'smooth'});});
-$('settingsNav').addEventListener('click',()=>$('notifyBtn').click());
-setInterval(checkDueNotices,30000);
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
-resetForm();
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  installPrompt = event;
+  $('installBtn').classList.remove('hidden');
+});
+$('addNav').addEventListener('click', () => {
+  $('title').focus();
+  window.scrollTo({ top:0, behavior:'smooth' });
+});
+$('settingsNav').addEventListener('click', () => $('notifyBtn').click());
+setInterval(checkDueNotices, 30000);
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+async function start() {
+  $('todayLabel').textContent = new Intl.DateTimeFormat('es-EC', {
+    weekday:'long', day:'numeric', month:'long'
+  }).format(new Date()).toLocaleUpperCase('es-EC');
+  resetForm();
+  try {
+    reminders = await storageRequest('readonly', store => store.getAll());
+    reminders.sort((a, b) => a.dueAt - b.dueAt);
+    render();
+    checkDueNotices();
+  } catch (error) {
+    showToast(error.message || 'No se pudo abrir el almacenamiento local.');
+  }
+}
+start();
 
