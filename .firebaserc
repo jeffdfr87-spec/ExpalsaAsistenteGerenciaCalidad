@@ -5,8 +5,8 @@
   "targets": {
     "oceantreasure-app": {
       "hosting": {
-        "mis-avisos": [
-          "mis-avisos-oceantreasure"
+        "oliver": [
+          "oliver-oceantreasure"
         ]
       }
     }
