@@ -400,7 +400,7 @@ async function saveVoiceReminder(minutes) {
   if (!voiceFlow) return;
   const { title, date, time, place, note } = voiceFlow.data;
   const due = dateTime(date,time), now = Date.now();
-  if (due.getTime() < now-60000) { $('voiceDialog').close(); voiceFlow = null; showToast('La fecha y hora ya pasaron. Vuelve a intentarlo.'); return; }
+  if (due.getTime() < now-60000) { closeVoice(); showToast('La fecha y hora ya pasaron. Vuelve a intentarlo.'); return; }
   let noticePermission = 'unsupported';
   if ('Notification' in window) {
     noticePermission = Notification.permission;
@@ -408,17 +408,19 @@ async function saveVoiceReminder(minutes) {
   }
   const reminder = { id:crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(36).slice(2)}`, title, date, time, place, note, photoDataUrl:'', dueAt:due.getTime(), notifyAt:due.getTime()-minutes*60000, reminderLeadMinutes:minutes, done:false, notified:false, createdAt:now, updatedAt:now };
   $('voiceStatus').textContent = 'Guardando en este teléfono…'; $('voiceChoices').classList.add('hidden');
-  try { await storageRequest('readwrite', store => store.put(reminder)); reminders.push(reminder); render(); voiceFlow = null; window.speechSynthesis?.cancel(); $('voiceDialog').close(); resetForm(); showToast(noticePermission === 'granted' ? 'Recordatorio guardado en este teléfono.' : 'Guardado. Activa avisos para recibir la notificación.'); if ('Notification' in window && Notification.permission === 'granted') checkDueNotices(); }
+  try { await storageRequest('readwrite', store => store.put(reminder)); reminders.push(reminder); render(); closeVoice(); resetForm(); showToast(noticePermission === 'granted' ? 'Recordatorio guardado en este teléfono.' : 'Guardado. Activa avisos para recibir la notificación.'); if ('Notification' in window && Notification.permission === 'granted') checkDueNotices(); }
   catch (error) { $('voiceStatus').textContent = error.message || 'No se pudo guardar el recordatorio.'; $('voiceChoices').classList.remove('hidden'); }
 }
-function closeVoice() { voiceTurn++; clearTimeout(voiceSpeakTimer); window.speechSynthesis?.cancel(); try { voiceRecognition?.abort(); } catch {} voiceRecognition = null; voiceFlow = null; $('voiceDialog').close(); $('voiceChoices').classList.add('hidden'); $('voiceFallback').classList.add('hidden'); $('voiceActions').classList.remove('hidden'); $('voiceListen').disabled = false; }
+function closeVoice() { voiceTurn++; clearTimeout(voiceSpeakTimer); window.speechSynthesis?.cancel(); try { voiceRecognition?.abort(); } catch {} voiceRecognition = null; voiceFlow = null; $('voiceDialog').classList.add('hidden'); $('voiceDialog').classList.remove('speaking','listening'); document.body.classList.remove('voice-open'); $('voiceChoices').classList.add('hidden'); $('voiceFallback').classList.add('hidden'); $('voiceActions').classList.remove('hidden'); $('voiceListen').disabled = false; }
 $('voiceBtn').addEventListener('click', () => {
   voiceFlow = { step:'title', data:{}, mobileVoiceActive: mobileVoiceMode && !!voiceSpeech };
-  $('voiceFallback').classList.add('hidden'); $('voiceFallbackInput').value = ''; $('voiceListen').classList.toggle('hidden', !mobileVoiceMode); $('voiceDialog').showModal();
+  $('voiceFallback').classList.add('hidden'); $('voiceFallbackInput').value = ''; $('voiceListen').classList.toggle('hidden', !mobileVoiceMode); $('voiceDialog').classList.remove('hidden'); document.body.classList.add('voice-open'); $('voiceClose').focus({preventScroll:true});
   if (mobileVoiceMode && voiceSpeech) listenVoice();
   else if (mobileVoiceMode) { $('voiceFallback').classList.remove('hidden'); $('voiceStatus').textContent = 'Puedes responder con el micrófono del teclado.'; }
   speakVoice('Bienvenido. ¿Qué necesitas agendar?', afterVoicePrompt);
 });
+$('voiceDialog').addEventListener('click', event => { if (event.target === $('voiceDialog')) closeVoice(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('voiceDialog').classList.contains('hidden')) { event.preventDefault(); closeVoice(); } });
 $('voiceClose').addEventListener('click', closeVoice);
 $('voiceCancel').addEventListener('click', closeVoice);
 $('voiceRetry').addEventListener('click', () => { if (voiceFlow) speakVoice($('voicePrompt').textContent, afterVoicePrompt); });

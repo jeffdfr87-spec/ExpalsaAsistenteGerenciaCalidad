@@ -22,3 +22,15 @@
 @media(max-width:520px){.voice-dialog{width:calc(100vw - 22px);max-height:calc(100dvh - 24px);padding:22px 18px calc(19px + env(safe-area-inset-bottom));border-radius:27px}.voice-dialog-head h2{font-size:21px}.voice-mark{width:52px;height:52px}.voice-prompt{margin-top:22px;padding:20px 18px;border-radius:20px}.voice-orb{height:52px}}
 @media(prefers-reduced-motion:reduce){.voice-mark span,.voice-dialog.speaking .voice-orb span,.voice-dialog.listening .voice-orb span,.voice-status.listening::before{animation:none}}
 
+/* Capa de voz propia: se comporta igual en navegadores y PWA instaladas. */
+body{background:linear-gradient(180deg,#315842 0,#527862 76px,#eef3ec 205px,#f6f8f3 390px);background-attachment:fixed}
+.voice-open{overflow:hidden}
+.shell{padding-top:env(safe-area-inset-top)}
+.topbar{border-bottom-color:#ffffff36}
+.brand{color:#f8fbf8}.brand-mark{color:#dce9da}.icon-btn{background:#ffffff20;color:#fff;border:1px solid #ffffff2e}
+.voice-dialog{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;width:auto;max-width:none;height:100%;height:100dvh;max-height:none;margin:0;padding:16px;padding-top:calc(16px + env(safe-area-inset-top));padding-bottom:calc(16px + env(safe-area-inset-bottom));overflow:hidden;border:0;border-radius:0;background:#16261b9e;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.voice-dialog[hidden],.voice-dialog.hidden{display:none!important}
+.voice-card{width:min(520px,100%);max-height:100%;overflow:auto;border:1px solid #ffffff;border-radius:30px;padding:clamp(22px,5vw,34px);background:radial-gradient(ellipse at 88% 0%,#e4eee5 0,transparent 38%),linear-gradient(155deg,#f8faf6,#eef3ec 100%);box-shadow:0 30px 100px #101c1655;color:#24352e;overscroll-behavior:contain}
+.voice-dialog .voice-prompt{max-height:36dvh;overflow:auto}
+@media(max-width:520px){.voice-dialog{padding:11px;padding-top:calc(11px + env(safe-area-inset-top));padding-bottom:calc(11px + env(safe-area-inset-bottom))}.voice-card{width:100%;padding:22px 18px calc(18px + env(safe-area-inset-bottom));border-radius:27px}.voice-dialog .voice-prompt{max-height:32dvh}}
+

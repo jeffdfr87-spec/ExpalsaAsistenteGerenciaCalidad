@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6f8f3"><meta name="description" content="Tus recordatorios, a tu manera.">
+  <meta name="theme-color" content="#315842"><meta name="description" content="Tus recordatorios, a tu manera.">
   <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
   <title>Oliver</title>
 </head>
@@ -26,7 +26,8 @@
       <footer><span class="footer-mark">✳</span> Un pequeño espacio para acordarte de lo importante.</footer>
     </main>
     <nav class="bottom-nav"><a class="selected" href="#top"><span>⌂</span> Inicio</a><button id="addNav" type="button"><b>＋</b> Nuevo</button><button id="settingsNav" type="button"><span>☼</span> Avisos</button></nav>
-    <dialog id="voiceDialog" class="voice-dialog" aria-labelledby="voiceTitle">
+    <div id="voiceDialog" class="voice-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="voiceTitle" tabindex="-1">
+      <section class="voice-card">
       <div class="voice-dialog-head"><span class="voice-mark" aria-hidden="true"><span>✳</span></span><div><span class="eyebrow" id="voiceStep">OLIVER · BIENVENIDA</span><h2 id="voiceTitle">Agendar un aviso</h2></div><button id="voiceClose" class="voice-close" type="button" aria-label="Cerrar">×</button></div>
       <p id="voicePrompt" class="voice-prompt" aria-live="polite"></p>
       <p id="voiceStatus" class="voice-status" role="status"></p>
@@ -34,10 +35,11 @@
       <div class="voice-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
       <div id="voiceChoices" class="voice-choices hidden" aria-label="Opciones de anticipación"></div>
       <div id="voiceActions" class="voice-actions"><button id="voiceListen" class="voice-listen hidden" type="button">🎙️ Responder</button><button id="voiceRetry" class="voice-retry hidden" type="button">Repetir pregunta</button><button id="voiceCancel" class="voice-cancel" type="button">Cancelar</button></div>
-    </dialog>
+      </section>
+    </div>
     <div id="toast" role="status" class="toast"></div>
   </div>
-  <script type="module" src="/app.js?v=local9"></script>
+  <script type="module" src="/app.js?v=local11"></script>
 </body>
 </html>
 
