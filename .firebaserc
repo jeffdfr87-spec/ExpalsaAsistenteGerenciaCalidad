@@ -5,8 +5,8 @@
   "targets": {
     "oceantreasure-app": {
       "hosting": {
-        "oliver": [
-          "oliver-oceantreasure"
+        "oliverasist": [
+          "oliverasist"
         ]
       }
     }
