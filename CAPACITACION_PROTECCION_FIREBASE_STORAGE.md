@@ -2,9 +2,9 @@
 
 ## Estado de integración
 
-La web de GitHub Pages usa Firebase Authentication para validar la sesión administrativa y `getBlob()` de Firebase Storage para recuperar los documentos sin obtener URL públicas con tokens.
+La página de Capacitación usa Firebase Authentication para validar la sesión administrativa y `getBlob()` para recuperar documentos sin crear URL públicas con tokens.
 
-**La conexión y los archivos de reglas están preparados en GitHub, pero NO se han activado directamente en Firebase.** Es necesario configurar el bucket y cargar los once PDF en Firebase Console con una cuenta que tenga permisos de administración del proyecto.
+Las reglas activas de Firebase incluyen la ruta `expalsa_capacitacion_privada_2026`. `REGLA_STORAGE_CAPACITACION_PRIVADA.txt` contiene el bloque de capacitación, no el conjunto completo de reglas de Storage. `firebase.json` no configura el despliegue de reglas de Storage.
 
 ## 1. Ubicación exacta de los once PDF
 
@@ -44,7 +44,7 @@ Al guardar reglas que usan `firestore.get`, Firebase puede pedir activar permiso
 
 Configurar el CORS del bucket de Storage para permitir solicitudes autenticadas desde:
 
-`https://jefferson-arch.github.io`
+`https://jeffdfr87-spec.github.io`
 
 El archivo `cors-capacitacion-privada.json` contiene esta configuración. En Cloud Console → Cloud Storage → Buckets → bucket → Configuration → Cross-origin resource sharing, agregar una configuración equivalente o hacerlo desde CLI:
 
@@ -63,7 +63,7 @@ Verificar que los archivos están guardados como `application/pdf` y no son púb
 ## 5. Verificación
 
 1. Iniciar sesión como `jefferson@expalsaevaluations.com`.
-2. Abrir `https://jefferson-arch.github.io/ExpalsaAsistenteGerenciaCalidad/capacitacion.html`.
+2. Abrir `https://jeffdfr87-spec.github.io/ExpalsaAsistenteGerenciaCalidad/capacitacion.html`.
 3. En **Plan de capacitación**, comprobar que aparece el PDF completo.
 4. En **Cronograma**, comprobar las 10 descargas separadas.
 5. Cerrar sesión e intentar acceder sin autenticar y con un inspector: la lectura debe ser denegada.
@@ -75,4 +75,4 @@ Los once PDF que estaban en `documentos-capacitacion/` deben eliminarse de la ra
 
 ## Limitaciones de la operación actual
 
-No existe en la conexión disponible un método autorizado para publicar reglas de Firebase Storage ni cargar archivos binarios en el bucket. Por ello el sitio no tendrá acceso funcional hasta que se completen los pasos 2–4 y se realicen pruebas reales.
+El repositorio conserva el bloque de capacitación y la configuración CORS, pero no despliega reglas de Storage mediante `firebase.json`. Mantén el bloque integrado con las reglas completas activas para preservar también las rutas de los demás sistemas.

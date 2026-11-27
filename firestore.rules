@@ -14,6 +14,11 @@
 // in the Firebase Auth token. Fabio and Karina are trusted Calidad admins;
 // they still require an active evaluations access record but do not require
 // device approval. Device keys and status are server-managed by trusted functions.
+// expalsa_calidad_distribucion_inspectores/{id}: shared name, active flag,
+// creation/update timestamps and actor UIDs; Aaron and Angelo can manage it.
+// expalsa_calidad_distribuciones/{date__uid}: daily assignment map, notes,
+// checks, timestamps and creator/editor UIDs; editors read their own records,
+// Karina reads Aaron and Angelo's records, and Jefferson can read all records.
 // ===============================================================
 rules_version = '2';
 service cloud.firestore {
@@ -217,9 +222,6 @@ service cloud.firestore {
       return exists(attemptDoc(uid,stage)) && get(attemptDoc(uid,stage)).data.status in ['submitted','graded'] &&
         (get(attemptDoc(uid,stage)).data.status=='graded' || exists(automaticResultDoc(uid,stage)));
     }
-    function priorGraded(uid,stage) {
-      return retryStage(stage) ? true : stage=='1' || (stage=='2' && theoryDone(uid,'1')) || (stage=='3' && theoryDone(uid,'2'));
-    }
     function stageNumber(stage) { return stage in ['1','1_2']?1:stage in ['2','2_2']?2:3; }
     function progressKey(n) { return n==1?'1':n==2?'2':'3'; }
     function progressOf(p) { return p.get('stageProgress',{'version':1,'active':1,'closed':{}}); }
@@ -408,7 +410,6 @@ service cloud.firestore {
       let a=get(attemptDoc(uid,stage)).data;
       return a.get('bankSchema',1)==3 ? get(dynamicBank(a.version)).data.questionIds.size() : get(stageBank(stage)).data.questions.size();
     }
-    function automaticHit(a,k,id) { return a.get(id,'') in k[id].canonical ? 1 : 0; }
     function automaticThirty(a,b,k) {
       let ids=b.questionIds;
       return (a.get(ids[0],'') in k[ids[0]].canonical ? 1 : 0) + (a.get(ids[1],'') in k[ids[1]].canonical ? 1 : 0) + (a.get(ids[2],'') in k[ids[2]].canonical ? 1 : 0) + (a.get(ids[3],'') in k[ids[3]].canonical ? 1 : 0) + (a.get(ids[4],'') in k[ids[4]].canonical ? 1 : 0) + (a.get(ids[5],'') in k[ids[5]].canonical ? 1 : 0) + (a.get(ids[6],'') in k[ids[6]].canonical ? 1 : 0) + (a.get(ids[7],'') in k[ids[7]].canonical ? 1 : 0) + (a.get(ids[8],'') in k[ids[8]].canonical ? 1 : 0) + (a.get(ids[9],'') in k[ids[9]].canonical ? 1 : 0) + (a.get(ids[10],'') in k[ids[10]].canonical ? 1 : 0) + (a.get(ids[11],'') in k[ids[11]].canonical ? 1 : 0) + (a.get(ids[12],'') in k[ids[12]].canonical ? 1 : 0) + (a.get(ids[13],'') in k[ids[13]].canonical ? 1 : 0) + (a.get(ids[14],'') in k[ids[14]].canonical ? 1 : 0) + (a.get(ids[15],'') in k[ids[15]].canonical ? 1 : 0) + (a.get(ids[16],'') in k[ids[16]].canonical ? 1 : 0) + (a.get(ids[17],'') in k[ids[17]].canonical ? 1 : 0) + (a.get(ids[18],'') in k[ids[18]].canonical ? 1 : 0) + (a.get(ids[19],'') in k[ids[19]].canonical ? 1 : 0) + (a.get(ids[20],'') in k[ids[20]].canonical ? 1 : 0) + (a.get(ids[21],'') in k[ids[21]].canonical ? 1 : 0) + (a.get(ids[22],'') in k[ids[22]].canonical ? 1 : 0) + (a.get(ids[23],'') in k[ids[23]].canonical ? 1 : 0) + (a.get(ids[24],'') in k[ids[24]].canonical ? 1 : 0) + (a.get(ids[25],'') in k[ids[25]].canonical ? 1 : 0) + (a.get(ids[26],'') in k[ids[26]].canonical ? 1 : 0) + (a.get(ids[27],'') in k[ids[27]].canonical ? 1 : 0) + (ids.size()>28 && a.get(ids[28],'') in k[ids[28]].canonical ? 1 : 0) + (ids.size()>29 && a.get(ids[29],'') in k[ids[29]].canonical ? 1 : 0);
@@ -446,7 +447,10 @@ service cloud.firestore {
     }
 
     match /expalsa_calidad_config/{id} {
-      allow get: if (id=='administrador' && expalsaAdmin()) || (id=='evaluaciones' && (expalsaAdmin() || inspector()));
+      // The administrator document is the source of truth for Jefferson's UID.
+      // Let only that exact email read this single document so administratorMatches()
+      // can validate the UID without a circular rules dependency.
+      allow get: if (id=='administrador' && signedIn() && request.auth.token.email=='jefferson@expalsaevaluations.com') || (id=='evaluaciones' && (expalsaAdmin() || inspector()));
       allow create,update: if id=='evaluaciones' && expalsaAdmin() && configurationValid(request.resource.data);
       allow list,delete: if false;
     }
@@ -569,41 +573,11 @@ service cloud.firestore {
         (t is number && p is number && m is number && m>=(t+p)*0.5-0.0000001 && m<=(t+p)*0.5+0.0000001);
     }
 
-    function radarTopics(uid,d) {
-      return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','practicalAxes','theoreticalAxes','updatedBy','updatedAt']) && d.size()==13 && d.schema==3 && d.uid==uid && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) && radarMean(d.practice,d.theory,d.average) && d.delta==null && d.paired==0 && d.covered is int && d.covered>=0 && d.covered<=9 && d.practicalAxes is map && d.practicalAxes.size()==9 && d.practicalAxes.keys().hasOnly(['cuenta', 'bruto', 'neto', 'uniformidad', 'calidad', 'ordenes', 'registros', 'organolepticos', 'sulfitos']) && radarScore(d.practicalAxes.cuenta) && radarScore(d.practicalAxes.bruto) && radarScore(d.practicalAxes.neto) && radarScore(d.practicalAxes.uniformidad) && radarScore(d.practicalAxes.calidad) && radarScore(d.practicalAxes.ordenes) && radarScore(d.practicalAxes.registros) && radarScore(d.practicalAxes.organolepticos) && radarScore(d.practicalAxes.sulfitos) && d.theoreticalAxes is map && d.theoreticalAxes.size()==11 && d.theoreticalAxes.keys().hasOnly(['certificaciones', 'piezas', 'calculoscuenta', 'glaseo', 'uniformidad', 'cuenta', 'peso', 'calidad', 'temperatura', 'sulfitos', 'codex']) && radarScore(d.theoreticalAxes.certificaciones) && radarScore(d.theoreticalAxes.piezas) && radarScore(d.theoreticalAxes.calculoscuenta) && radarScore(d.theoreticalAxes.glaseo) && radarScore(d.theoreticalAxes.uniformidad) && radarScore(d.theoreticalAxes.cuenta) && radarScore(d.theoreticalAxes.peso) && radarScore(d.theoreticalAxes.calidad) && radarScore(d.theoreticalAxes.temperatura) && radarScore(d.theoreticalAxes.sulfitos) && radarScore(d.theoreticalAxes.codex) && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
-    }
     function radarTraining(uid,d) {
       return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','practicalAxes','theoreticalAxes','updatedBy','updatedAt']) && d.size()==13 && d.schema==4 && d.uid==uid && d.asOf is string && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) && radarMean(d.practice,d.theory,d.average) && d.delta==null && d.paired==0 && d.covered is int && d.covered>=0 && d.covered<=9 && d.practicalAxes is map && d.practicalAxes.size()==9 && d.practicalAxes.keys().hasOnly(['cuenta','bruto','neto','uniformidad','calidad','ordenes','registros','organolepticos','sulfitos']) && radarScore(d.practicalAxes.cuenta) && radarScore(d.practicalAxes.bruto) && radarScore(d.practicalAxes.neto) && radarScore(d.practicalAxes.uniformidad) && radarScore(d.practicalAxes.calidad) && radarScore(d.practicalAxes.ordenes) && radarScore(d.practicalAxes.registros) && radarScore(d.practicalAxes.organolepticos) && radarScore(d.practicalAxes.sulfitos) && d.theoreticalAxes is map && d.theoreticalAxes.size()==10 && d.theoreticalAxes.keys().hasOnly(['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10']) && radarScore(d.theoreticalAxes.C1) && radarScore(d.theoreticalAxes.C2) && radarScore(d.theoreticalAxes.C3) && radarScore(d.theoreticalAxes.C4) && radarScore(d.theoreticalAxes.C5) && radarScore(d.theoreticalAxes.C6) && radarScore(d.theoreticalAxes.C7) && radarScore(d.theoreticalAxes.C8) && radarScore(d.theoreticalAxes.C9) && radarScore(d.theoreticalAxes.C10) && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
     }
 
-    function radarOperational(uid,d) {
-      return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','competencies','technical','updatedBy','updatedAt']) && d.size()==13 && d.schema==2 && d.uid==uid && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) && radarMean(d.practice,d.theory,d.average) && d.delta==null && d.paired==0 && d.covered is int && d.covered>=0 && d.covered<=13 && d.competencies is map && d.competencies.size()==39 && d.competencies.keys().hasOnly(['P1_practice', 'P1_theory', 'P1_average', 'P2_practice', 'P2_theory', 'P2_average', 'P3_practice', 'P3_theory', 'P3_average', 'P4_practice', 'P4_theory', 'P4_average', 'P5_practice', 'P5_theory', 'P5_average', 'P6_practice', 'P6_theory', 'P6_average', 'P7_practice', 'P7_theory', 'P7_average', 'P8_practice', 'P8_theory', 'P8_average', 'P9_practice', 'P9_theory', 'P9_average', 'P10_practice', 'P10_theory', 'P10_average', 'P11_practice', 'P11_theory', 'P11_average', 'P12_practice', 'P12_theory', 'P12_average', 'P13_practice', 'P13_theory', 'P13_average']) && radarScore(d.competencies.P1_practice) && radarScore(d.competencies.P1_theory) && radarScore(d.competencies.P1_average) && radarScore(d.competencies.P2_practice) && radarScore(d.competencies.P2_theory) && radarScore(d.competencies.P2_average) && radarScore(d.competencies.P3_practice) && radarScore(d.competencies.P3_theory) && radarScore(d.competencies.P3_average) && radarScore(d.competencies.P4_practice) && radarScore(d.competencies.P4_theory) && radarScore(d.competencies.P4_average) && radarScore(d.competencies.P5_practice) && radarScore(d.competencies.P5_theory) && radarScore(d.competencies.P5_average) && radarScore(d.competencies.P6_practice) && radarScore(d.competencies.P6_theory) && radarScore(d.competencies.P6_average) && radarScore(d.competencies.P7_practice) && radarScore(d.competencies.P7_theory) && radarScore(d.competencies.P7_average) && radarScore(d.competencies.P8_practice) && radarScore(d.competencies.P8_theory) && radarScore(d.competencies.P8_average) && radarScore(d.competencies.P9_practice) && radarScore(d.competencies.P9_theory) && radarScore(d.competencies.P9_average) && radarScore(d.competencies.P10_practice) && radarScore(d.competencies.P10_theory) && radarScore(d.competencies.P10_average) && radarScore(d.competencies.P11_practice) && radarScore(d.competencies.P11_theory) && radarScore(d.competencies.P11_average) && radarScore(d.competencies.P12_practice) && radarScore(d.competencies.P12_theory) && radarScore(d.competencies.P12_average) && radarScore(d.competencies.P13_practice) && radarScore(d.competencies.P13_theory) && radarScore(d.competencies.P13_average) && d.technical is map && d.technical.size()==10 && d.technical.keys().hasOnly(['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10']) && radarScore(d.technical.C1) && radarScore(d.technical.C2) && radarScore(d.technical.C3) && radarScore(d.technical.C4) && radarScore(d.technical.C5) && radarScore(d.technical.C6) && radarScore(d.technical.C7) && radarScore(d.technical.C8) && radarScore(d.technical.C9) && radarScore(d.technical.C10) && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
-    }
 
-    function radarData(uid,d) {
-      let c=d.competencies;
-      let t=d.technical;
-      return d.keys().hasOnly(['schema','uid','asOf','practice','theory','average','delta','paired','covered','competencies','technical','updatedBy','updatedAt']) && d.size()==13 &&
-        d.schema==1 && d.uid==uid && d.asOf is string && d.asOf.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-        radarScore(d.practice) && radarScore(d.theory) && radarScore(d.average) &&
-        radarMean(d.practice,d.theory,d.average) &&
-        (d.delta==null || (d.delta is number && d.delta>=-100 && d.delta<=100)) && d.paired is int && d.paired>=0 && d.paired<=10 && d.covered is int && d.covered>=0 && d.covered<=10 &&
-        c.size()==30 && c.keys().hasOnly(['C1_theory','C1_practice','C1_average','C2_theory','C2_practice','C2_average','C3_theory','C3_practice','C3_average','C4_theory','C4_practice','C4_average','C5_theory','C5_practice','C5_average','C6_theory','C6_practice','C6_average','C7_theory','C7_practice','C7_average','C8_theory','C8_practice','C8_average','C9_theory','C9_practice','C9_average','C10_theory','C10_practice','C10_average']) &&
-        radarScore(c.C1_theory) && c.C1_practice in [null,0,25,50,75,100] && radarScore(c.C1_average) &&
-        radarScore(c.C2_theory) && c.C2_practice in [null,0,25,50,75,100] && radarScore(c.C2_average) &&
-        radarScore(c.C3_theory) && c.C3_practice in [null,0,25,50,75,100] && radarScore(c.C3_average) &&
-        radarScore(c.C4_theory) && c.C4_practice in [null,0,25,50,75,100] && radarScore(c.C4_average) &&
-        radarScore(c.C5_theory) && c.C5_practice in [null,0,25,50,75,100] && radarScore(c.C5_average) &&
-        radarScore(c.C6_theory) && c.C6_practice in [null,0,25,50,75,100] && radarScore(c.C6_average) &&
-        radarScore(c.C7_theory) && c.C7_practice in [null,0,25,50,75,100] && radarScore(c.C7_average) &&
-        radarScore(c.C8_theory) && c.C8_practice in [null,0,25,50,75,100] && radarScore(c.C8_average) &&
-        radarScore(c.C9_theory) && c.C9_practice in [null,0,25,50,75,100] && radarScore(c.C9_average) &&
-        radarScore(c.C10_theory) && c.C10_practice in [null,0,25,50,75,100] && radarScore(c.C10_average) &&
-        t is map && t.size()==7 && t.keys().hasOnly(['temperature','sensory','weight','glaze','sulfites','defects','sampling']) &&
-        t.temperature in [null,0,25,50,75,100] && t.sensory in [null,0,25,50,75,100] && t.weight in [null,0,25,50,75,100] && t.glaze in [null,0,25,50,75,100] &&
-        t.sulfites in [null,0,25,50,75,100] && t.defects in [null,0,25,50,75,100] && t.sampling in [null,0,25,50,75,100] &&
-        d.updatedBy==request.auth.uid && d.updatedAt==request.time;
-    }
     match /expalsa_calidad_radares/{uid} {
       allow get: if expalsaAdmin() || (inspector() && request.auth.uid==uid && resource.data.get('schema',0)==4);
       allow list: if expalsaAdmin();
@@ -665,7 +639,6 @@ service cloud.firestore {
         d.createdAt is timestamp && d.createdBy==request.auth.uid && photoIdsValid(d.photoIds) && technicalValid(d.get('technical',null),false);
     }
 
-    function v2Level(v) { return v is int && v>=1 && v<=3; }
     function v2Competencies(v) {
       return v.values is map && v.values.size()>0 && v.values.keys().hasOnly(['K1','K2','K3','K4','K5']) &&
         v.values.values().hasOnly([0,1,2,3]) && v.evidence is map && v.evidence.keys()==v.values.keys() &&
@@ -1080,163 +1053,8 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
-function emAdmin() {
-  return expalsaAdmin();
-}
-function emJefe(uid) {
-  return exists(/databases/$(database)/documents/empaque_ejercicio_jefes/$(uid))
-    && get(/databases/$(database)/documents/empaque_ejercicio_jefes/$(uid)).data.activo == true;
-}
-function emUsuario() {
-  return accountEmail() &&
-    request.auth.token.email.matches('^[^@]+@expalsaevaluations[.]com$') &&
-    (emAdmin() || inspector() || emJefe(request.auth.uid));
-}
-function emLeeReporte(r) {
-  return emUsuario() && (r.owner == request.auth.uid || emAdmin() || emJefe(request.auth.uid));
-}
-function emEditaReporte(r) {
-  return emUsuario() && (r.owner == request.auth.uid || emAdmin());
-}
-match /empaque_ejercicio_jefes/{uid} {
-  allow get: if emUsuario();
-  allow list: if emAdmin();
-  allow create, update: if emAdmin()
-    && request.resource.data.keys().hasOnly(['nombre', 'activo'])
-    && request.resource.data.nombre is string
-    && request.resource.data.activo is bool;
-  allow delete: if false;
-}
-match /empaque_ejercicio_qr/{token} {
-  allow get: if emUsuario();
-  allow list: if false;
-  allow create: if emUsuario()
-    && (emAdmin() || request.resource.data.uid == request.auth.uid)
-    && emJefe(request.resource.data.uid)
-    && token.matches('[a-f0-9]{64}')
-    && request.resource.data.keys().hasOnly(['uid', 'activo', 'vence', 'creado'])
-    && request.resource.data.activo == true
-    && request.resource.data.creado == request.time
-    && request.resource.data.vence > request.time
-    && request.resource.data.vence <= request.time + duration.value(9, 'h');
-  allow update, delete: if false;
-}
-match /empaque_ejercicio_ordenes/{id} {
-  allow read: if emUsuario();
-  allow create, update: if emAdmin();
-}
-match /empaque_ejercicio_materias/{id} {
-  allow read: if emUsuario();
-  allow create, update: if emAdmin();
-}
-match /empaque_ejercicio_residuales/{id} {
-  allow read: if emUsuario();
-  allow create, update: if emAdmin();
-}
-match /empaque_ejercicio_config/contador {
-  allow read: if emUsuario();
-  allow create: if emUsuario() && request.resource.data.keys().hasOnly(['ultimo']) && request.resource.data.ultimo == 1;
-  allow update: if emUsuario() && request.resource.data.keys().hasOnly(['ultimo']) && request.resource.data.ultimo == resource.data.ultimo + 1;
-}
-match /empaque_ejercicio_reportes/{reporteId} {
-  function baseActualizacion() {
-    return emEditaReporte(resource.data)
-      && resource.data.estado == 'abierto'
-      && resource.data.eliminado == false
-      && request.resource.data.owner == resource.data.owner
-      && request.resource.data.revision == resource.data.revision + 1
-      && request.resource.data.actualizado == request.time;
-  }
-  function edicion() {
-    return request.resource.data.ultima.tipo == 'editar'
-      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['muestras','alertas','pendientes','revision','actualizado','ultima'])
-      && request.resource.data.muestras is list
-      && request.resource.data.muestras.size() <= 12
-      && request.resource.data.alertas is map
-      && request.resource.data.pendientes is list
-      && request.resource.data.pendientes.toSet().hasAll(resource.data.pendientes.toSet())
-      && request.resource.data.alertas.diff(resource.data.alertas).changedKeys().size() == 0
-      && request.resource.data.alertas.diff(resource.data.alertas).removedKeys().size() == 0
-      && request.resource.data.alertas.diff(resource.data.alertas).addedKeys() == request.resource.data.pendientes.toSet().difference(resource.data.pendientes.toSet());
-  }
-  function autoriza() {
-    let id = request.resource.data.ultima.alertaId;
-    let hash = request.resource.data.ultima.tokenHash;
-    let token = get(/databases/$(database)/documents/empaque_ejercicio_qr/$(hash)).data;
-    let jefe = get(/databases/$(database)/documents/empaque_ejercicio_jefes/$(token.uid)).data;
-    let aprobacion = request.resource.data.alertas[id].autorizacion;
-    return request.resource.data.ultima.tipo == 'autorizar'
-      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['alertas','pendientes','revision','actualizado','ultima'])
-      && id in resource.data.pendientes
-      && token.activo == true && token.vence > request.time && jefe.activo == true
-      && request.resource.data.pendientes == resource.data.pendientes.removeAll([id])
-      && request.resource.data.alertas.diff(resource.data.alertas).affectedKeys().hasOnly([id])
-      && request.resource.data.alertas[id].diff(resource.data.alertas[id]).affectedKeys().hasOnly(['autorizacion'])
-      && aprobacion.keys().hasOnly(['nombre','uid','tokenHash','fecha','registradoPor'])
-      && aprobacion.nombre == jefe.nombre
-      && aprobacion.uid == token.uid
-      && aprobacion.tokenHash == hash
-      && aprobacion.registradoPor == request.auth.uid;
-  }
-  function cierra() {
-    return request.resource.data.ultima.tipo == 'cerrar'
-      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado','cerrado','revision','actualizado','ultima'])
-      && request.resource.data.estado == 'cerrado'
-      && request.resource.data.cerrado == request.time
-      && resource.data.pendientes.size() == 0
-      && resource.data.muestras.size() > 0;
-  }
-  function elimina() {
-    return request.resource.data.ultima.tipo == 'eliminar'
-      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['eliminado','revision','actualizado','ultima'])
-      && request.resource.data.eliminado == true;
-  }
-  allow read: if emLeeReporte(resource.data);
-  allow create: if emUsuario()
-    && request.resource.data.owner == request.auth.uid
-    && request.resource.data.estado == 'abierto'
-    && request.resource.data.muestras == []
-    && request.resource.data.alertas == {}
-    && request.resource.data.pendientes == []
-    && request.resource.data.revision == 0
-    && request.resource.data.eliminado == false
-    && request.resource.data.creado == request.time;
-  allow update: if baseActualizacion() && (
-    (request.resource.data.ultima.tipo == 'editar' && edicion())
-    || (request.resource.data.ultima.tipo == 'autorizar' && autoriza())
-    || (request.resource.data.ultima.tipo == 'cerrar' && cierra())
-    || (request.resource.data.ultima.tipo == 'eliminar' && elimina())
-  );
-  allow delete: if false;
-  match /fotos/{fotoId} {
-    allow read: if emLeeReporte(get(/databases/$(database)/documents/empaque_ejercicio_reportes/$(reporteId)).data);
-    allow create: if emEditaReporte(get(/databases/$(database)/documents/empaque_ejercicio_reportes/$(reporteId)).data)
-      && get(/databases/$(database)/documents/empaque_ejercicio_reportes/$(reporteId)).data.estado == 'abierto'
-      && request.resource.data.owner == request.auth.uid
-      && request.resource.data.creado == request.time
-      && request.resource.data.imagen is string
-      && request.resource.data.imagen.size() <= 300000
-      && request.resource.data.imagen.matches('data:image/jpeg;base64,.*');
-    allow update, delete: if false;
-  }
-}
-
-
-
-    // MODULO DE CAPACITACION 2026 - EXCLUSIVAMENTE ADMINISTRADOR
+// MODULO DE CAPACITACION 2026 - EXCLUSIVAMENTE ADMINISTRADOR
     // Colecciones independientes: no modifica evaluaciones, resultados ni expedientes oficiales.
-    function capAdminWrite(d) {
-      return expalsaAdmin()
-        && d.keys().hasOnly(['id','name','station','accountUid','email','active','createdAt','updatedAt','updatedBy'])
-        && d.keys().hasAll(['id','name','station','accountUid','email','active','createdAt','updatedAt','updatedBy'])
-        && d.id is string && d.name is string && d.name.size() >= 2 && d.name.size() <= 100
-        && d.station in ['M02','M05','M06','M07','M08','M09','M10','B12','B345','T01']
-        && d.email is string && d.email.size() <= 150
-        && d.accountUid is string && d.accountUid.size() <= 128
-        && d.active is bool
-        && d.updatedBy == request.auth.uid
-        && d.updatedAt == request.time;
-    }
     function capBoardScore(v) { return v == null || (v is number && v >= 0 && v <= 100); }
     function capBoardScoresValid(s) { return s is list && s.size() == 10
       && capBoardScore(s[0]) && capBoardScore(s[1]) && capBoardScore(s[2]) && capBoardScore(s[3]) && capBoardScore(s[4])
@@ -1554,8 +1372,214 @@ match /empaque_ejercicio_reportes/{reporteId} {
       allow delete: if calidadPageUser() && calidadPageAdmin();
     }
 
+
+    // Inspection module: shared, numbered runs; append-only correction history.
+    function expalsaInspectionAdmin() {
+      return expalsaAdmin() || calidadTrustedAdmin();
+    }
+    function expalsaInspectionUser() { return expalsaInspectionAdmin() || inspector(); }
+    function expalsaInspectionPhotoValid(photo) {
+      return photo is map && photo.uploadedBy == request.auth.uid;
+    }
+    function inspectionRunPath(id) { return /databases/$(database)/documents/expalsa_calidad_inspecciones_runs/$(id); }
+    function inspectionRecordPath(id) { return /databases/$(database)/documents/expalsa_calidad_inspecciones/$(id); }
+    function correctiveActionPath(id) { return /databases/$(database)/documents/expalsa_calidad_acciones_correctivas/$(id); }
+    function inspectionRunOpen(id, number) {
+      let run = get(inspectionRunPath(id)).data;
+      return run.status == 'en_curso'
+        && run.inspectionNumber == number;
+    }
+    function correctionMatchesAfter(id, d) {
+      let actionId = d.get('lastCorrectionId','');
+      let action = getAfter(correctiveActionPath(actionId)).data;
+      return action.observationId == id
+        && action.newStatus == d.status && action.previousStatus == resource.data.status
+        && action.byUid == request.auth.uid;
+    }
+    function validCorrectiveAction(d, id) {
+      let observation = get(inspectionRecordPath(d.observationId)).data;
+      let updated = getAfter(inspectionRecordPath(d.observationId)).data;
+      return d.observationId is string && d.byUid == request.auth.uid
+        && d.createdAt == request.time && d.previousStatus == observation.status
+        && d.previousStatus in ['no_cumple','parcial'] && d.newStatus in ['cumple','parcial'] && d.newStatus != d.previousStatus
+        && d.note is string && d.note.size() > 0 && d.photos is list && d.photos.size() > 0
+        && expalsaInspectionPhotoValid(d.photos[0]) && updated.lastCorrectionId == id;
+    }
+    match /expalsa_calidad_inspecciones_runs/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create: if expalsaInspectionUser() && id.size() == 20
+        && request.resource.data.openedByUid == request.auth.uid && request.resource.data.openedByEmail == request.auth.token.email
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && request.resource.data.status == 'en_curso' && request.resource.data.participants is list;
+      allow update: if expalsaInspectionUser()
+        && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.openedByUid == resource.data.openedByUid && request.resource.data.openedByEmail == resource.data.openedByEmail
+        && request.resource.data.inspectionNumber == resource.data.inspectionNumber && request.resource.data.inspectedAt == resource.data.inspectedAt
+        && resource.data.status == 'en_curso'
+        && (request.resource.data.status == 'en_curso' || (request.resource.data.status == 'terminada' && request.resource.data.closedAt == request.time && request.resource.data.closedByUid == request.auth.uid))
+        && request.resource.data.participants is list && request.resource.data.participants.size() <= 30
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants','status','closedAt','closedByUid','closedByName','updatedBy','updatedByName','updatedAt']);
+      allow delete: if expalsaInspectionAdmin();
+    }
+    match /expalsa_calidad_inspecciones/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create: if expalsaInspectionUser() && id.size() == 20
+        && request.resource.data.area in ['PLANTA','EXTERIORES','BODEGAS','DESECHOS','DESPACHO','SILO DE HIELO','OTROS']
+        && request.resource.data.status in ['cumple','no_cumple','parcial','nueva']
+        && request.resource.data.photos is list && request.resource.data.photos.size() <= 6
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.inspectorUid == request.auth.uid
+        && request.resource.data.inspectorEmail == request.auth.token.email && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && inspectionRunOpen(request.resource.data.inspectionId, request.resource.data.inspectionNumber);
+      allow update: if expalsaInspectionUser()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.inspectorUid == resource.data.inspectorUid
+        && request.resource.data.inspectorEmail == resource.data.inspectorEmail && request.resource.data.inspectorName == resource.data.inspectorName
+        && request.resource.data.get('inspectionId','') == resource.data.get('inspectionId','') && request.resource.data.get('inspectionNumber','') == resource.data.get('inspectionNumber','')
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && ((request.resource.data.status == resource.data.status && resource.data.get('inspectionId','') != '' && inspectionRunOpen(resource.data.inspectionId, resource.data.inspectionNumber)
+          && request.resource.data.photos is list && request.resource.data.photos.size() <= 6
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['location','description','department','notificationDate','notes','photos','updatedBy','updatedByName','updatedAt']))
+          || (request.resource.data.status != resource.data.status && correctionMatchesAfter(id, request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','lastCorrectionId','lastCorrectionNote','updatedBy','updatedByName','updatedAt'])));
+      allow delete: if expalsaInspectionAdmin();
+    }
+    match /expalsa_calidad_acciones_correctivas/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create: if expalsaInspectionUser() && validCorrectiveAction(request.resource.data, id);
+      allow update: if false;
+      allow delete: if expalsaInspectionAdmin();
+    }
+    match /expalsa_calidad_inspecciones_progreso/{id} {
+      allow get, list: if expalsaInspectionUser();
+      allow create, update: if expalsaInspectionUser()
+        && request.resource.data.savedByUid == request.auth.uid
+        && inspectionRunOpen(request.resource.data.inspectionId, request.resource.data.inspectionNumber);
+      allow delete: if expalsaInspectionAdmin();
+    }
+
+    // Distribución diaria del personal de Calidad en Planta.
+    // Aaron and Angelo can manage their own records; Karina can read only theirs.
+    function distributionEditor() {
+      return expalsaAdmin() || (signedIn() && request.auth.uid in [
+        '5MgYD7qqEwPTCTIzQyTS7n1kNk63',
+        'NvbcodzylQPi2P8Y1stcJEq0ETi1'
+      ]);
+    }
+    function distributionViewer() {
+      return signedIn()
+        && request.auth.uid == '96Q1hgrEKyR2zVL8CfCXf1xe4al2'
+        && request.auth.token.email == 'karina@expalsaevaluations.com';
+    }
+    function distributionCanReadRecord(d) {
+      return expalsaAdmin()
+        || (distributionEditor() && d.createdBy == request.auth.uid)
+        || (distributionViewer() && d.createdBy in [
+          '5MgYD7qqEwPTCTIzQyTS7n1kNk63',
+          'NvbcodzylQPi2P8Y1stcJEq0ETi1'
+        ]);
+    }
+    function validDistributionInspector(id,d) {
+      return distributionEditor() && id.size() == 20
+        && d.keys().hasAll(['name','active','createdAt','createdBy','updatedAt','updatedBy','revision'])
+        && d.keys().hasOnly(['name','active','createdAt','createdBy','updatedAt','updatedBy','revision'])
+        && d.name is string && d.name.matches('.*\\S.*') && d.name.size() >= 2 && d.name.size() <= 120
+        && d.active is bool && d.createdAt is timestamp && d.createdBy is string && d.createdBy.size() > 0 && d.createdBy.size() <= 128
+        && d.updatedAt == request.time && d.updatedBy == request.auth.uid
+        && d.revision is int && d.revision >= 1
+        && (!('previousRevision' in d.keys()) || (d.previousRevision is string && d.previousRevision.size() <= 200));
+    }
+    match /expalsa_calidad_distribucion_inspectores/{id} {
+      allow get, list: if distributionEditor();
+      allow create: if validDistributionInspector(id,request.resource.data)
+        && request.resource.data.revision == 1 && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update: if validDistributionInspector(id,request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
+    function distributionSlots() {
+      return ['shiftDavid','shiftAngelo','noRota','receptionDigitacion','receptionMuestreo','receptionOrganolepticos','receptionValoracion','receptionSulfitos','receptionOrganolepticosLatam','receptionSulfitosLatam',
+        'machine1Latam','machine2','machine2Latam','machine5','machine6','machine7','machine8','machine9','machine10','avanceDescabezado','avanceValorAgregado',
+        'freezeEspiral','freezeCiclon','freezeTornado','freezeBrine12','freezeBrine345','freezeBrine6','inspectionDefrosted',
+        'storageGrossWeight','storageTemperature','storagePreboxes1','storagePreboxes2','storagePreboxesLatam','storageWarehouse','exportShipment','exportRepack',
+        'faltas','permisos','atrasos','iess','vacaciones','francos','sinFuncion','asistencias','ausencias','nomina'];
+    }
+    function distributionDataValid(id,d) {
+      return distributionEditor()
+        && d.keys().hasAll(['date','assignments','entryReview','teamNotes','completedChecks','createdAt','createdBy','updatedAt','updatedBy','revision'])
+        && d.keys().hasOnly(['date','assignments','entryReview','teamNotes','completedChecks','createdAt','createdBy','updatedAt','updatedBy','revision','previousRevision'])
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.createdBy is string && d.createdBy.size() > 0 && d.createdBy.size() <= 128
+        && (id == d.date || id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__'+d.createdBy+'(__r[0-9]+)?$'))
+        && d.assignments is map
+        && d.assignments.keys().hasAll(distributionSlots())
+        && d.assignments.keys().hasOnly(distributionSlots())
+        && d.entryReview is string && d.entryReview.size() <= 2000
+        && d.teamNotes is string && d.teamNotes.size() <= 3000
+        && d.completedChecks is list && d.completedChecks.size() <= 6
+        && d.completedChecks.hasOnly(['Revisar órdenes de producción','Revisar residuales','Verificar proveedores autorizados para empaques','Subir reporte de limpieza','Subir reporte de BPM','Subir reporte de balanzas'])
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time && d.updatedBy == request.auth.uid
+        && d.revision is int && d.revision >= 1
+        && (!('previousRevision' in d.keys()) || (d.previousRevision is string && d.previousRevision.size() <= 200));
+    }
+    function restoringDistribution(id,d) {
+      let trashPath = /databases/$(database)/documents/expalsa_calidad_distribuciones_papelera/$(id);
+      return distributionEditor()
+        && d.createdBy == request.auth.uid
+        && (id == d.date+'__'+request.auth.uid || id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__'+request.auth.uid+'(__r[0-9]+)?$'))
+        && exists(trashPath)
+        && get(trashPath).data == d
+        && !existsAfter(trashPath);
+    }
+    match /expalsa_calidad_distribuciones_papelera/{id} {
+      allow read: if distributionEditor() && (expalsaAdmin() || resource.data.createdBy == request.auth.uid);
+      allow create: if expalsaAdmin()
+        && request.resource.data == get(/databases/$(database)/documents/expalsa_calidad_distribuciones/$(id)).data
+        && !existsAfter(/databases/$(database)/documents/expalsa_calidad_distribuciones/$(id));
+      allow update: if false;
+      allow delete: if expalsaAdmin() || (distributionEditor()
+        && resource.data.createdBy == request.auth.uid
+        && !exists(/databases/$(database)/documents/expalsa_calidad_distribuciones/$(id))
+        && existsAfter(/databases/$(database)/documents/expalsa_calidad_distribuciones/$(id))
+        && getAfter(/databases/$(database)/documents/expalsa_calidad_distribuciones/$(id)).data == resource.data);
+    }
+    match /expalsa_calidad_distribuciones/{id} {
+      allow get, list: if distributionCanReadRecord(resource.data);
+      allow create: if (distributionEditor() && distributionDataValid(id,request.resource.data)
+          && request.resource.data.createdBy == request.auth.uid
+          && (id == request.resource.data.date+'__'+request.auth.uid || id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__'+request.auth.uid+'__r[0-9]+$'))
+          && request.resource.data.revision >= 1
+          && request.resource.data.createdAt == request.time)
+        || restoringDistribution(id,request.resource.data);
+      allow update: if false;
+      allow delete: if expalsaAdmin()
+        && existsAfter(/databases/$(database)/documents/expalsa_calidad_distribuciones_papelera/$(id));
+    }
+
+
+    // Oliver: lecturas en vivo limitadas al propietario aprobado;
+    // las escrituras de recordatorios pasan por Cloud Functions.
+    function oliverReminderOwnerApproved(uid) {
+      return request.auth != null && request.auth.uid == uid && (
+        (request.auth.token.email == 'jefferson@expalsaevaluations.com'
+          && exists(/databases/$(database)/documents/oliver_admins/$(uid))
+          && get(/databases/$(database)/documents/oliver_admins/$(uid)).data.uid == uid
+          && get(/databases/$(database)/documents/oliver_admins/$(uid)).data.email == 'jefferson@expalsaevaluations.com'
+          && get(/databases/$(database)/documents/oliver_admins/$(uid)).data.active == true)
+        || (request.auth.token.email_verified == true
+          && exists(/databases/$(database)/documents/oliver_users/$(uid))
+          && get(/databases/$(database)/documents/oliver_users/$(uid)).data.status == 'approved')
+      );
+    }
+    match /oliver_users/{uid}/reminders/{reminderId} {
+      allow get, list: if oliverReminderOwnerApproved(uid);
+      allow create, update, delete: if false;
+    }
   }
 }
-
-
-
