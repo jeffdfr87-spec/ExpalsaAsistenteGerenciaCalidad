@@ -1,24 +1,21 @@
 # EXPALSA | Puesta en marcha del control de capacitación 2026
 
-## Archivos nuevos (sin modificar la plataforma existente)
+## Archivos de la aplicación
 - `capacitacion.html`: tablero administrativo y evaluaciones de campo.
 - `capacitacion-data.js`: 10 jornadas, 40 criterios y 10 puestos operativos.
-- `Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`: propuesta de reglas completas, basada en la versión de reglas que estaba en este repositorio.
+- `capacitacion-*.js` y `capacitacion-premium.css`: módulos activos de la página.
+- `firestore.rules`: reglas de Firestore configuradas en `firebase.json`.
 
 ## Acceso
 Página prevista para GitHub Pages:
-https://jefferson-arch.github.io/ExpalsaAsistenteGerenciaCalidad/capacitacion.html
+https://jeffdfr87-spec.github.io/ExpalsaAsistenteGerenciaCalidad/capacitacion.html
 
 La página usa `firebase-config.js` del repositorio y autenticación Firebase. Solo se autoriza la cuenta administrativa existente cuando su UID y correo coinciden con `expalsa_calidad_config/administrador`.
 
-## Paso necesario: habilitar reglas en Firebase
-GitHub **no publica las reglas de Firestore**. Para poder guardar, abre Firebase Console > Firestore Database > Reglas.
+## Reglas de Firestore
+GitHub Pages no publica las reglas. `firebase.json` señala `firestore.rules` como archivo de despliegue para el proyecto `oceantreasure-app`. En esta revisión, el archivo se sincronizó con las reglas que Firebase tiene activas. No uses copias históricas de reglas. Antes de desplegar desde el repositorio, compara el archivo con el estado activo y publica solo si el cambio es intencional.
 
-1. Realiza un respaldo de las reglas que están **publicadas actualmente en Firebase**.
-2. Compara esas reglas con `Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`. Este archivo se generó a partir de la copia del repositorio y puede no reflejar cambios realizados más recientemente en Firebase Console.
-3. Integra los dos nuevos bloques `match /expalsa_capacitacion_2026_participantes/{participantId}` y `match /expalsa_capacitacion_2026_sesiones/{sessionId}`, además de sus funciones auxiliares `capAdminWrite` y `capSessionValid`, **sin eliminar** reglas más recientes de evaluaciones o control de empaque.
-4. Valida y publica las reglas. Las colecciones se crearán en el primer guardado, no es necesario crearlas a mano.
-5. Ingresa como administrador y asigna los inspectores a sus puestos.
+Las colecciones se crean al primer guardado. Ingresa como administrador y asigna los inspectores a sus puestos.
 
 ## Datos y seguridad
 Colecciones nuevas (aisladas):
@@ -46,7 +43,7 @@ Las calificaciones de capacitación son formativas, no sustituyen las tres etapa
 - Las fotografías se guardan por separado en la subcolección `expalsa_capacitacion_2026_sesiones/{sessionId}/fotos/{fotoId}`.
 - Cada fotografía se convierte a JPEG y se comprime. Las fotografías anteriores guardadas en `evidenceImage` se mantienen visibles.
 - Solo se pueden añadir o quitar fotografías mientras la jornada esté en borrador; después del cierre es necesario reabrirla.
-- **Importante:** también debes incorporar en las reglas publicadas de Firebase el bloque anidado `match /fotos/{photoId}` que figura en la versión más reciente de `Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`. Sin ese permiso, el botón puede mostrarse pero la carga no tendrá autorización.
+- **Importante:** `firestore.rules` contiene el bloque anidado `match /fotos/{photoId}` para la evidencia de capacitación. Verifica que las reglas activas de Firebase sigan coincidiendo antes de desplegar.
 - Pruebas pendientes en Firebase real: captura desde cámara trasera, selección de tres o más imágenes, persistencia al actualizar, eliminación y rechazo de cambios tras el cierre.
 
 ## Actualización: reportes individuales y evidencias por criterio
@@ -55,7 +52,7 @@ Las calificaciones de capacitación son formativas, no sustituyen las tres etapa
 - Junto a cada opción **N/A** de la matriz hay un botón **Foto**. La captura se guarda con su identificador `criterionId` y se agrupa con ese criterio.
 - La sección **Evidencia fotográfica autorizada** se conserva como fotografía principal. Si hay varias fotos generales, la primera se coloca en la portada del PDF y las demás se anexan.
 - El botón **Crear reporte PDF** genera un archivo con resultados del inspector, observaciones, evidencia principal en la primera página y fotografías por criterio como anexos.
-- Para escribir fotografías por criterio hay que publicar la regla actualizada **`Reglas_Firestore_EXPALSA_CON_CAPACITACION_2026.txt`**, que permite el campo opcional `criterionId` en cada fotografía. Antes de publicar, comparar con las reglas que están activas en Firebase, que pueden diferir de la copia en GitHub.
+- Para fotografías por criterio, `firestore.rules` permite el campo opcional `criterionId`. Compara siempre el archivo con las reglas activas antes de desplegar.
 - La biblioteca jsPDF se carga en el navegador; para crear el PDF es necesaria conectividad a la CDN usada por la página.
 - Las evaluaciones oficiales y los perfiles originales de los inspectores no se modifican.
 

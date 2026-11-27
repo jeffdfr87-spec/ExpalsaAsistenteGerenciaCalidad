@@ -32,7 +32,7 @@ La cámara física y la impresión del navegador deben comprobarse en el disposi
 
 ## Integración de las evaluaciones teóricas
 
-La referencia es la implementación vigente integrada en `index.html` de la plataforma de evaluación, incluidas sus funciones de puntuación, normalización y correspondencia de preguntas con C1–C10. Las funciones puras necesarias se conservan en `capacitacion-teoria-core.js`, sin incluir bancos ni claves oficiales en el código público.
+La referencia es la implementación vigente integrada en `index.html` de la plataforma de evaluación, incluidas sus funciones de puntuación, normalización y correspondencia de preguntas con C1–C10. No se incluyen bancos ni claves oficiales en el código público.
 
 - Se muestran tres etapas y hasta dos intentos por etapa. El promedio conserva todos los intentos calificados, como en la plataforma de origen; no selecciona únicamente la mejor nota.
 - Una autocalificación válida se calcula como aciertos × 100 / total. En versiones que requieren calificación manual se conserva la nota oficial del intento calificado. Los intentos en curso o pendientes no se convierten en cero.
